@@ -4,7 +4,9 @@ import type {
   LoginRequest,
   LoginResponse,
   UserInfo,
-  CaptchaResponse,
+  CaptchaChallengeResponse,
+  CaptchaVerifyResponse,
+  TrajectoryPoint,
   ChangePasswordRequest,
 } from '../types/auth';
 
@@ -33,7 +35,18 @@ export function changePassword(data: ChangePasswordRequest): Promise<ApiResponse
   return http.post('/auth/change-password', data);
 }
 
-/** Get captcha image */
-export function getCaptcha(): Promise<ApiResponse<CaptchaResponse>> {
-  return http.get('/auth/captcha');
+/** Create a captcha challenge */
+export function createCaptchaChallenge(session_id: string): Promise<ApiResponse<CaptchaChallengeResponse>> {
+  return http.post('/auth/captcha', { session_id });
+}
+
+/** Verify captcha challenge */
+export function verifyCaptchaChallenge(data: {
+  session_id: string;
+  challenge_id: string;
+  x: number;
+  y: number;
+  trajectory: TrajectoryPoint[];
+}): Promise<ApiResponse<CaptchaVerifyResponse>> {
+  return http.post('/auth/captcha/verify', data);
 }

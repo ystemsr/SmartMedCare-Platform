@@ -14,4 +14,4 @@ alembic>=1.14.0
 httpx>=0.27.0
 openpyxl>=3.1.0
 pandas>=2.2.0
-captcha>=0.6.0
+Pillow>=10.0.0

@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db, oauth2_scheme
 from app.models.user import User
 from app.schemas.auth import (
+    CaptchaChallengeRequest,
+    CaptchaVerifyRequest,
     ChangePasswordRequest,
     LoginRequest,
     TokenRefreshRequest,
@@ -39,8 +41,8 @@ async def login(
         db=db,
         username=body.username,
         password=body.password,
-        captcha_id=body.captcha_id,
-        captcha_code=body.captcha_code,
+        captcha_token=body.captcha_token,
+        session_id=body.session_id,
         ip=ip,
         user_agent=user_agent,
     )
@@ -108,8 +110,17 @@ async def change_password(
     return success_response(message="密码修改成功")
 
 
-@router.get("/captcha")
-async def get_captcha():
-    """Generate and return a captcha image."""
-    result = await AuthService.generate_captcha()
+@router.post("/captcha")
+async def create_captcha(body: CaptchaChallengeRequest):
+    """Generate and return a slider puzzle captcha challenge."""
+    result = await AuthService.generate_captcha(body)
+    return success_response(result.model_dump())
+
+
+@router.post("/captcha/verify")
+async def verify_captcha(body: CaptchaVerifyRequest):
+    """Verify the slider captcha position and trajectory."""
+    result = await AuthService.verify_captcha(body)
+    if isinstance(result, str):
+        return error_response(BUSINESS_VALIDATION_FAILED, result)
     return success_response(result.model_dump())

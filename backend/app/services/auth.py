@@ -1,12 +1,9 @@
 """Authentication service — login, logout, token refresh, captcha."""
 
-import base64
+import json
 import logging
-import string
 import uuid
 from datetime import datetime, timezone
-from io import BytesIO
-from random import SystemRandom
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,16 +19,26 @@ from app.core.security import (
 from app.models.audit_log import LoginLog
 from app.repositories.user import UserRepository
 from app.schemas.auth import (
-    CaptchaResponse,
+    CaptchaChallengeRequest,
+    CaptchaChallengeResponse,
+    CaptchaVerifyRequest,
+    CaptchaVerifyResponse,
     ChangePasswordRequest,
     LoginResponse,
     TokenRefreshResponse,
     UserBrief,
 )
+from app.services.captcha import (
+    CAPTCHA_EXPIRE_SECONDS,
+    CAPTCHA_HEIGHT,
+    CAPTCHA_PIECE_SIZE,
+    CAPTCHA_TOLERANCE,
+    CAPTCHA_WIDTH,
+    build_slide_images,
+    validate_trajectory,
+)
 
 logger = logging.getLogger(__name__)
-
-_rng = SystemRandom()
 
 
 class AuthService:
@@ -42,8 +49,8 @@ class AuthService:
         db: AsyncSession,
         username: str,
         password: str,
-        captcha_id: str,
-        captcha_code: str,
+        captcha_token: str,
+        session_id: str,
         ip: str,
         user_agent: str,
     ) -> LoginResponse | str:
@@ -51,14 +58,14 @@ class AuthService:
 
         Returns LoginResponse on success, or an error message string on failure.
         """
-        # Validate captcha
-        captcha_key = f"captcha:{captcha_id}"
-        stored_code = await redis_get(captcha_key)
-        if stored_code is None:
+        # Validate slider captcha token
+        token_key = f"captcha_token:{captcha_token}"
+        stored_session = await redis_get(token_key)
+        if stored_session is None:
             await AuthService._record_login(db, None, ip, user_agent, "captcha_expired")
             return "验证码已过期"
-        await redis_delete(captcha_key)
-        if stored_code.lower() != captcha_code.lower():
+        await redis_delete(token_key)
+        if stored_session != session_id:
             await AuthService._record_login(db, None, ip, user_agent, "captcha_invalid")
             return "验证码错误"
 
@@ -176,31 +183,87 @@ class AuthService:
         return None
 
     @staticmethod
-    async def generate_captcha() -> CaptchaResponse:
-        """Generate a captcha image and store the code in Redis."""
-        from captcha.image import ImageCaptcha
+    async def generate_captcha(
+        data: CaptchaChallengeRequest,
+    ) -> CaptchaChallengeResponse:
+        """Generate a slider puzzle captcha challenge and store in Redis."""
+        image_uri, thumb_uri, x, y = build_slide_images()
 
-        # Generate random 4-char alphanumeric code
-        chars = string.ascii_uppercase + string.digits
-        code = "".join(_rng.choice(chars) for _ in range(4))
+        challenge_id = uuid.uuid4().hex
+        expires_at = datetime.now(timezone.utc).timestamp() + CAPTCHA_EXPIRE_SECONDS
 
-        # Create captcha image
-        captcha = ImageCaptcha(width=160, height=60)
-        image = captcha.generate_image(code)
-
-        # Convert to base64
-        buffer = BytesIO()
-        image.save(buffer, format="PNG")
-        image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-        # Store in Redis with 5 minute TTL
-        captcha_id = str(uuid.uuid4())
-        await redis_set(f"captcha:{captcha_id}", code, ttl=300)
-
-        return CaptchaResponse(
-            captcha_id=captcha_id,
-            image=f"data:image/png;base64,{image_base64}",
+        payload = json.dumps(
+            {
+                "expected_x": x,
+                "expected_y": y,
+                "session_id": data.session_id,
+            }
         )
+        await redis_set(
+            f"captcha:{challenge_id}", payload, ttl=CAPTCHA_EXPIRE_SECONDS
+        )
+
+        logger.info("Captcha challenge created: challenge_id=%s", challenge_id)
+
+        return CaptchaChallengeResponse(
+            challenge_id=challenge_id,
+            width=CAPTCHA_WIDTH,
+            height=CAPTCHA_HEIGHT,
+            thumb_y=y,
+            thumb_width=CAPTCHA_PIECE_SIZE,
+            thumb_height=CAPTCHA_PIECE_SIZE,
+            image=image_uri,
+            thumb=thumb_uri,
+            expires_at=datetime.fromtimestamp(expires_at, tz=timezone.utc),
+        )
+
+    @staticmethod
+    async def verify_captcha(
+        data: CaptchaVerifyRequest,
+    ) -> CaptchaVerifyResponse | str:
+        """Verify the slider captcha position and trajectory.
+
+        Returns CaptchaVerifyResponse on success, or an error message string on failure.
+        """
+        captcha_key = f"captcha:{data.challenge_id}"
+        stored = await redis_get(captcha_key)
+        if stored is None:
+            return "验证码已过期"
+        await redis_delete(captcha_key)
+
+        challenge = json.loads(stored)
+        if challenge["session_id"] != data.session_id:
+            return "验证码会话不匹配"
+
+        expected_x = challenge["expected_x"]
+        expected_y = challenge["expected_y"]
+
+        # Validate trajectory behavior
+        fail_reason = validate_trajectory(
+            data.trajectory, expected_x, CAPTCHA_TOLERANCE
+        )
+        if fail_reason:
+            return fail_reason
+
+        # Validate final position
+        if (
+            abs(data.x - expected_x) > CAPTCHA_TOLERANCE
+            or abs(data.y - expected_y) > CAPTCHA_TOLERANCE
+        ):
+            return "滑块位置不正确，请重试"
+
+        # Store verified token in Redis
+        await redis_set(
+            f"captcha_token:{data.challenge_id}",
+            data.session_id,
+            ttl=CAPTCHA_EXPIRE_SECONDS,
+        )
+
+        logger.info(
+            "Captcha verified: challenge_id=%s", data.challenge_id
+        )
+
+        return CaptchaVerifyResponse(captcha_token=data.challenge_id)
 
     @staticmethod
     async def _record_login(

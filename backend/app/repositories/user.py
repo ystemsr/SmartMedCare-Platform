@@ -54,16 +54,36 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def get_by_phone(db: AsyncSession, phone: str) -> Optional[User]:
+        """Load a user by phone number with eager-loaded roles and permissions."""
+        stmt = (
+            select(User)
+            .options(
+                selectinload(User.user_roles)
+                .selectinload(UserRole.role)
+                .selectinload(Role.role_permissions)
+                .selectinload(RolePermission.permission)
+            )
+            .where(User.phone == phone, User.deleted_at.is_(None))
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
+    @staticmethod
     async def get_list(
         db: AsyncSession,
         pagination: PaginationParams,
         status_filter: Optional[str] = None,
+        role_name: Optional[str] = None,
     ) -> PaginatedData:
         """Return a paginated list of users with eager-loaded roles."""
         base_stmt = select(User).where(User.deleted_at.is_(None))
 
         if status_filter:
             base_stmt = base_stmt.where(User.status == status_filter)
+
+        if role_name:
+            base_stmt = base_stmt.join(UserRole, User.id == UserRole.user_id).join(Role, UserRole.role_id == Role.id).where(Role.name == role_name)
 
         if pagination.keyword:
             keyword = f"%{pagination.keyword}%"

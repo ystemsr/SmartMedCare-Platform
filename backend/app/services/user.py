@@ -44,9 +44,10 @@ class UserService:
         db: AsyncSession,
         pagination: PaginationParams,
         status: Optional[str] = None,
+        role: Optional[str] = None,
     ):
         """Return a paginated list of users."""
-        return await UserRepository.get_list(db, pagination, status)
+        return await UserRepository.get_list(db, pagination, status, role_name=role)
 
     @staticmethod
     async def update_user(

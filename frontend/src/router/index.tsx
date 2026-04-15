@@ -11,16 +11,16 @@ const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const ElderListPage = lazy(() => import('../pages/elders/ElderListPage'));
 const ElderDetailPage = lazy(() => import('../pages/elders/ElderDetailPage'));
 const ElderArchivePage = lazy(() => import('../pages/elders/ElderArchivePage'));
+const ElderArchiveListPage = lazy(() => import('../pages/elders/ElderArchiveListPage'));
 const AlertListPage = lazy(() => import('../pages/alerts/AlertListPage'));
 const AlertDetailPage = lazy(() => import('../pages/alerts/AlertDetailPage'));
 const FollowupPlanPage = lazy(() => import('../pages/followups/FollowupPlanPage'));
 const FollowupRecordPage = lazy(() => import('../pages/followups/FollowupRecordPage'));
 const InterventionPage = lazy(() => import('../pages/interventions/InterventionPage'));
 const AssessmentPage = lazy(() => import('../pages/assessments/AssessmentPage'));
-const ElderAccountPage = lazy(() => import('../pages/accounts/ElderAccountPage'));
 const PersonalAccountPage = lazy(() => import('../pages/accounts/PersonalAccountPage'));
-const UserPage = lazy(() => import('../pages/system/UserPage'));
-const RolePage = lazy(() => import('../pages/system/RolePage'));
+const DoctorPage = lazy(() => import('../pages/doctors/DoctorPage'));
+const FamilyMemberPage = lazy(() => import('../pages/family/FamilyMemberPage'));
 const ElderLayout = lazy(() => import('../layouts/ElderLayout'));
 const ElderHomePage = lazy(() => import('../pages/elder-portal/ElderHomePage'));
 const ElderInvitePage = lazy(() => import('../pages/elder-portal/ElderInvitePage'));
@@ -75,6 +75,7 @@ const AppRouter: React.FC = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/elders" element={<ElderListPage />} />
+          <Route path="/elders/archive" element={<ElderArchiveListPage />} />
           <Route path="/elders/:id" element={<ElderDetailPage />} />
           <Route path="/elders/:id/archive" element={<ElderArchivePage />} />
           <Route path="/alerts" element={<AlertListPage />} />
@@ -83,10 +84,9 @@ const AppRouter: React.FC = () => {
           <Route path="/followups/records" element={<FollowupRecordPage />} />
           <Route path="/interventions" element={<InterventionPage />} />
           <Route path="/assessments" element={<AssessmentPage />} />
-          <Route path="/accounts/elders" element={<ElderAccountPage />} />
+          <Route path="/doctors" element={<DoctorPage />} />
+          <Route path="/family-members" element={<FamilyMemberPage />} />
           <Route path="/accounts/personal" element={<PersonalAccountPage />} />
-          <Route path="/system/users" element={<UserPage />} />
-          <Route path="/system/roles" element={<RolePage />} />
         </Route>
 
         {/* Elder portal routes */}

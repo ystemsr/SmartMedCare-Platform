@@ -21,6 +21,19 @@ export interface FamilyElderInfo {
   tags: string[];
 }
 
+/** Admin view of a family member */
+export interface FamilyMemberAdmin {
+  id: number;
+  user_id: number;
+  elder_id: number;
+  relationship: string;
+  username: string;
+  real_name: string;
+  phone: string;
+  elder_name: string;
+  created_at: string;
+}
+
 export interface InviteCodeValidation {
   valid: boolean;
   elder_name: string;

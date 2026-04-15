@@ -51,7 +51,7 @@ class ElderRepository:
         """Get paginated list of elders with optional filters."""
         stmt = (
             select(Elder)
-            .options(selectinload(Elder.tags))
+            .options(selectinload(Elder.tags), selectinload(Elder.user))
             .where(Elder.deleted_at.is_(None))
         )
 

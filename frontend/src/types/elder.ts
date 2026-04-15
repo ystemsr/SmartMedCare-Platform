@@ -13,6 +13,8 @@ export interface Elder {
   emergency_contact_name: string;
   emergency_contact_phone: string;
   tags: string[];
+  username?: string;
+  family_count?: number;
   created_at: string;
   updated_at?: string;
 }

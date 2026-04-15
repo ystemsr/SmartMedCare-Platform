@@ -49,6 +49,10 @@ export function updateElderAccountStatus(
   return http.post(`/elders/${elderId}/account-status`, { account_status });
 }
 
+export function activateElderAccount(elderId: number) {
+  return http.post(`/elders/${elderId}/activate-account`);
+}
+
 // --- Tags ---
 
 export function getElderTags(): Promise<ApiResponse<ElderTag[]>> {

@@ -27,6 +27,11 @@ class FamilyMemberService:
     """Family member business operations."""
 
     @staticmethod
+    async def list_all_members(db: AsyncSession, pagination):
+        """List all family members for admin view."""
+        return await FamilyMemberRepository.get_all_paginated(db, pagination)
+
+    @staticmethod
     async def register(
         db: AsyncSession, data: FamilyRegisterRequest
     ) -> dict | str:

@@ -9,7 +9,7 @@ import {
   MedicineBoxOutlined,
   FileSearchOutlined,
   UserOutlined,
-  SettingOutlined,
+  HeartOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -88,27 +88,24 @@ const BasicLayout: React.FC = () => {
       });
     }
 
-    items.push({
-      key: '/accounts',
-      icon: <UserOutlined />,
-      label: '账户管理',
-      children: [
-        { key: '/accounts/elders', label: '老人账户' },
-        { key: '/accounts/personal', label: '个人账户' },
-      ],
-    });
-
-    if (hasAnyPermission(['user:manage', 'role:manage'])) {
+    if (hasAnyPermission(['user:manage'])) {
       items.push({
-        key: '/system',
-        icon: <SettingOutlined />,
-        label: '系统管理',
-        children: [
-          { key: '/system/users', label: '用户管理' },
-          { key: '/system/roles', label: '角色管理' },
-        ],
+        key: '/doctors',
+        icon: <MedicineBoxOutlined />,
+        label: '医生管理',
+      });
+      items.push({
+        key: '/family-members',
+        icon: <HeartOutlined />,
+        label: '家属管理',
       });
     }
+
+    items.push({
+      key: '/accounts/personal',
+      icon: <UserOutlined />,
+      label: '个人账户',
+    });
 
     return items;
   }, [hasAnyPermission]);
@@ -126,8 +123,6 @@ const BasicLayout: React.FC = () => {
     const path = location.pathname;
     if (path.startsWith('/elders')) return ['/elders'];
     if (path.startsWith('/followups')) return ['/followups'];
-    if (path.startsWith('/accounts')) return ['/accounts'];
-    if (path.startsWith('/system')) return ['/system'];
     return [];
   }, [location.pathname]);
 

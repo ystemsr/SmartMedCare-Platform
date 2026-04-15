@@ -1,4 +1,11 @@
 import http from './http';
+import type { ApiResponse, PaginatedData, PaginationParams } from '../types/common';
+import type { FamilyMemberAdmin } from '../types/family';
+
+/** List all family members (admin) */
+export function getFamilyMembers(params: PaginationParams): Promise<ApiResponse<PaginatedData<FamilyMemberAdmin>>> {
+  return http.get('/family/members', { params });
+}
 
 /** Validate invite code (public, no auth) */
 export function validateInviteCode(code: string) {

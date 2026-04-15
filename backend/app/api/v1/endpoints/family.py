@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.family_member import FamilyRegisterRequest
 from app.services.family_member import FamilyMemberService
 from app.services.invite_code import InviteCodeService
+from app.utils.pagination import PaginationParams
 from app.utils.response import (
     BUSINESS_VALIDATION_FAILED,
     NOT_FOUND,
@@ -20,6 +21,17 @@ from app.utils.response import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/members")
+async def list_family_members(
+    pagination: PaginationParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("user:manage")),
+):
+    """List all family members (admin only)."""
+    result = await FamilyMemberService.list_all_members(db, pagination)
+    return success_response(result.model_dump())
 
 
 @router.get("/validate-code/{code}")

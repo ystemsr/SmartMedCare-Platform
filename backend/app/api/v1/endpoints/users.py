@@ -27,11 +27,12 @@ router = APIRouter()
 async def list_users(
     pagination: PaginationParams = Depends(),
     status: Optional[str] = Query(None, pattern="^(active|disabled)$"),
+    role: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("user:manage")),
 ):
     """Return a paginated list of users."""
-    result = await UserService.list_users(db, pagination, status)
+    result = await UserService.list_users(db, pagination, status, role=role)
     return success_response(result.model_dump())
 
 

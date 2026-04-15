@@ -44,10 +44,35 @@ class ElderService:
         risk_level: str | None = None,
     ):
         """List elders with pagination and filters."""
-        return await ElderRepository.get_list(
+        result = await ElderRepository.get_list(
             db, pagination, gender=gender, tag=tag,
             account_status=account_status, risk_level=risk_level,
         )
+
+        # Enrich with username and family_count
+        if result.items:
+            elder_ids = [item.id for item in result.items]
+
+            # Batch fetch family counts
+            from app.repositories.family_member import FamilyMemberRepository
+            family_counts = await FamilyMemberRepository.count_by_elder_ids(db, elder_ids)
+
+            # Batch fetch usernames via Elder -> user_id -> User
+            from sqlalchemy import select as sa_select
+            from app.models.elder import Elder
+            from app.models.user import User
+
+            stmt = sa_select(Elder.id, User.username).outerjoin(
+                User, Elder.user_id == User.id
+            ).where(Elder.id.in_(elder_ids))
+            rows = await db.execute(stmt)
+            username_map = {r[0]: r[1] for r in rows.all()}
+
+            for item in result.items:
+                item.username = username_map.get(item.id)
+                item.family_count = family_counts.get(item.id, 0)
+
+        return result
 
     @staticmethod
     async def update_elder(

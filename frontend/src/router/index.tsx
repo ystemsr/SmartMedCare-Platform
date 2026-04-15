@@ -24,6 +24,10 @@ const RolePage = lazy(() => import('../pages/system/RolePage'));
 const ElderLayout = lazy(() => import('../layouts/ElderLayout'));
 const ElderHomePage = lazy(() => import('../pages/elder-portal/ElderHomePage'));
 const ElderInvitePage = lazy(() => import('../pages/elder-portal/ElderInvitePage'));
+const FamilyRegisterPage = lazy(() => import('../pages/family/FamilyRegisterPage'));
+const FamilyLayout = lazy(() => import('../layouts/FamilyLayout'));
+const FamilyHomePage = lazy(() => import('../pages/family-portal/FamilyHomePage'));
+const FamilyElderHealthPage = lazy(() => import('../pages/family-portal/FamilyElderHealthPage'));
 
 /** Loading fallback for lazy-loaded pages */
 const PageLoading: React.FC = () => (
@@ -55,6 +59,7 @@ const AppRouter: React.FC = () => {
         {/* Public routes */}
         <Route element={<BlankLayout />}>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register/family" element={<FamilyRegisterPage />} />
         </Route>
 
         {/* Protected routes */}
@@ -93,6 +98,19 @@ const AppRouter: React.FC = () => {
           <Route path="/elder" element={<ElderHomePage />} />
           <Route path="/elder/invite" element={<ElderInvitePage />} />
           <Route path="/elder/personal" element={<PersonalAccountPage />} />
+        </Route>
+
+        {/* Family portal routes */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <FamilyLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/family" element={<FamilyHomePage />} />
+          <Route path="/family/elder" element={<FamilyElderHealthPage />} />
+          <Route path="/family/personal" element={<PersonalAccountPage />} />
         </Route>
 
         {/* Fallback — redirect based on role */}

@@ -98,6 +98,12 @@ const LoginPage: React.FC = () => {
             </Button>
           </Form.Item>
         </Form>
+
+        <div style={{ textAlign: 'center', marginTop: -8 }}>
+          <Button type="link" onClick={() => navigate('/register/family')}>
+            家属注册
+          </Button>
+        </div>
       </Card>
 
       <SlideCaptcha

@@ -1,30 +1,85 @@
 import React, { useState } from 'react';
-import { Card, Descriptions, Form, Input, Button, Divider, message } from 'antd';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Divider,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { useAuthStore } from '../../store/auth';
 import { changePassword } from '../../api/auth';
+import { message } from '../../utils/message';
+
+interface PasswordFormValues {
+  old_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+type PasswordFormErrors = Partial<Record<keyof PasswordFormValues, string>>;
+
+const initialValues: PasswordFormValues = {
+  old_password: '',
+  new_password: '',
+  confirm_password: '',
+};
+
+function validatePasswordForm(values: PasswordFormValues): PasswordFormErrors {
+  const errors: PasswordFormErrors = {};
+
+  if (!values.old_password) {
+    errors.old_password = '请输入当前密码';
+  }
+  if (!values.new_password) {
+    errors.new_password = '请输入新密码';
+  } else if (values.new_password.length < 6) {
+    errors.new_password = '密码至少6个字符';
+  }
+  if (!values.confirm_password) {
+    errors.confirm_password = '请再次输入新密码';
+  } else if (values.confirm_password !== values.new_password) {
+    errors.confirm_password = '两次输入的密码不一致';
+  }
+
+  return errors;
+}
 
 const PersonalAccountPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const [loading, setLoading] = useState(false);
-  const [form] = Form.useForm();
+  const [values, setValues] = useState<PasswordFormValues>(initialValues);
+  const [errors, setErrors] = useState<PasswordFormErrors>({});
 
-  const handleChangePassword = async (values: {
-    old_password: string;
-    new_password: string;
-    confirm_password: string;
-  }) => {
-    if (values.new_password !== values.confirm_password) {
-      message.error('两次输入的密码不一致');
+  const updateField = <K extends keyof PasswordFormValues>(key: K, value: PasswordFormValues[K]) => {
+    setValues((current) => ({
+      ...current,
+      [key]: value,
+    }));
+    setErrors((current) => ({
+      ...current,
+      [key]: '',
+    }));
+  };
+
+  const handleChangePassword = async (nextValues: PasswordFormValues) => {
+    const nextErrors = validatePasswordForm(nextValues);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
       return;
     }
+
     setLoading(true);
     try {
       await changePassword({
-        old_password: values.old_password,
-        new_password: values.new_password,
+        old_password: nextValues.old_password,
+        new_password: nextValues.new_password,
       });
       message.success('密码修改成功');
-      form.resetFields();
+      setValues(initialValues);
+      setErrors({});
     } catch (err) {
       message.error(err instanceof Error ? err.message : '修改失败');
     } finally {
@@ -33,71 +88,98 @@ const PersonalAccountPage: React.FC = () => {
   };
 
   return (
-    <div>
-      <Card title="个人信息" style={{ marginBottom: 16 }}>
-        <Descriptions column={{ xs: 1, sm: 2 }}>
-          <Descriptions.Item label="用户名">{user?.username || '-'}</Descriptions.Item>
-          <Descriptions.Item label="姓名">{user?.real_name || '-'}</Descriptions.Item>
-          <Descriptions.Item label="手机号">{user?.phone || '-'}</Descriptions.Item>
-          <Descriptions.Item label="邮箱">{user?.email || '-'}</Descriptions.Item>
-          <Descriptions.Item label="角色">{user?.roles?.join(', ') || '-'}</Descriptions.Item>
-        </Descriptions>
+    <Stack spacing={3}>
+      <Card>
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+            个人信息
+          </Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+              gap: 2,
+            }}
+          >
+            {[
+              ['用户名', user?.username || '-'],
+              ['姓名', user?.real_name || '-'],
+              ['手机号', user?.phone || '-'],
+              ['邮箱', user?.email || '-'],
+              ['角色', user?.roles?.join(', ') || '-'],
+            ].map(([label, value]) => (
+              <Box key={label as string} sx={{ p: 2, borderRadius: 2, bgcolor: 'background.default' }}>
+                <Typography variant="body2" color="text.secondary">
+                  {label}
+                </Typography>
+                <Typography variant="subtitle1" sx={{ mt: 0.5, fontWeight: 600 }}>
+                  {value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </CardContent>
       </Card>
 
-      <Card title="修改密码">
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleChangePassword}
-          style={{ maxWidth: 400 }}
-        >
-          <Form.Item
-            name="old_password"
-            label="当前密码"
-            rules={[{ required: true, message: '请输入当前密码' }]}
+      <Card>
+        <CardContent>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+            修改密码
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            密码至少 6 个字符，确认新密码需保持一致。
+          </Typography>
+
+          <Box
+            component="form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleChangePassword(values);
+            }}
+            noValidate
+            sx={{ maxWidth: 440 }}
           >
-            <Input.Password placeholder="请输入当前密码" />
-          </Form.Item>
+            <Stack spacing={2.25}>
+              <TextField
+                label="当前密码"
+                type="password"
+                value={values.old_password}
+                onChange={(event) => updateField('old_password', event.target.value)}
+                error={Boolean(errors.old_password)}
+                helperText={errors.old_password || ' '}
+                fullWidth
+              />
 
-          <Divider />
+              <Divider />
 
-          <Form.Item
-            name="new_password"
-            label="新密码"
-            rules={[
-              { required: true, message: '请输入新密码' },
-              { min: 6, message: '密码至少6个字符' },
-            ]}
-          >
-            <Input.Password placeholder="请输入新密码" />
-          </Form.Item>
+              <TextField
+                label="新密码"
+                type="password"
+                value={values.new_password}
+                onChange={(event) => updateField('new_password', event.target.value)}
+                error={Boolean(errors.new_password)}
+                helperText={errors.new_password || ' '}
+                fullWidth
+              />
 
-          <Form.Item
-            name="confirm_password"
-            label="确认新密码"
-            rules={[
-              { required: true, message: '请再次输入新密码' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('new_password') === value) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('两次输入的密码不一致'));
-                },
-              }),
-            ]}
-          >
-            <Input.Password placeholder="请再次输入新密码" />
-          </Form.Item>
+              <TextField
+                label="确认新密码"
+                type="password"
+                value={values.confirm_password}
+                onChange={(event) => updateField('confirm_password', event.target.value)}
+                error={Boolean(errors.confirm_password)}
+                helperText={errors.confirm_password || ' '}
+                fullWidth
+              />
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading}>
-              修改密码
-            </Button>
-          </Form.Item>
-        </Form>
+              <Button type="submit" variant="contained" disabled={loading}>
+                {loading ? '修改中...' : '修改密码'}
+              </Button>
+            </Stack>
+          </Box>
+        </CardContent>
       </Card>
-    </div>
+    </Stack>
   );
 };
 

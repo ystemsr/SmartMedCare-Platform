@@ -1,10 +1,19 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Descriptions, Spin, Tag, Table, Typography, Alert } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Stack,
+  Typography,
+} from '@mui/material';
+import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded';
 import { useAuthStore } from '../../store/auth';
 import { getElderSelf, getElderHealthRecords } from '../../api/elderPortal';
-
-const { Title } = Typography;
+import AppTable, { type AppTableColumn } from '../../components/AppTable';
+import { formatDate, formatDateTime } from '../../utils/formatter';
 
 interface ElderProfile {
   id: number;
@@ -24,6 +33,19 @@ interface HealthRecord {
   record_type: string;
   summary: string;
   created_at: string;
+}
+
+function FieldItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'background.default' }}>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="subtitle1" sx={{ mt: 0.5, fontWeight: 600 }}>
+        {value}
+      </Typography>
+    </Box>
+  );
 }
 
 const ElderHomePage: React.FC = () => {
@@ -46,7 +68,7 @@ const ElderHomePage: React.FC = () => {
         setProfileLoading(false);
       }
     };
-    fetchProfile();
+    void fetchProfile();
   }, []);
 
   useEffect(() => {
@@ -59,12 +81,12 @@ const ElderHomePage: React.FC = () => {
         const res = await getElderHealthRecords(elderId, { page: 1, page_size: 5 });
         setHealthRecords(res.data?.items || []);
       } catch {
-        // Silently handle — profile section is more important
+        // Profile section is more important; keep the page usable.
       } finally {
         setRecordsLoading(false);
       }
     };
-    fetchRecords();
+    void fetchRecords();
   }, [user?.elder_id]);
 
   const genderMap: Record<string, string> = {
@@ -74,18 +96,19 @@ const ElderHomePage: React.FC = () => {
     F: '女',
   };
 
-  const columns: ColumnsType<HealthRecord> = [
+  const columns = useMemo<AppTableColumn<HealthRecord>[]>(() => [
     {
       title: '记录日期',
       dataIndex: 'record_date',
       key: 'record_date',
       width: 120,
+      render: (value) => formatDate(value as string | undefined),
     },
     {
       title: '类型',
       dataIndex: 'record_type',
       key: 'record_type',
-      width: 100,
+      width: 120,
     },
     {
       title: '摘要',
@@ -98,65 +121,93 @@ const ElderHomePage: React.FC = () => {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
+      render: (value) => formatDateTime(value as string | undefined),
     },
-  ];
+  ], []);
 
   if (profileLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <Spin size="large" />
-      </div>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+        <CircularProgress size={44} />
+      </Box>
     );
   }
 
   if (error) {
-    return <Alert type="error" message="加载失败" description={error} showIcon />;
+    return (
+      <Alert severity="error" variant="filled" sx={{ alignItems: 'center' }}>
+        {error}
+      </Alert>
+    );
   }
 
   return (
-    <div>
-      <Card style={{ marginBottom: 16 }}>
-        <Title level={4} style={{ marginBottom: 16 }}>
-          {profile?.name ? `${profile.name}，您好！` : '您好！'}
-        </Title>
-        <Descriptions column={{ xs: 1, sm: 2 }} bordered>
-          <Descriptions.Item label="姓名">{profile?.name || '-'}</Descriptions.Item>
-          <Descriptions.Item label="性别">
-            {profile?.gender ? (genderMap[profile.gender] || profile.gender) : '-'}
-          </Descriptions.Item>
-          <Descriptions.Item label="出生日期">{profile?.birth_date || '-'}</Descriptions.Item>
-          <Descriptions.Item label="联系电话">{profile?.phone || '-'}</Descriptions.Item>
-          <Descriptions.Item label="住址" span={2}>{profile?.address || '-'}</Descriptions.Item>
-          <Descriptions.Item label="紧急联系人">
-            {profile?.emergency_contact_name || '-'}
-          </Descriptions.Item>
-          <Descriptions.Item label="紧急联系电话">
-            {profile?.emergency_contact_phone || '-'}
-          </Descriptions.Item>
-          {profile?.tags && profile.tags.length > 0 && (
-            <Descriptions.Item label="标签" span={2}>
-              {profile.tags.map((tag) => (
-                <Tag color="blue" key={tag}>
-                  {tag}
-                </Tag>
-              ))}
-            </Descriptions.Item>
-          )}
-        </Descriptions>
+    <Stack spacing={3}>
+      <Card>
+        <CardContent>
+          <Stack spacing={2.5}>
+            <Box>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <FavoriteRoundedIcon color="error" />
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  {profile?.name ? `${profile.name}，您好！` : '您好！'}
+                </Typography>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                以下是您的基础信息与最近健康记录。
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                gap: 2,
+              }}
+            >
+              <FieldItem label="姓名" value={profile?.name || '-'} />
+              <FieldItem
+                label="性别"
+                value={profile?.gender ? (genderMap[profile.gender] || profile.gender) : '-'}
+              />
+              <FieldItem label="出生日期" value={formatDate(profile?.birth_date)} />
+              <FieldItem label="联系电话" value={profile?.phone || '-'} />
+              <FieldItem label="住址" value={profile?.address || '-'} />
+              <FieldItem label="紧急联系人" value={profile?.emergency_contact_name || '-'} />
+              <FieldItem label="紧急联系电话" value={profile?.emergency_contact_phone || '-'} />
+              <FieldItem
+                label="标签"
+                value={
+                  profile?.tags && profile.tags.length > 0 ? (
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                      {profile.tags.map((tag) => (
+                        <Chip key={tag} color="primary" variant="outlined" label={tag} />
+                      ))}
+                    </Stack>
+                  ) : (
+                    '-'
+                  )
+                }
+              />
+            </Box>
+          </Stack>
+        </CardContent>
       </Card>
 
-      <Card title="近期健康记录">
-        <Table<HealthRecord>
+      <Box>
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+          近期健康记录
+        </Typography>
+        <AppTable<HealthRecord>
           columns={columns}
           dataSource={healthRecords}
           loading={recordsLoading}
           rowKey="id"
           pagination={false}
-          locale={{ emptyText: '暂无健康记录' }}
-          scroll={{ x: 'max-content' }}
+          emptyText="暂无健康记录"
         />
-      </Card>
-    </div>
+      </Box>
+    </Stack>
   );
 };
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Card,
@@ -64,42 +64,42 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     dataIndex: 'systolic_bp',
     key: 'systolic_bp',
     width: 130,
-    render: (val?: number) => val ?? '-',
+    render: (value) => (typeof value === 'number' ? value : '-'),
   },
   {
     title: '舒张压 (mmHg)',
     dataIndex: 'diastolic_bp',
     key: 'diastolic_bp',
     width: 130,
-    render: (val?: number) => val ?? '-',
+    render: (value) => (typeof value === 'number' ? value : '-'),
   },
   {
     title: '血糖 (mmol/L)',
     dataIndex: 'blood_glucose',
     key: 'blood_glucose',
     width: 130,
-    render: (val?: number) => val ?? '-',
+    render: (value) => (typeof value === 'number' ? value : '-'),
   },
   {
     title: '心率 (bpm)',
     dataIndex: 'heart_rate',
     key: 'heart_rate',
     width: 110,
-    render: (val?: number) => val ?? '-',
+    render: (value) => (typeof value === 'number' ? value : '-'),
   },
   {
     title: '体温 (°C)',
     dataIndex: 'temperature',
     key: 'temperature',
     width: 100,
-    render: (val?: number) => val ?? '-',
+    render: (value) => (typeof value === 'number' ? value : '-'),
   },
   {
     title: '备注',
     dataIndex: 'notes',
     key: 'notes',
     ellipsis: true,
-    render: (val?: string) => val || '-',
+    render: (value) => (typeof value === 'string' && value ? value : '-'),
   },
 ];
 
@@ -115,9 +115,10 @@ const alertColumns: AppTableColumn<AlertRecord>[] = [
     dataIndex: 'level',
     key: 'level',
     width: 100,
-    render: (level: string) => (
-      <Chip size="small" color={alertLevelColorMap[level] || 'primary'} label={level} />
-    ),
+    render: (value) => {
+      const level = typeof value === 'string' ? value : '';
+      return <Chip size="small" color={alertLevelColorMap[level] || 'primary'} label={level || '-'} />;
+    },
   },
   {
     title: '内容',
@@ -130,7 +131,10 @@ const alertColumns: AppTableColumn<AlertRecord>[] = [
     dataIndex: 'status',
     key: 'status',
     width: 110,
-    render: (status: string) => alertStatusLabelMap[status] || status,
+    render: (value) => {
+      const status = typeof value === 'string' ? value : '';
+      return alertStatusLabelMap[status] || status || '-';
+    },
   },
   {
     title: '时间',

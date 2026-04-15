@@ -5,11 +5,8 @@ import {
   Button,
   Card,
   CardContent,
-  FormControl,
   InputAdornment,
-  InputLabel,
   MenuItem,
-  Select,
   Stack,
   TextField,
   Typography,
@@ -333,33 +330,31 @@ const FamilyRegisterPage: React.FC = () => {
                   }}
                 />
 
-                <FormControl fullWidth error={Boolean(errors.relationship)}>
-                  <InputLabel id="relationship-label">与老人关系</InputLabel>
-                  <Select
-                    labelId="relationship-label"
-                    label="与老人关系"
-                    value={values.relationship}
-                    onChange={(event) => updateField('relationship', String(event.target.value))}
-                    displayEmpty
-                    startAdornment={
-                      <InputAdornment position="start" sx={{ ml: 1, mr: 0 }}>
+                <TextField
+                  select
+                  label="与老人关系"
+                  value={values.relationship}
+                  onChange={(event) => updateField('relationship', String(event.target.value))}
+                  error={Boolean(errors.relationship)}
+                  helperText={errors.relationship || ' '}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
                         <GroupsRoundedIcon fontSize="small" />
                       </InputAdornment>
-                    }
-                  >
-                    <MenuItem value="">
-                      <em>请选择与老人的关系</em>
+                    ),
+                  }}
+                >
+                  <MenuItem value="">
+                    <em>请选择与老人的关系</em>
+                  </MenuItem>
+                  {relationshipOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
                     </MenuItem>
-                    {relationshipOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5, minHeight: 20 }}>
-                    {errors.relationship || ' '}
-                  </Typography>
-                </FormControl>
+                  ))}
+                </TextField>
 
                 <Button type="submit" variant="contained" size="large" fullWidth disabled={loading}>
                   {loading ? '注册中...' : '注册'}

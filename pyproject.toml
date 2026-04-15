@@ -1,0 +1,7 @@
+[project]
+name = "smartmedcare-platform"
+version = "0.1.0"
+description = "A unified smart medical-elderly care data service platform that integrates medical and elderly care resources for efficient coordination and management."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []

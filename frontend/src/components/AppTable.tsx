@@ -20,14 +20,14 @@ import {
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 
 export interface AppTableColumn<T> {
-  title: React.ReactNode;
+  title?: React.ReactNode | ((props: any) => React.ReactNode);
   dataIndex?: keyof T | string;
   key?: string;
   width?: number | string;
   align?: 'left' | 'center' | 'right';
   ellipsis?: boolean;
   fixed?: 'left' | 'right';
-  render?: (value: unknown, record: T, index: number) => React.ReactNode;
+  render?: (value: any, record: T, index: number) => React.ReactNode;
 }
 
 export type ColumnsType<T> = AppTableColumn<T>[];
@@ -83,6 +83,13 @@ function renderFallbackValue(value: unknown) {
     return '-';
   }
   return String(value);
+}
+
+function resolveTitle(title: AppTableColumn<object>['title']) {
+  if (typeof title === 'function') {
+    return title({});
+  }
+  return title ?? '';
 }
 
 function AppTable<T extends object>({
@@ -223,7 +230,7 @@ function AppTable<T extends object>({
                       fontWeight: 700,
                     }}
                   >
-                    {column.title}
+                    {resolveTitle(column.title as AppTableColumn<object>['title'])}
                   </TableCell>
                 ))}
               </TableRow>

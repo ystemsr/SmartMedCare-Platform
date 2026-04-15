@@ -7,7 +7,7 @@ import MedicalInformationRoundedIcon from '@mui/icons-material/MedicalInformatio
 import MedicationRoundedIcon from '@mui/icons-material/MedicationRounded';
 import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import StethoscopeRoundedIcon from '@mui/icons-material/StethoscopeRounded';
+import MedicalServicesRoundedIcon from '@mui/icons-material/MedicalServicesRounded';
 import TimelineRoundedIcon from '@mui/icons-material/TimelineRounded';
 import AppShell, { type AppShellMenuItem } from '../components/AppShell';
 import { usePermission } from '../hooks/usePermission';
@@ -75,7 +75,7 @@ const BasicLayout: React.FC = () => {
     if (hasAnyPermission(['user:manage'])) {
       items.push({
         key: '/doctors',
-        icon: <StethoscopeRoundedIcon />,
+        icon: <MedicalServicesRoundedIcon />,
         label: '医生管理',
       });
       items.push({

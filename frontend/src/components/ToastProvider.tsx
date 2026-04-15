@@ -33,7 +33,7 @@ const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 
   const alert = useMemo(() => {
     if (!current) {
-      return null;
+      return undefined;
     }
 
     return (

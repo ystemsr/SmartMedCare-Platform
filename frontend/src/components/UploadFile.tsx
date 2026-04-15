@@ -8,8 +8,10 @@ interface UploadFileProps {
   category?: string;
   elderId?: number;
   onSuccess?: (fileInfo: { file_id: number; file_name: string; url: string }) => void;
+  onUpload?: (file: File) => Promise<void> | void;
   accept?: string;
   maxCount?: number;
+  buttonText?: string;
 }
 
 /**
@@ -19,8 +21,10 @@ const UploadFile: React.FC<UploadFileProps> = ({
   category,
   elderId,
   onSuccess,
+  onUpload,
   accept,
   maxCount = 1,
+  buttonText = '上传文件',
 }) => {
   const [uploading, setUploading] = useState(false);
 
@@ -43,14 +47,18 @@ const UploadFile: React.FC<UploadFileProps> = ({
     setUploading(true);
 
     try {
-      const response = await http.post('/files/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      if (onUpload) {
+        await onUpload(file);
+      } else {
+        const response = await http.post('/files/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
 
-      message.success('上传成功');
-      onSuccess?.(response.data);
+        message.success('上传成功');
+        onSuccess?.(response.data);
+      }
     } catch (error) {
       message.error(error instanceof Error ? error.message : '上传失败');
     } finally {
@@ -61,7 +69,7 @@ const UploadFile: React.FC<UploadFileProps> = ({
 
   return (
     <Button component="label" variant="outlined" startIcon={<UploadRoundedIcon />} disabled={uploading}>
-      {uploading ? '上传中...' : '上传文件'}
+      {uploading ? '处理中...' : buttonText}
       <input hidden type="file" accept={accept} multiple={maxCount > 1} onChange={handleFileChange} />
     </Button>
   );

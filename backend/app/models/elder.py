@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import BaseModel
 
 if TYPE_CHECKING:
-    pass
+    from app.models.invite_code import ElderInviteCode
 
 
 class Elder(BaseModel):
@@ -44,6 +44,11 @@ class Elder(BaseModel):
         back_populates="elder",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    invite_codes: Mapped[list["ElderInviteCode"]] = relationship(
+        "ElderInviteCode",
+        back_populates="elder",
+        lazy="noload",
     )
 
 

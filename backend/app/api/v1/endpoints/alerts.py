@@ -1,0 +1,106 @@
+"""Alert (risk warning) API endpoints."""
+
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.deps import get_db, require_permission
+from app.schemas.alert import (
+    AlertBatchStatus,
+    AlertCreate,
+    AlertRecheckRequest,
+    AlertStatusUpdate,
+)
+from app.services.alert import AlertService
+from app.utils.pagination import PaginationParams
+from app.utils.response import NOT_FOUND, error_response, success_response
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+@router.get("")
+async def list_alerts(
+    pagination: PaginationParams = Depends(),
+    elder_id: Optional[int] = Query(None),
+    type: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    risk_level: Optional[str] = Query(None),
+    date_start: Optional[str] = Query(None),
+    date_end: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("alert:read")),
+):
+    """Get paginated list of alerts."""
+    result = await AlertService.get_list(
+        db, pagination, elder_id, type, status, risk_level,
+        date_start, date_end,
+    )
+    return success_response(data=result.model_dump())
+
+
+@router.post("/batch-status")
+async def batch_update_alert_status(
+    body: AlertBatchStatus,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("alert:update")),
+):
+    """Batch update alert statuses."""
+    count = await AlertService.batch_update_status(
+        db, body.ids, body.status, body.remark,
+    )
+    return success_response(data={"updated_count": count})
+
+
+@router.post("/recheck")
+async def recheck_alerts(
+    body: AlertRecheckRequest,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("alert:update")),
+):
+    """Trigger rule engine recheck for an elder."""
+    alerts = await AlertService.recheck(db, body.elder_id)
+    return success_response(
+        data=[a.model_dump() for a in alerts],
+        message=f"Recheck completed, {len(alerts)} new alert(s) created",
+    )
+
+
+@router.get("/{alert_id}")
+async def get_alert(
+    alert_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("alert:read")),
+):
+    """Get alert detail by ID."""
+    alert = await AlertService.get_by_id(db, alert_id)
+    if alert is None:
+        return error_response(NOT_FOUND, "Alert not found")
+    return success_response(data=alert.model_dump())
+
+
+@router.post("")
+async def create_alert(
+    body: AlertCreate,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("alert:update")),
+):
+    """Manually create a new alert."""
+    alert = await AlertService.create(db, body.model_dump())
+    return success_response(data=alert.model_dump())
+
+
+@router.patch("/{alert_id}/status")
+async def update_alert_status(
+    alert_id: int,
+    body: AlertStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("alert:update")),
+):
+    """Update the status of an alert."""
+    alert = await AlertService.update_status(db, alert_id, body.status, body.remark)
+    if alert is None:
+        return error_response(NOT_FOUND, "Alert not found")
+    return success_response(data=alert.model_dump())

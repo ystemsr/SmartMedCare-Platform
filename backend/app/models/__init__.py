@@ -16,6 +16,7 @@ from app.models.base import Base  # noqa: F401
 # from app.models.file_record import FileRecord, FileBinding  # noqa: F401
 
 # ===== Alert & Followup models (feat/backend-alert-followup) =====
-# from app.models.alert import Alert  # noqa: F401
-# from app.models.followup import Followup, FollowupRecord  # noqa: F401
-# from app.models.intervention import Intervention  # noqa: F401
+from app.models.alert import Alert  # noqa: F401
+from app.models.followup import Followup, FollowupRecord  # noqa: F401
+from app.models.intervention import Intervention  # noqa: F401
+from app.models.analytics import AnalyticsJob, ElderRiskProfile, DashboardSnapshot  # noqa: F401

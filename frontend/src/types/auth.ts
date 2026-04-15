@@ -36,6 +36,7 @@ export interface UserInfo {
   status?: string;
   roles: string[];
   permissions: string[];
+  elder_id?: number;
   created_at?: string;
 }
 

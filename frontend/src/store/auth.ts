@@ -13,6 +13,13 @@ interface AuthState {
   loadFromStorage: () => void;
 }
 
+/** Determine home route based on user roles */
+export function getHomeRoute(roles: string[]): string {
+  if (roles.includes('elder')) return '/elder';
+  if (roles.includes('family')) return '/family';
+  return '/dashboard';
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: getToken(),

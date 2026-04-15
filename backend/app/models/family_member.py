@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import BigInteger, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship as sa_relationship
 
 from app.models.base import BaseModel
 
@@ -25,6 +25,6 @@ class FamilyMember(BaseModel):
     )
     relationship: Mapped[str] = mapped_column(String(32), nullable=False, default="")
 
-    # Relationships
-    user: Mapped["User"] = relationship("User", foreign_keys=[user_id], lazy="selectin")
-    elder: Mapped["Elder"] = relationship("Elder", foreign_keys=[elder_id], lazy="selectin")
+    # ORM relationships
+    user: Mapped["User"] = sa_relationship("User", foreign_keys=[user_id], lazy="selectin")
+    elder: Mapped["Elder"] = sa_relationship("Elder", foreign_keys=[elder_id], lazy="selectin")

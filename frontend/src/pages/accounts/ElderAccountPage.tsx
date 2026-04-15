@@ -49,21 +49,29 @@ const ElderAccountPage: React.FC = () => {
 
   const columns: AppTableColumn<Elder>[] = [
     { title: '姓名', dataIndex: 'name', width: 100 },
-    { title: '性别', dataIndex: 'gender', width: 80, render: formatGender },
+    {
+      title: '性别',
+      dataIndex: 'gender',
+      width: 80,
+      render: (value) => formatGender(value as string | null | undefined),
+    },
     { title: '联系电话', dataIndex: 'phone', width: 130 },
     { title: '身份证号', dataIndex: 'id_card', width: 180 },
     {
       title: '账户状态',
       dataIndex: 'account_status',
       width: 100,
-      render: (status: string) => (
-        <Chip
-          size="small"
-          color={status === 'active' ? 'success' : 'error'}
-          variant="outlined"
-          label={status === 'active' ? '正常' : '已禁用'}
-        />
-      ),
+      render: (value) => {
+        const status = String(value);
+        return (
+          <Chip
+            size="small"
+            color={status === 'active' ? 'success' : 'error'}
+            variant="outlined"
+            label={status === 'active' ? '正常' : '已禁用'}
+          />
+        );
+      },
     },
     {
       title: '操作',

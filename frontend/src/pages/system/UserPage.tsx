@@ -82,31 +82,47 @@ const UserPage: React.FC = () => {
       title: '角色',
       dataIndex: 'roles',
       width: 150,
-      render: (roles: User['roles']) =>
-        roles?.length ? (
+      render: (value) => {
+        const roles = value as User['roles'] | undefined;
+        return roles?.length ? (
           <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
-            {roles.map((r) => (
-              <Chip key={r.id} label={r.display_name} size="small" color="primary" variant="outlined" />
+            {roles.map((role) => (
+              <Chip
+                key={role.id}
+                label={role.display_name}
+                size="small"
+                color="primary"
+                variant="outlined"
+              />
             ))}
           </Stack>
         ) : (
           '-'
-        ),
+        );
+      },
     },
     {
       title: '状态',
       dataIndex: 'status',
       width: 80,
-      render: (status: string) => (
-        <Chip
-          size="small"
-          color={status === 'active' ? 'success' : 'error'}
-          variant="outlined"
-          label={status === 'active' ? '正常' : '禁用'}
-        />
-      ),
+      render: (value) => {
+        const status = String(value);
+        return (
+          <Chip
+            size="small"
+            color={status === 'active' ? 'success' : 'error'}
+            variant="outlined"
+            label={status === 'active' ? '正常' : '禁用'}
+          />
+        );
+      },
     },
-    { title: '创建时间', dataIndex: 'created_at', render: formatDateTime, width: 170 },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
     {
       title: '操作',
       key: 'actions',

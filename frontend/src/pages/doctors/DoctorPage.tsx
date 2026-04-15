@@ -83,16 +83,24 @@ const DoctorPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       width: 80,
-      render: (status: string) => (
-        <Chip
-          size="small"
-          color={status === 'active' ? 'success' : 'error'}
-          variant="outlined"
-          label={status === 'active' ? '正常' : '禁用'}
-        />
-      ),
+      render: (value) => {
+        const status = String(value);
+        return (
+          <Chip
+            size="small"
+            color={status === 'active' ? 'success' : 'error'}
+            variant="outlined"
+            label={status === 'active' ? '正常' : '禁用'}
+          />
+        );
+      },
     },
-    { title: '创建时间', dataIndex: 'created_at', render: formatDateTime, width: 170 },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
     {
       title: '操作',
       key: 'actions',

@@ -25,11 +25,17 @@ const FamilyMemberPage: React.FC = () => {
       title: '关系',
       dataIndex: 'relationship',
       width: 100,
-      render: (relationship: string) => (
-        <Chip size="small" label={relationship || '-'} variant="outlined" />
-      ),
+      render: (value) => {
+        const relationship = String(value ?? '');
+        return <Chip size="small" label={relationship || '-'} variant="outlined" />;
+      },
     },
-    { title: '注册时间', dataIndex: 'created_at', render: formatDateTime, width: 170 },
+    {
+      title: '注册时间',
+      dataIndex: 'created_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
   ];
 
   return (

@@ -155,7 +155,12 @@ const RolePage: React.FC = () => {
     { title: '角色标识', dataIndex: 'name', width: 150 },
     { title: '角色名称', dataIndex: 'display_name', width: 150 },
     { title: '描述', dataIndex: 'description', ellipsis: true },
-    { title: '创建时间', dataIndex: 'created_at', render: formatDateTime, width: 170 },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
     {
       title: '操作',
       key: 'actions',

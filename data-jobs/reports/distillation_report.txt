@@ -1,0 +1,63 @@
+SmartMedCare Knowledge Distillation Report
+============================================================
+
+Teacher: MoE-Transformer
+  Parameters: 4,515,843
+
+Student: FT-Transformer (no MoE)
+  d_model=64, 2 layers, 4 heads
+  Parameters: 109,187 (41.4x smaller)
+  Distillation: T=4.0, alpha=0.7
+
+Task 1: High-Risk Elderly Classification
+  Accuracy: 0.9805
+  F1:       0.9868  (teacher: 0.9869)
+  AUC:      0.9952  (teacher: 0.9956)
+              precision    recall  f1-score   support
+
+           0       0.97      0.96      0.96       808
+           1       0.98      0.99      0.99      2276
+
+    accuracy                           0.98      3084
+   macro avg       0.98      0.97      0.97      3084
+weighted avg       0.98      0.98      0.98      3084
+
+Task 2: Priority Follow-up Classification
+  Accuracy: 0.9332
+  F1:       0.9596  (teacher: 0.9622)
+  AUC:      0.9467  (teacher: 0.9576)
+              precision    recall  f1-score   support
+
+           0       0.81      0.80      0.81       535
+           1       0.96      0.96      0.96      2549
+
+    accuracy                           0.93      3084
+   macro avg       0.88      0.88      0.88      3084
+weighted avg       0.93      0.93      0.93      3084
+
+Task 3: Health Status Score Regression
+  R2:   0.9562  (teacher: 0.9536)
+  MAE:  3.5139  (teacher: 3.6687)
+  RMSE: 4.4386
+
+Feature columns (20):
+  - AGE
+  - IS_FEMALE
+  - RACE
+  - SCHLYRS
+  - SELF_HEALTH
+  - HEALTH_CHANGE
+  - FALL_2YR
+  - PAIN
+  - BMI_CATEGORY
+  - MEMORY_RATING
+  - MEMORY_CHANGE
+  - SERIAL7_SCORE
+  - DATE_NAMING
+  - ADL_SCORE
+  - HOSPITAL_STAY
+  - NURSING_HOME
+  - HOME_HEALTH
+  - HAS_USUAL_CARE
+  - NUM_HOSPITAL_STAYS
+  - DOCTOR_VISITS

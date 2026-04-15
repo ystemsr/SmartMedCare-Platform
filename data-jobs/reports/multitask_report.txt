@@ -1,0 +1,63 @@
+SmartMedCare Multi-Task Model Evaluation Report
+============================================================
+Architecture: MoE-Transformer
+  - FT-Transformer with MoE feed-forward layers
+  - d_model=128, 4 layers, 8 heads, 8 experts (top-2)
+  - Dynamic loss weighting via learned uncertainty
+  - 3 tasks (chronic risk removed due to data leakage)
+
+Task 1: High-Risk Elderly Classification
+  Accuracy: 0.9805
+  F1:       0.9869
+  AUC:      0.9956
+              precision    recall  f1-score   support
+
+           0       0.97      0.95      0.96       808
+           1       0.98      0.99      0.99      2276
+
+    accuracy                           0.98      3084
+   macro avg       0.98      0.97      0.97      3084
+weighted avg       0.98      0.98      0.98      3084
+
+Task 2: Priority Follow-up Classification
+  Accuracy: 0.9374
+  F1:       0.9622
+  AUC:      0.9576
+              precision    recall  f1-score   support
+
+           0       0.83      0.81      0.82       535
+           1       0.96      0.96      0.96      2549
+
+    accuracy                           0.94      3084
+   macro avg       0.89      0.89      0.89      3084
+weighted avg       0.94      0.94      0.94      3084
+
+Task 3: Health Status Score Regression
+  R2:   0.9536
+  MAE:  3.6687
+  RMSE: 4.5646
+
+Feature columns (20):
+  - AGE
+  - IS_FEMALE
+  - RACE
+  - SCHLYRS
+  - SELF_HEALTH
+  - HEALTH_CHANGE
+  - FALL_2YR
+  - PAIN
+  - BMI_CATEGORY
+  - MEMORY_RATING
+  - MEMORY_CHANGE
+  - SERIAL7_SCORE
+  - DATE_NAMING
+  - ADL_SCORE
+  - HOSPITAL_STAY
+  - NURSING_HOME
+  - HOME_HEALTH
+  - HAS_USUAL_CARE
+  - NUM_HOSPITAL_STAYS
+  - DOCTOR_VISITS
+
+Note: NUM_CHRONIC + 8 chronic disease columns removed to prevent
+data leakage. Chronic disease risk task dropped (wF1 < 0.9).

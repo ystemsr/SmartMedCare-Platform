@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { message } from 'antd';
 import type { PaginatedData, ApiResponse } from '../types/common';
+import { message } from '../utils/message';
 
 interface UseTableOptions<TQuery> {
   defaultPageSize?: number;

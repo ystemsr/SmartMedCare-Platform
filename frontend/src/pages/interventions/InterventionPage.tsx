@@ -1,7 +1,25 @@
 import React, { useState, useCallback } from 'react';
-import { Button, Tag, Space, Select, Popconfirm, Modal, Form, Input, message } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import {
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+} from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
+import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
+import StopRoundedIcon from '@mui/icons-material/StopRounded';
+import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -15,9 +33,8 @@ import {
 } from '../../api/interventions';
 import { formatDateTime, formatInterventionStatus } from '../../utils/formatter';
 import { INTERVENTION_STATUS_OPTIONS, INTERVENTION_STATUS_COLORS } from '../../utils/constants';
+import { message } from '../../utils/message';
 import type { Intervention, InterventionListQuery } from '../../types/intervention';
-
-const { TextArea } = Input;
 
 const INTERVENTION_TYPE_OPTIONS = [
   { label: '用药指导', value: 'medication_guidance' },
@@ -39,8 +56,8 @@ const InterventionPage: React.FC = () => {
   const [formVisible, setFormVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<Intervention | null>(null);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
-  const [statusTarget, setStatusTarget] = useState<{ id: number; status: string } | null>(null);
-  const [statusForm] = Form.useForm();
+  const [statusTarget, setStatusTarget] = useState<{ id: number; status: Intervention['status'] } | null>(null);
+  const [statusResult, setStatusResult] = useState('');
 
   const fetchFn = useCallback(
     (params: InterventionListQuery & { page: number; page_size: number }) => getInterventions(params),
@@ -61,6 +78,10 @@ const InterventionPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
+    if (!window.confirm('确定删除该干预记录？')) {
+      return;
+    }
+
     try {
       await deleteIntervention(id);
       message.success('删除成功');
@@ -70,30 +91,37 @@ const InterventionPage: React.FC = () => {
     }
   };
 
-  const openStatusModal = (id: number, status: string) => {
+  const openStatusModal = (id: number, status: Intervention['status']) => {
     setStatusTarget({ id, status });
+    setStatusResult('');
     setStatusModalVisible(true);
   };
 
   const handleStatusSubmit = async () => {
+    if (!statusTarget) {
+      return;
+    }
+
+    if (!window.confirm(`确认将该干预标记为${formatInterventionStatus(statusTarget.status)}？`)) {
+      return;
+    }
+
     try {
-      const values = await statusForm.validateFields();
-      if (statusTarget) {
-        await updateInterventionStatus(statusTarget.id, {
-          status: statusTarget.status as Intervention['status'],
-          result: values.result,
-        });
-        message.success('状态更新成功');
-        setStatusModalVisible(false);
-        statusForm.resetFields();
-        refresh();
-      }
-    } catch {
-      // validation errors
+      await updateInterventionStatus(statusTarget.id, {
+        status: statusTarget.status,
+        result: statusResult,
+      });
+      message.success('状态更新成功');
+      setStatusModalVisible(false);
+      setStatusTarget(null);
+      setStatusResult('');
+      refresh();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '操作失败');
     }
   };
 
-  const columns: ColumnsType<Intervention> = [
+  const columns: AppTableColumn<Intervention>[] = [
     { title: '老人ID', dataIndex: 'elder_id', width: 80 },
     { title: '老人姓名', dataIndex: 'elder_name', width: 100 },
     { title: '干预类型', dataIndex: 'type', width: 120 },
@@ -101,29 +129,49 @@ const InterventionPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       width: 100,
-      render: (status: string) => (
-        <Tag color={INTERVENTION_STATUS_COLORS[status]}>
-          {formatInterventionStatus(status)}
-        </Tag>
-      ),
+      render: (status: unknown) => {
+        const interventionStatus = String(status ?? '');
+        return (
+          <Chip
+            size="small"
+            label={formatInterventionStatus(interventionStatus)}
+            sx={{
+              color: INTERVENTION_STATUS_COLORS[interventionStatus] || 'text.primary',
+              borderColor: INTERVENTION_STATUS_COLORS[interventionStatus] || 'divider',
+              bgcolor: 'transparent',
+            }}
+            variant="outlined"
+          />
+        );
+      },
     },
     { title: '干预内容', dataIndex: 'content', ellipsis: true },
-    { title: '执行时间', dataIndex: 'performed_at', render: formatDateTime, width: 170 },
+    {
+      title: '执行时间',
+      dataIndex: 'performed_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
     {
       title: '操作',
       key: 'actions',
-      width: 300,
+      width: 320,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap">
           <PermissionGuard permission="intervention:create">
-            <Button type="link" size="small" onClick={() => handleEdit(record)}>
+            <Button
+              size="small"
+              startIcon={<EditRoundedIcon />}
+              onClick={() => handleEdit(record)}
+            >
               编辑
             </Button>
             {record.status === 'planned' && (
               <Button
-                type="link"
                 size="small"
+                color="primary"
+                startIcon={<PlayArrowRoundedIcon />}
                 onClick={() => openStatusModal(record.id, 'ongoing')}
               >
                 开始执行
@@ -131,8 +179,9 @@ const InterventionPage: React.FC = () => {
             )}
             {record.status === 'ongoing' && (
               <Button
-                type="link"
                 size="small"
+                color="success"
+                startIcon={<TaskAltRoundedIcon />}
                 onClick={() => openStatusModal(record.id, 'completed')}
               >
                 完成
@@ -140,19 +189,24 @@ const InterventionPage: React.FC = () => {
             )}
             {(record.status === 'planned' || record.status === 'ongoing') && (
               <Button
-                type="link"
                 size="small"
-                danger
+                color="inherit"
+                startIcon={<StopRoundedIcon />}
                 onClick={() => openStatusModal(record.id, 'stopped')}
               >
                 停止
               </Button>
             )}
-            <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
-              <Button type="link" size="small" danger>删除</Button>
-            </Popconfirm>
+            <Button
+              size="small"
+              color="inherit"
+              startIcon={<DeleteRoundedIcon />}
+              onClick={() => handleDelete(record.id)}
+            >
+              删除
+            </Button>
           </PermissionGuard>
-        </Space>
+        </Stack>
       ),
     },
   ];
@@ -168,29 +222,47 @@ const InterventionPage: React.FC = () => {
         onSearch={handleSearch}
         searchPlaceholder="搜索干预记录"
         toolbar={
-          <Space wrap>
-            <Select
-              placeholder="状态"
-              allowClear
-              options={INTERVENTION_STATUS_OPTIONS}
-              style={{ width: 120 }}
-              value={query.status || undefined}
-              onChange={(val) => setQuery((prev) => ({ ...prev, status: val }))}
-            />
-            <Select
-              placeholder="干预类型"
-              allowClear
-              options={INTERVENTION_TYPE_OPTIONS}
-              style={{ width: 120 }}
-              value={query.type || undefined}
-              onChange={(val) => setQuery((prev) => ({ ...prev, type: val }))}
-            />
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} flexWrap="wrap">
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>状态</InputLabel>
+              <Select
+                label="状态"
+                value={query.status || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, status: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                {INTERVENTION_STATUS_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>干预类型</InputLabel>
+              <Select
+                label="干预类型"
+                value={query.type || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, type: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                {INTERVENTION_TYPE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <PermissionGuard permission="intervention:create">
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={handleCreate}>
                 新建干预
               </Button>
             </PermissionGuard>
-          </Space>
+          </Stack>
         }
       />
 
@@ -212,21 +284,43 @@ const InterventionPage: React.FC = () => {
         onCancel={() => setFormVisible(false)}
       />
 
-      <Modal
-        title="更新干预状态"
+      <Dialog
         open={statusModalVisible}
-        onOk={handleStatusSubmit}
-        onCancel={() => {
+        onClose={() => {
           setStatusModalVisible(false);
-          statusForm.resetFields();
+          setStatusTarget(null);
         }}
+        fullWidth
+        maxWidth="sm"
       >
-        <Form form={statusForm} layout="vertical">
-          <Form.Item name="result" label="执行结果">
-            <TextArea rows={3} placeholder="请输入执行结果（可选）" />
-          </Form.Item>
-        </Form>
-      </Modal>
+        <DialogTitle>更新干预状态</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField
+              label="执行结果"
+              value={statusResult}
+              onChange={(event) => setStatusResult(event.target.value)}
+              multiline
+              minRows={3}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            color="inherit"
+            onClick={() => {
+              setStatusModalVisible(false);
+              setStatusTarget(null);
+            }}
+          >
+            取消
+          </Button>
+          <Button variant="contained" onClick={handleStatusSubmit}>
+            保存
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

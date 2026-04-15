@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Upload, Button, message } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
-import type { UploadFile as AntUploadFile, UploadChangeParam } from 'antd/es/upload';
-import { getToken } from '../utils/storage';
+import { Button } from '@mui/material';
+import UploadRoundedIcon from '@mui/icons-material/UploadRounded';
+import http from '../api/http';
+import { message } from '../utils/message';
 
 interface UploadFileProps {
   category?: string;
   elderId?: number;
   onSuccess?: (fileInfo: { file_id: number; file_name: string; url: string }) => void;
+  onUpload?: (file: File) => Promise<void> | void;
   accept?: string;
   maxCount?: number;
+  buttonText?: string;
 }
 
 /**
@@ -19,42 +21,57 @@ const UploadFile: React.FC<UploadFileProps> = ({
   category,
   elderId,
   onSuccess,
+  onUpload,
   accept,
   maxCount = 1,
+  buttonText = '上传文件',
 }) => {
-  const [fileList, setFileList] = useState<AntUploadFile[]>([]);
+  const [uploading, setUploading] = useState(false);
 
-  const handleChange = (info: UploadChangeParam) => {
-    setFileList(info.fileList);
-    if (info.file.status === 'done') {
-      const res = info.file.response;
-      if (res?.code === 0) {
-        message.success('上传成功');
-        onSuccess?.(res.data);
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (category) {
+      formData.append('category', category);
+    }
+    if (elderId) {
+      formData.append('elder_id', String(elderId));
+    }
+
+    setUploading(true);
+
+    try {
+      if (onUpload) {
+        await onUpload(file);
       } else {
-        message.error(res?.message || '上传失败');
+        const response = await http.post('/files/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        message.success('上传成功');
+        onSuccess?.(response.data);
       }
-    } else if (info.file.status === 'error') {
-      message.error('上传失败');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '上传失败');
+    } finally {
+      setUploading(false);
+      event.target.value = '';
     }
   };
 
-  const data: Record<string, string> = {};
-  if (category) data.category = category;
-  if (elderId) data.elder_id = String(elderId);
-
   return (
-    <Upload
-      action="/api/v1/files/upload"
-      headers={{ Authorization: `Bearer ${getToken() || ''}` }}
-      data={data}
-      fileList={fileList}
-      onChange={handleChange}
-      accept={accept}
-      maxCount={maxCount}
-    >
-      <Button icon={<UploadOutlined />}>上传文件</Button>
-    </Upload>
+    <Button component="label" variant="outlined" startIcon={<UploadRoundedIcon />} disabled={uploading}>
+      {uploading ? '处理中...' : buttonText}
+      <input hidden type="file" accept={accept} multiple={maxCount > 1} onChange={handleFileChange} />
+    </Button>
   );
 };
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Statistic } from 'antd';
+import { Avatar, Card, Skeleton, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 
 interface StatCardProps {
@@ -23,22 +23,38 @@ const StatCard: React.FC<StatCardProps> = ({
   loading,
 }) => {
   return (
-    <Card hoverable loading={loading}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+    <Card sx={{ height: '100%' }}>
+      <Stack direction="row" spacing={2} alignItems="center">
         {icon && (
-          <div
-            style={{
-              fontSize: 32,
+          <Avatar
+            sx={{
+              width: 56,
+              height: 56,
+              bgcolor: `${color || '#1677ff'}18`,
               color: color || '#1677ff',
-              display: 'flex',
-              alignItems: 'center',
             }}
           >
             {icon}
-          </div>
+          </Avatar>
         )}
-        <Statistic title={title} value={value} suffix={suffix} />
-      </div>
+        <div>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            {title}
+          </Typography>
+          {loading ? (
+            <Skeleton variant="text" width={96} height={42} />
+          ) : (
+            <Typography variant="h4">
+              {value}
+              {suffix ? (
+                <Typography component="span" variant="h6" color="text.secondary" sx={{ ml: 0.5 }}>
+                  {suffix}
+                </Typography>
+              ) : null}
+            </Typography>
+          )}
+        </div>
+      </Stack>
     </Card>
   );
 };

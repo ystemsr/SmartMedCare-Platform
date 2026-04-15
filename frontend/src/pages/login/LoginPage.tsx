@@ -1,33 +1,73 @@
-import React, { useState, useMemo } from 'react';
-import { Form, Input, Button, Card, message } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import React, { useMemo, useState } from 'react';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  InputAdornment,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore, getHomeRoute } from '../../store/auth';
 import SlideCaptcha from '../../components/SlideCaptcha';
+import { message } from '../../utils/message';
 
 interface LoginFormValues {
   username: string;
   password: string;
 }
 
+type LoginFormErrors = Partial<Record<keyof LoginFormValues, string>>;
+
+function validateLoginForm(values: LoginFormValues): LoginFormErrors {
+  const errors: LoginFormErrors = {};
+
+  if (!values.username.trim()) {
+    errors.username = '请输入用户名';
+  }
+  if (!values.password.trim()) {
+    errors.password = '请输入密码';
+  }
+
+  return errors;
+}
+
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
-  const [form] = Form.useForm<LoginFormValues>();
   const [loading, setLoading] = useState(false);
   const [captchaVisible, setCaptchaVisible] = useState(false);
+  const [values, setValues] = useState<LoginFormValues>({ username: '', password: '' });
+  const [errors, setErrors] = useState<LoginFormErrors>({});
 
   const sessionId = useMemo(() => crypto.randomUUID(), []);
 
-  const handleSubmit = () => {
-    form.validateFields().then(() => {
+  const updateField = <K extends keyof LoginFormValues>(key: K, value: LoginFormValues[K]) => {
+    setValues((current) => ({
+      ...current,
+      [key]: value,
+    }));
+    setErrors((current) => ({
+      ...current,
+      [key]: '',
+    }));
+  };
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextErrors = validateLoginForm(values);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length === 0) {
       setCaptchaVisible(true);
-    });
+    }
   };
 
   const handleCaptchaSuccess = async (captchaToken: string) => {
     setCaptchaVisible(false);
-    const values = form.getFieldsValue();
     setLoading(true);
     try {
       await login({
@@ -52,58 +92,75 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <>
+    <Box sx={{ width: '100%', maxWidth: 480 }}>
       <Card
-        style={{
-          width: 420,
-          borderRadius: 12,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+        sx={{
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider',
         }}
-        styles={{ body: { padding: '40px 32px' } }}
       >
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: '#1677ff',
-              margin: 0,
-              lineHeight: 1.4,
-            }}
-          >
-            智慧医养大数据公共服务平台
-          </h1>
-          <p style={{ color: '#8c8c8c', fontSize: 14, margin: '8px 0 0' }}>
-            医生服务系统
-          </p>
-        </div>
+        <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
+          <Stack spacing={3}>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h5" sx={{ fontWeight: 800, color: 'primary.main' }}>
+                智慧医养大数据公共服务平台
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                医生服务系统
+              </Typography>
+            </Box>
 
-        <Form<LoginFormValues>
-          form={form}
-          onFinish={handleSubmit}
-          size="large"
-          autoComplete="off"
-        >
-          <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
-            <Input prefix={<UserOutlined />} placeholder="用户名" />
-          </Form.Item>
+            <Box component="form" onSubmit={handleSubmit} noValidate>
+              <Stack spacing={2.5}>
+                <TextField
+                  label="用户名"
+                  value={values.username}
+                  onChange={(event) => updateField('username', event.target.value)}
+                  error={Boolean(errors.username)}
+                  helperText={errors.username || ' '}
+                  autoComplete="username"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PersonOutlineRoundedIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
 
-          <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="密码" />
-          </Form.Item>
+                <TextField
+                  label="密码"
+                  type="password"
+                  value={values.password}
+                  onChange={(event) => updateField('password', event.target.value)}
+                  error={Boolean(errors.password)}
+                  helperText={errors.password || ' '}
+                  autoComplete="current-password"
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockOutlinedIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block>
-              登 录
-            </Button>
-          </Form.Item>
-        </Form>
+                <Button type="submit" variant="contained" size="large" fullWidth disabled={loading}>
+                  {loading ? '登录中...' : '登录'}
+                </Button>
+              </Stack>
+            </Box>
 
-        <div style={{ textAlign: 'center', marginTop: -8 }}>
-          <Button type="link" onClick={() => navigate('/register/family')}>
-            家属注册
-          </Button>
-        </div>
+            <Box sx={{ textAlign: 'center', mt: -0.5 }}>
+              <Button variant="text" onClick={() => navigate('/register/family')}>
+                家属注册
+              </Button>
+            </Box>
+          </Stack>
+        </CardContent>
       </Card>
 
       <SlideCaptcha
@@ -112,7 +169,7 @@ const LoginPage: React.FC = () => {
         onSuccess={handleCaptchaSuccess}
         onCancel={handleCaptchaCancel}
       />
-    </>
+    </Box>
   );
 };
 

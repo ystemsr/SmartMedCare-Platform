@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Spin } from 'antd';
 import BasicLayout from '../layouts/BasicLayout';
 import BlankLayout from '../layouts/BlankLayout';
-import { useAuthStore } from '../store/auth';
+import { useAuthStore, getHomeRoute } from '../store/auth';
 
 // Lazy-loaded pages
 const LoginPage = lazy(() => import('../pages/login/LoginPage'));
@@ -21,6 +21,9 @@ const ElderAccountPage = lazy(() => import('../pages/accounts/ElderAccountPage')
 const PersonalAccountPage = lazy(() => import('../pages/accounts/PersonalAccountPage'));
 const UserPage = lazy(() => import('../pages/system/UserPage'));
 const RolePage = lazy(() => import('../pages/system/RolePage'));
+const ElderLayout = lazy(() => import('../layouts/ElderLayout'));
+const ElderHomePage = lazy(() => import('../pages/elder-portal/ElderHomePage'));
+const ElderInvitePage = lazy(() => import('../pages/elder-portal/ElderInvitePage'));
 
 /** Loading fallback for lazy-loaded pages */
 const PageLoading: React.FC = () => (
@@ -36,6 +39,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
+};
+
+/** Fallback redirect based on user role */
+const RoleBasedRedirect: React.FC = () => {
+  const user = useAuthStore((state) => state.user);
+  const target = user ? getHomeRoute(user.roles) : '/dashboard';
+  return <Navigate to={target} replace />;
 };
 
 const AppRouter: React.FC = () => {
@@ -72,8 +82,21 @@ const AppRouter: React.FC = () => {
           <Route path="/system/roles" element={<RolePage />} />
         </Route>
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Elder portal routes */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <ElderLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/elder" element={<ElderHomePage />} />
+          <Route path="/elder/invite" element={<ElderInvitePage />} />
+          <Route path="/elder/personal" element={<PersonalAccountPage />} />
+        </Route>
+
+        {/* Fallback — redirect based on role */}
+        <Route path="*" element={<RoleBasedRedirect />} />
       </Routes>
     </Suspense>
   );

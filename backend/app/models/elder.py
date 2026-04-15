@@ -9,7 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import BaseModel
 
 if TYPE_CHECKING:
-    pass
+    from app.models.user import User
+    from app.models.invite_code import ElderInviteCode
 
 
 class Elder(BaseModel):
@@ -17,6 +18,9 @@ class Elder(BaseModel):
 
     __tablename__ = "elders"
 
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, unique=True
+    )
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     gender: Mapped[str] = mapped_column(String(16), nullable=False, default="unknown")
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
@@ -44,6 +48,13 @@ class Elder(BaseModel):
         back_populates="elder",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id], lazy="selectin")
+    invite_codes: Mapped[list["ElderInviteCode"]] = relationship(
+        "ElderInviteCode",
+        back_populates="elder",
+        cascade="all, delete-orphan",
+        lazy="noload",
     )
 
 

@@ -69,8 +69,10 @@ class AuthService:
             await AuthService._record_login(db, None, ip, user_agent, "captcha_invalid")
             return "验证码错误"
 
-        # Find user
+        # Find user by username or phone
         user = await UserRepository.get_by_username(db, username)
+        if user is None:
+            user = await UserRepository.get_by_phone(db, username)
         if user is None:
             await AuthService._record_login(db, None, ip, user_agent, "user_not_found")
             return "用户名或密码错误"

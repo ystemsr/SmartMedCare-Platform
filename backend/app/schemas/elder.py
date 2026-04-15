@@ -13,7 +13,7 @@ class ElderCreate(BaseModel):
     gender: str = "unknown"
     birth_date: Optional[date] = None
     id_card: Optional[str] = None
-    phone: Optional[str] = None
+    phone: str
     address: Optional[str] = None
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
@@ -54,6 +54,8 @@ class ElderResponse(BaseModel):
     account_status: str
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
+    username: Optional[str] = None
+    family_count: int = 0
     tags: list[str] = []
     created_at: Optional[datetime] = None
 

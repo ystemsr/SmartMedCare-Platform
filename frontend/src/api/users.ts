@@ -2,7 +2,7 @@ import http from './http';
 import type { ApiResponse, PaginatedData, PaginationParams } from '../types/common';
 import type { User, UserCreate, UserUpdate } from '../types/user';
 
-export function getUsers(params: PaginationParams): Promise<ApiResponse<PaginatedData<User>>> {
+export function getUsers(params: PaginationParams & { role?: string }): Promise<ApiResponse<PaginatedData<User>>> {
   return http.get('/users', { params });
 }
 

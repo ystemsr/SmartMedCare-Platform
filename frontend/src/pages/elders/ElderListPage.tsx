@@ -7,7 +7,7 @@ import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
 import { useTable } from '../../hooks/useTable';
-import { getElders, createElder, updateElder, deleteElder } from '../../api/elders';
+import { getElders, createElder, updateElder, deleteElder, resetElderPassword, updateElderAccountStatus, activateElderAccount } from '../../api/elders';
 import { formatGender, formatDate } from '../../utils/formatter';
 import { GENDER_OPTIONS, RISK_LEVEL_OPTIONS, ACCOUNT_STATUS_OPTIONS } from '../../utils/constants';
 import type { Elder, ElderListQuery } from '../../types/elder';
@@ -57,6 +57,36 @@ const ElderListPage: React.FC = () => {
     }
   };
 
+  const handleActivateAccount = async (record: Elder) => {
+    try {
+      const res = await activateElderAccount(record.id);
+      message.success(`账户已激活，用户名: ${res.data.username}，密码: ${res.data.password}`);
+      refresh();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '激活失败');
+    }
+  };
+
+  const handleResetPassword = async (id: number) => {
+    try {
+      await resetElderPassword(id);
+      message.success('密码已重置');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '重置失败');
+    }
+  };
+
+  const handleToggleStatus = async (id: number, currentStatus: string) => {
+    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    try {
+      await updateElderAccountStatus(id, newStatus);
+      message.success(newStatus === 'active' ? '已启用' : '已禁用');
+      refresh();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '操作失败');
+    }
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSubmit = async (values: any) => {
     setSubmitLoading(true);
@@ -91,6 +121,18 @@ const ElderListPage: React.FC = () => {
         tags?.map((tag) => <Tag key={tag} color="blue">{tag}</Tag>),
     },
     {
+      title: '账户名',
+      dataIndex: 'username',
+      width: 130,
+      render: (val: string | undefined) => val || <Tag>未激活</Tag>,
+    },
+    {
+      title: '家属数',
+      dataIndex: 'family_count',
+      width: 80,
+      render: (val: number | undefined) => val ?? 0,
+    },
+    {
       title: '账户状态',
       dataIndex: 'account_status',
       width: 100,
@@ -103,7 +145,7 @@ const ElderListPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 360,
       fixed: 'right',
       render: (_, record) => (
         <Space>
@@ -124,6 +166,31 @@ const ElderListPage: React.FC = () => {
             >
               编辑
             </Button>
+          </PermissionGuard>
+          <PermissionGuard permission="elder:update">
+            {!record.username ? (
+              <Popconfirm title="确定为该老人激活登录账户？" onConfirm={() => handleActivateAccount(record)}>
+                <Button type="link" size="small">激活账户</Button>
+              </Popconfirm>
+            ) : (
+              <>
+                <Popconfirm title="确定重置密码？" onConfirm={() => handleResetPassword(record.id)}>
+                  <Button type="link" size="small">重置密码</Button>
+                </Popconfirm>
+                <Popconfirm
+                  title={`确定${record.account_status === 'active' ? '禁用' : '启用'}该账户？`}
+                  onConfirm={() => handleToggleStatus(record.id, record.account_status)}
+                >
+                  <Button
+                    type="link"
+                    size="small"
+                    danger={record.account_status === 'active'}
+                  >
+                    {record.account_status === 'active' ? '禁用' : '启用'}
+                  </Button>
+                </Popconfirm>
+              </>
+            )}
           </PermissionGuard>
           <PermissionGuard permission="elder:delete">
             <Popconfirm title="确定删除该老人档案？" onConfirm={() => handleDelete(record.id)}>

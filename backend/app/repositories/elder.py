@@ -29,6 +29,17 @@ class ElderRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def get_by_user_id(db: AsyncSession, user_id: int) -> Optional[Elder]:
+        """Get an elder by their linked user account ID."""
+        stmt = (
+            select(Elder)
+            .options(selectinload(Elder.tags))
+            .where(Elder.user_id == user_id, Elder.deleted_at.is_(None))
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def get_list(
         db: AsyncSession,
         pagination: PaginationParams,
@@ -40,7 +51,7 @@ class ElderRepository:
         """Get paginated list of elders with optional filters."""
         stmt = (
             select(Elder)
-            .options(selectinload(Elder.tags))
+            .options(selectinload(Elder.tags), selectinload(Elder.user))
             .where(Elder.deleted_at.is_(None))
         )
 

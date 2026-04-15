@@ -2,14 +2,9 @@ import React, { useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Button, Dropdown, theme } from 'antd';
 import {
-  DashboardOutlined,
-  TeamOutlined,
-  AlertOutlined,
-  ScheduleOutlined,
-  MedicineBoxOutlined,
-  FileSearchOutlined,
+  HomeOutlined,
+  UsergroupAddOutlined,
   UserOutlined,
-  HeartOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -17,113 +12,40 @@ import {
 import type { MenuProps } from 'antd';
 import { useAuthStore } from '../store/auth';
 import { useAppStore } from '../store/app';
-import { usePermission } from '../hooks/usePermission';
 
 const { Header, Sider, Content } = Layout;
 
 type MenuItem = Required<MenuProps>['items'][number];
 
-const BasicLayout: React.FC = () => {
+const ElderLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const { sidebarCollapsed, toggleSidebar } = useAppStore();
-  const { hasAnyPermission } = usePermission();
   const { token: themeToken } = theme.useToken();
 
   const menuItems = useMemo<MenuItem[]>(() => {
-    const items: MenuItem[] = [
+    return [
       {
-        key: '/dashboard',
-        icon: <DashboardOutlined />,
-        label: '工作台',
+        key: '/elder',
+        icon: <HomeOutlined />,
+        label: '首页',
+      },
+      {
+        key: '/elder/invite',
+        icon: <UsergroupAddOutlined />,
+        label: '邀请家属',
+      },
+      {
+        key: '/elder/personal',
+        icon: <UserOutlined />,
+        label: '个人账户',
       },
     ];
+  }, []);
 
-    if (hasAnyPermission(['elder:read', 'elder:create'])) {
-      items.push({
-        key: '/elders',
-        icon: <TeamOutlined />,
-        label: '老人管理',
-        children: [
-          { key: '/elders', label: '老人列表' },
-          { key: '/elders/archive', label: '老人档案' },
-        ],
-      });
-    }
-
-    if (hasAnyPermission(['alert:read', 'alert:update'])) {
-      items.push({
-        key: '/alerts',
-        icon: <AlertOutlined />,
-        label: '风险预警',
-      });
-    }
-
-    if (hasAnyPermission(['followup:create', 'followup:update'])) {
-      items.push({
-        key: '/followups',
-        icon: <ScheduleOutlined />,
-        label: '随访管理',
-        children: [
-          { key: '/followups/plans', label: '随访计划' },
-          { key: '/followups/records', label: '随访记录' },
-        ],
-      });
-    }
-
-    if (hasAnyPermission(['intervention:create'])) {
-      items.push({
-        key: '/interventions',
-        icon: <MedicineBoxOutlined />,
-        label: '干预记录',
-      });
-    }
-
-    if (hasAnyPermission(['assessment:read', 'assessment:create'])) {
-      items.push({
-        key: '/assessments',
-        icon: <FileSearchOutlined />,
-        label: '健康评估',
-      });
-    }
-
-    if (hasAnyPermission(['user:manage'])) {
-      items.push({
-        key: '/doctors',
-        icon: <MedicineBoxOutlined />,
-        label: '医生管理',
-      });
-      items.push({
-        key: '/family-members',
-        icon: <HeartOutlined />,
-        label: '家属管理',
-      });
-    }
-
-    items.push({
-      key: '/accounts/personal',
-      icon: <UserOutlined />,
-      label: '个人账户',
-    });
-
-    return items;
-  }, [hasAnyPermission]);
-
-  // Determine selected and open keys from current path
   const selectedKeys = useMemo(() => {
-    const path = location.pathname;
-    // Match exact path first, then try parent paths
-    if (path.startsWith('/elders') && !path.includes('/archive')) return ['/elders'];
-    if (path.includes('/archive')) return ['/elders/archive'];
-    return [path];
-  }, [location.pathname]);
-
-  const openKeys = useMemo(() => {
-    const path = location.pathname;
-    if (path.startsWith('/elders')) return ['/elders'];
-    if (path.startsWith('/followups')) return ['/followups'];
-    return [];
+    return [location.pathname];
   }, [location.pathname]);
 
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
@@ -140,7 +62,7 @@ const BasicLayout: React.FC = () => {
       key: 'personal',
       icon: <UserOutlined />,
       label: '个人账户',
-      onClick: () => navigate('/accounts/personal'),
+      onClick: () => navigate('/elder/personal'),
     },
     { type: 'divider' },
     {
@@ -189,7 +111,6 @@ const BasicLayout: React.FC = () => {
         <Menu
           mode="inline"
           selectedKeys={selectedKeys}
-          defaultOpenKeys={openKeys}
           items={menuItems}
           onClick={handleMenuClick}
           style={{ border: 'none' }}
@@ -228,4 +149,4 @@ const BasicLayout: React.FC = () => {
   );
 };
 
-export default BasicLayout;
+export default ElderLayout;

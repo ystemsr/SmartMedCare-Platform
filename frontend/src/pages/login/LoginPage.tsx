@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Form, Input, Button, Card, message } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../../store/auth';
+import { useAuthStore, getHomeRoute } from '../../store/auth';
 import SlideCaptcha from '../../components/SlideCaptcha';
 
 interface LoginFormValues {
@@ -36,8 +36,10 @@ const LoginPage: React.FC = () => {
         captcha_token: captchaToken,
         session_id: sessionId,
       });
+      const user = useAuthStore.getState().user;
+      const homeRoute = user ? getHomeRoute(user.roles) : '/dashboard';
       message.success('登录成功');
-      navigate('/dashboard', { replace: true });
+      navigate(homeRoute, { replace: true });
     } catch (err) {
       message.error(err instanceof Error ? err.message : '登录失败');
     } finally {
@@ -96,6 +98,12 @@ const LoginPage: React.FC = () => {
             </Button>
           </Form.Item>
         </Form>
+
+        <div style={{ textAlign: 'center', marginTop: -8 }}>
+          <Button type="link" onClick={() => navigate('/register/family')}>
+            家属注册
+          </Button>
+        </div>
       </Card>
 
       <SlideCaptcha

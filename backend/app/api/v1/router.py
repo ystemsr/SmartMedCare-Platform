@@ -13,10 +13,10 @@ api_router.include_router(health.router, prefix="/system", tags=["系统"])
 api_router.include_router(system.router, prefix="/system", tags=["系统配置"])
 
 # ===== Elder & Health routes (feat/backend-elder-health) =====
-# from app.api.v1.endpoints import elders, assessments, files
-# api_router.include_router(elders.router, prefix="/elders", tags=["老人管理"])
-# api_router.include_router(assessments.router, prefix="/assessments", tags=["健康评估"])
-# api_router.include_router(files.router, prefix="/files", tags=["文件管理"])
+from app.api.v1.endpoints import elders, assessments, files
+api_router.include_router(elders.router, prefix="/elders", tags=["老人管理"])
+api_router.include_router(assessments.router, prefix="/assessments", tags=["健康评估"])
+api_router.include_router(files.router, prefix="/files", tags=["文件管理"])
 
 # ===== Alert & Followup routes (feat/backend-alert-followup) =====
 # from app.api.v1.endpoints import alerts, followups, interventions, dashboard

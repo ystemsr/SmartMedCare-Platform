@@ -5,9 +5,9 @@ Each section is maintained by a specific feature branch.
 from app.models.base import Base  # noqa: F401
 
 # ===== Auth & System models (feat/backend-auth-system) =====
-# from app.models.user import User, UserRole  # noqa: F401
-# from app.models.role import Role, Permission, RolePermission  # noqa: F401
-# from app.models.audit_log import AuditLog, LoginLog, SystemConfig  # noqa: F401
+from app.models.user import User, UserRole  # noqa: F401
+from app.models.role import Role, Permission, RolePermission  # noqa: F401
+from app.models.audit_log import AuditLog, LoginLog, SystemConfig  # noqa: F401
 
 # ===== Elder & Health models (feat/backend-elder-health) =====
 # from app.models.elder import Elder, ElderTag  # noqa: F401

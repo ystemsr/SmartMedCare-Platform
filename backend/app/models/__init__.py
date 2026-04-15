@@ -20,3 +20,6 @@ from app.models.alert import Alert  # noqa: F401
 from app.models.followup import Followup, FollowupRecord  # noqa: F401
 from app.models.intervention import Intervention  # noqa: F401
 from app.models.analytics import AnalyticsJob, ElderRiskProfile, DashboardSnapshot  # noqa: F401
+
+# ===== Elder & Family Role models =====
+from app.models.invite_code import ElderInviteCode  # noqa: F401

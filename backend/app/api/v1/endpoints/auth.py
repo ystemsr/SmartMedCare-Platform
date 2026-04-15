@@ -53,6 +53,7 @@ async def login(
 
 @router.get("/me")
 async def get_me(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Return current authenticated user info with permissions."""
@@ -72,6 +73,28 @@ async def get_me(
         "roles": role_names,
         "permissions": sorted(permissions),
     }
+
+    # Add elder_id for elder/family roles
+    if "elder" in role_names:
+        from app.repositories.elder import ElderRepository
+        elder = await ElderRepository.get_by_user_id(db, current_user.id)
+        if elder:
+            data["elder_id"] = elder.id
+    elif "family" in role_names:
+        try:
+            from app.models.family_member import FamilyMember
+            from sqlalchemy import select
+            stmt = select(FamilyMember).where(
+                FamilyMember.user_id == current_user.id,
+                FamilyMember.deleted_at.is_(None),
+            )
+            result = await db.execute(stmt)
+            fm = result.scalar_one_or_none()
+            if fm:
+                data["elder_id"] = fm.elder_id
+        except ImportError:
+            pass
+
     return success_response(data)
 
 

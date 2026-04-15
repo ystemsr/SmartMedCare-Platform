@@ -101,3 +101,56 @@ class ElderService:
     async def get_tags(db: AsyncSession) -> list[str]:
         """Get all distinct elder tags."""
         return await ElderRepository.get_all_tags(db)
+
+    @staticmethod
+    async def activate_account(db: AsyncSession, elder_id: int) -> dict | str:
+        """Create a user account for an elder and link it.
+
+        Returns dict with username and password on success, or error string.
+        """
+        elder = await ElderRepository.get_by_id(db, elder_id)
+        if elder is None:
+            return "老人档案不存在"
+        if elder.user_id is not None:
+            return "该老人已有关联账户"
+
+        # Generate username from phone or elder_<id>
+        username = f"elder_{elder.id}" if not elder.phone else elder.phone
+
+        # Check username uniqueness
+        from app.repositories.user import UserRepository
+        existing = await UserRepository.get_by_username(db, username)
+        if existing:
+            username = f"elder_{elder.id}"
+            existing = await UserRepository.get_by_username(db, username)
+            if existing:
+                return "用户名已存在，请联系管理员"
+
+        # Generate random password
+        alphabet = string.ascii_letters + string.digits
+        plain_password = "".join(secrets.choice(alphabet) for _ in range(12))
+        hashed = hash_password(plain_password)
+
+        # Create user
+        from app.models.user import User, UserRole
+        user = User(
+            username=username,
+            real_name=elder.name,
+            phone=elder.phone,
+            password_hash=hashed,
+            status="active",
+        )
+        db.add(user)
+        await db.flush()
+
+        # Assign elder role (role_id=3)
+        user_role = UserRole(user_id=user.id, role_id=3)
+        db.add(user_role)
+
+        # Link elder to user
+        elder.user_id = user.id
+        elder.account_status = "active"
+
+        await db.commit()
+        logger.info("Elder account activated: elder_id=%s user_id=%s", elder_id, user.id)
+        return {"username": username, "password": plain_password}

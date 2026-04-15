@@ -9,10 +9,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db, require_permission
+from app.core.deps import get_current_user, get_db, require_permission
+from app.models.user import User
 from app.schemas.elder import (
     AccountStatusUpdate,
     ElderCreate,
+    ElderResponse,
     ElderUpdate,
 )
 from app.schemas.health_archive import (
@@ -23,8 +25,11 @@ from app.schemas.health_archive import (
 )
 from app.services.elder import ElderService
 from app.services.health_archive import HealthArchiveService
+from app.services.invite_code import InviteCodeService
 from app.utils.pagination import PaginationParams
 from app.utils.response import (
+    BUSINESS_VALIDATION_FAILED,
+    FORBIDDEN,
     NOT_FOUND,
     PARAM_ERROR,
     FILE_STORAGE_ERROR,
@@ -35,6 +40,59 @@ from app.utils.response import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ==================== Elder Self-Service (must be before /{elder_id}) ====================
+
+
+@router.get("/me")
+async def get_elder_self(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("elder:self_read")),
+):
+    """Get the current elder's own profile."""
+    from app.repositories.elder import ElderRepository
+    elder = await ElderRepository.get_by_user_id(db, current_user.id)
+    if elder is None:
+        return error_response(NOT_FOUND, "未找到关联的老人档案")
+    return success_response(ElderResponse.model_validate(elder).model_dump())
+
+
+@router.get("/me/family")
+async def get_elder_family(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("elder:self_read")),
+):
+    """Get family members linked to the current elder."""
+    from app.repositories.elder import ElderRepository
+    elder = await ElderRepository.get_by_user_id(db, current_user.id)
+    if elder is None:
+        return error_response(NOT_FOUND, "未找到关联的老人档案")
+
+    # Query family members
+    from sqlalchemy import select
+    # Import FamilyMember - may not exist yet if family backend hasn't merged
+    try:
+        from app.models.family_member import FamilyMember
+        stmt = (
+            select(FamilyMember)
+            .where(FamilyMember.elder_id == elder.id, FamilyMember.deleted_at.is_(None))
+        )
+        result = await db.execute(stmt)
+        members = result.scalars().all()
+        data = [
+            {
+                "id": m.id,
+                "user_id": m.user_id,
+                "relationship": m.relationship,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in members
+        ]
+    except ImportError:
+        data = []
+
+    return success_response(data)
 
 
 # ==================== Elder CRUD ====================
@@ -147,6 +205,103 @@ async def update_account_status(
     if not result:
         return error_response(NOT_FOUND, "Elder not found")
     return success_response(message="Account status updated")
+
+
+# ==================== Account Activation & Invite Codes ====================
+
+
+@router.post("/{elder_id}/activate-account")
+async def activate_elder_account(
+    elder_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("elder:update")),
+):
+    """Create a user account for an elder, enabling them to log in."""
+    result = await ElderService.activate_account(db, elder_id)
+    if isinstance(result, str):
+        return error_response(BUSINESS_VALIDATION_FAILED, result)
+    return success_response(result, message="账户激活成功")
+
+
+@router.post("/{elder_id}/invite-code")
+async def generate_invite_code(
+    elder_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate an invite code for family member registration."""
+    # Check authorization: admin/doctor with elder:invite OR the elder themselves
+    from app.repositories.elder import ElderRepository
+    elder = await ElderRepository.get_by_id(db, elder_id)
+    if elder is None:
+        return error_response(NOT_FOUND, "老人档案不存在")
+
+    user_permissions = set()
+    for ur in current_user.user_roles:
+        for rp in ur.role.role_permissions:
+            user_permissions.add(rp.permission.code)
+
+    is_self = elder.user_id == current_user.id
+    if not is_self and "elder:invite" not in user_permissions:
+        return error_response(FORBIDDEN, "无权操作")
+
+    if elder.user_id is None:
+        return error_response(BUSINESS_VALIDATION_FAILED, "请先激活老人账户")
+
+    result = await InviteCodeService.generate_code(db, elder_id)
+    return success_response(result.model_dump())
+
+
+@router.get("/{elder_id}/invite-code")
+async def get_invite_code(
+    elder_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get active invite code for an elder."""
+    from app.repositories.elder import ElderRepository
+    elder = await ElderRepository.get_by_id(db, elder_id)
+    if elder is None:
+        return error_response(NOT_FOUND, "老人档案不存在")
+
+    user_permissions = set()
+    for ur in current_user.user_roles:
+        for rp in ur.role.role_permissions:
+            user_permissions.add(rp.permission.code)
+
+    is_self = elder.user_id == current_user.id
+    if not is_self and "elder:invite" not in user_permissions:
+        return error_response(FORBIDDEN, "无权操作")
+
+    result = await InviteCodeService.get_active_code(db, elder_id)
+    if result is None:
+        return success_response(None, message="暂无有效邀请码")
+    return success_response(result.model_dump())
+
+
+@router.delete("/{elder_id}/invite-code")
+async def revoke_invite_code(
+    elder_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Revoke active invite codes for an elder."""
+    from app.repositories.elder import ElderRepository
+    elder = await ElderRepository.get_by_id(db, elder_id)
+    if elder is None:
+        return error_response(NOT_FOUND, "老人档案不存在")
+
+    user_permissions = set()
+    for ur in current_user.user_roles:
+        for rp in ur.role.role_permissions:
+            user_permissions.add(rp.permission.code)
+
+    is_self = elder.user_id == current_user.id
+    if not is_self and "elder:invite" not in user_permissions:
+        return error_response(FORBIDDEN, "无权操作")
+
+    await InviteCodeService.revoke_code(db, elder_id)
+    return success_response(message="邀请码已撤销")
 
 
 # ==================== Health Records ====================

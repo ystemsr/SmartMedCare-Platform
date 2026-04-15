@@ -459,3 +459,72 @@ INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
 
 -- Assign admin role to admin user
 INSERT INTO `user_roles` (`user_id`, `role_id`) VALUES (1, 1);
+
+-- ============================================================
+-- 11. Elder & Family Role Support
+-- ============================================================
+
+-- Add user_id to elders for unified auth
+ALTER TABLE `elders` ADD COLUMN `user_id` BIGINT UNSIGNED DEFAULT NULL AFTER `id`;
+ALTER TABLE `elders` ADD UNIQUE KEY `uk_user_id` (`user_id`);
+ALTER TABLE `elders` ADD CONSTRAINT `fk_elders_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL;
+
+-- Invite codes for family member registration
+CREATE TABLE IF NOT EXISTS `elder_invite_codes` (
+    `id`         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `elder_id`   BIGINT UNSIGNED NOT NULL,
+    `code`       VARCHAR(16) NOT NULL,
+    `expires_at` DATETIME NOT NULL,
+    `used_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `max_uses`   INT UNSIGNED NOT NULL DEFAULT 3,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_code` (`code`),
+    INDEX `idx_elder_id` (`elder_id`),
+    CONSTRAINT `fk_invite_codes_elder` FOREIGN KEY (`elder_id`) REFERENCES `elders`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Family members linked to elders
+CREATE TABLE IF NOT EXISTS `family_members` (
+    `id`           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `user_id`      BIGINT UNSIGNED NOT NULL,
+    `elder_id`     BIGINT UNSIGNED NOT NULL,
+    `relationship` VARCHAR(32) NOT NULL DEFAULT '',
+    `created_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at`   DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_user_elder` (`user_id`, `elder_id`),
+    INDEX `idx_elder_id` (`elder_id`),
+    CONSTRAINT `fk_family_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_family_elder` FOREIGN KEY (`elder_id`) REFERENCES `elders`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- New roles
+INSERT INTO `roles` (`id`, `name`, `display_name`) VALUES
+(3, 'elder',  '老人'),
+(4, 'family', '家属');
+
+-- New permissions
+INSERT INTO `permissions` (`id`, `code`, `name`, `description`) VALUES
+(22, 'elder:invite',    '生成邀请码',       '为老人生成家属邀请码'),
+(23, 'family:read',     '查看关联老人',     '家属查看关联老人的信息'),
+(24, 'elder:self_read', '老人查看个人信息', '老人查看自己的健康预警等信息');
+
+-- Elder role permissions
+INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
+(3, 1),   -- auth:login
+(3, 24),  -- elder:self_read
+(3, 22);  -- elder:invite
+
+-- Family role permissions
+INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
+(4, 1),   -- auth:login
+(4, 23);  -- family:read
+
+-- Admin and doctor get elder:invite
+INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
+(1, 22),  -- admin: elder:invite
+(1, 23),  -- admin: family:read
+(1, 24),  -- admin: elder:self_read
+(2, 22);  -- doctor: elder:invite

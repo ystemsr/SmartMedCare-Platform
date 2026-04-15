@@ -1,0 +1,42 @@
+/* Global styles and Ant Design overrides */
+
+body {
+  background-color: #f5f5f5;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Card hover effect */
+.ant-card:hover {
+  transition: box-shadow 0.3s;
+}
+
+/* Table row hover */
+.ant-table-tbody > tr:hover > td {
+  transition: background 0.2s;
+}
+
+/* Page transition */
+.page-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s, transform 0.3s;
+}

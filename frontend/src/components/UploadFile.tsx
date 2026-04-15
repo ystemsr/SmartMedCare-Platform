@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Upload, Button, message } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
-import type { UploadFile as AntUploadFile, UploadChangeParam } from 'antd/es/upload';
-import { getToken } from '../utils/storage';
+import { Button } from '@mui/material';
+import UploadRoundedIcon from '@mui/icons-material/UploadRounded';
+import http from '../api/http';
+import { message } from '../utils/message';
 
 interface UploadFileProps {
   category?: string;
@@ -22,39 +22,48 @@ const UploadFile: React.FC<UploadFileProps> = ({
   accept,
   maxCount = 1,
 }) => {
-  const [fileList, setFileList] = useState<AntUploadFile[]>([]);
+  const [uploading, setUploading] = useState(false);
 
-  const handleChange = (info: UploadChangeParam) => {
-    setFileList(info.fileList);
-    if (info.file.status === 'done') {
-      const res = info.file.response;
-      if (res?.code === 0) {
-        message.success('上传成功');
-        onSuccess?.(res.data);
-      } else {
-        message.error(res?.message || '上传失败');
-      }
-    } else if (info.file.status === 'error') {
-      message.error('上传失败');
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (category) {
+      formData.append('category', category);
+    }
+    if (elderId) {
+      formData.append('elder_id', String(elderId));
+    }
+
+    setUploading(true);
+
+    try {
+      const response = await http.post('/files/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      message.success('上传成功');
+      onSuccess?.(response.data);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '上传失败');
+    } finally {
+      setUploading(false);
+      event.target.value = '';
     }
   };
 
-  const data: Record<string, string> = {};
-  if (category) data.category = category;
-  if (elderId) data.elder_id = String(elderId);
-
   return (
-    <Upload
-      action="/api/v1/files/upload"
-      headers={{ Authorization: `Bearer ${getToken() || ''}` }}
-      data={data}
-      fileList={fileList}
-      onChange={handleChange}
-      accept={accept}
-      maxCount={maxCount}
-    >
-      <Button icon={<UploadOutlined />}>上传文件</Button>
-    </Upload>
+    <Button component="label" variant="outlined" startIcon={<UploadRoundedIcon />} disabled={uploading}>
+      {uploading ? '上传中...' : '上传文件'}
+      <input hidden type="file" accept={accept} multiple={maxCount > 1} onChange={handleFileChange} />
+    </Button>
   );
 };
 

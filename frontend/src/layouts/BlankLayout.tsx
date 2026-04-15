@@ -1,4 +1,5 @@
 import React from 'react';
+import { Box } from '@mui/material';
 import { Outlet } from 'react-router-dom';
 
 /**
@@ -6,17 +7,19 @@ import { Outlet } from 'react-router-dom';
  */
 const BlankLayout: React.FC = () => {
   return (
-    <div
-      style={{
+    <Box
+      sx={{
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        px: 2,
+        background:
+          'radial-gradient(circle at top left, rgba(31, 111, 235, 0.24), transparent 35%), linear-gradient(135deg, #f7fbff 0%, #e5f4f2 52%, #d9e7ff 100%)',
       }}
     >
       <Outlet />
-    </div>
+    </Box>
   );
 };
 

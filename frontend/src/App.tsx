@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { ConfigProvider, Spin } from 'antd';
-import zhCN from 'antd/locale/zh_CN';
+import { CircularProgress, CssBaseline, ThemeProvider } from '@mui/material';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import AppRouter from './router';
+import ToastProvider from './components/ToastProvider';
 import { useAuthStore } from './store/auth';
+import theme from './theme';
 
 dayjs.locale('zh-cn');
 
@@ -28,26 +31,26 @@ function App() {
 
   if (initializing) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Spin size="large" />
-      </div>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <CircularProgress size={48} />
+        </div>
+      </ThemeProvider>
     );
   }
 
   return (
-    <ConfigProvider
-      locale={zhCN}
-      theme={{
-        token: {
-          colorPrimary: '#1677ff',
-          borderRadius: 6,
-        },
-      }}
-    >
-      <BrowserRouter>
-        <AppRouter />
-      </BrowserRouter>
-    </ConfigProvider>
+    <ThemeProvider theme={theme}>
+      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="zh-cn">
+        <ToastProvider>
+          <CssBaseline />
+          <BrowserRouter>
+            <AppRouter />
+          </BrowserRouter>
+        </ToastProvider>
+      </LocalizationProvider>
+    </ThemeProvider>
   );
 }
 

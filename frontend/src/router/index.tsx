@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from 'react';
+import { Box, CircularProgress } from '@mui/material';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Spin } from 'antd';
 import BasicLayout from '../layouts/BasicLayout';
 import BlankLayout from '../layouts/BlankLayout';
 import { useAuthStore, getHomeRoute } from '../store/auth';
@@ -31,9 +31,9 @@ const FamilyElderHealthPage = lazy(() => import('../pages/family-portal/FamilyEl
 
 /** Loading fallback for lazy-loaded pages */
 const PageLoading: React.FC = () => (
-  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-    <Spin size="large" />
-  </div>
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+    <CircularProgress size={42} />
+  </Box>
 );
 
 /** Protected route wrapper — redirects to login if no token */

@@ -4,7 +4,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm config set registry https://registry.npmmirror.com && npm ci
+RUN npm config set registry https://registry.npmmirror.com && npm install
 
 COPY . .
 RUN npm run build

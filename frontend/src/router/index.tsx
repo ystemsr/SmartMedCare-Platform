@@ -47,7 +47,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 /** Fallback redirect based on user role */
 const RoleBasedRedirect: React.FC = () => {
+  const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
+  if (!token) return <Navigate to="/login" replace />;
   const target = user ? getHomeRoute(user.roles) : '/dashboard';
   return <Navigate to={target} replace />;
 };

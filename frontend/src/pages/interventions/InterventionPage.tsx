@@ -146,7 +146,12 @@ const InterventionPage: React.FC = () => {
       },
     },
     { title: '干预内容', dataIndex: 'content', ellipsis: true },
-    { title: '执行时间', dataIndex: 'performed_at', render: formatDateTime, width: 170 },
+    {
+      title: '执行时间',
+      dataIndex: 'performed_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
     {
       title: '操作',
       key: 'actions',

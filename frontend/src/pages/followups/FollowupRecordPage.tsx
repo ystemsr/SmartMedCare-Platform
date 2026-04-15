@@ -41,7 +41,7 @@ const FollowupRecordPage: React.FC = () => {
       title: '随访方式',
       dataIndex: 'plan_type',
       width: 100,
-      render: formatPlanType,
+      render: (value) => formatPlanType(value as string | null | undefined),
     },
     {
       title: '状态',
@@ -63,10 +63,20 @@ const FollowupRecordPage: React.FC = () => {
         );
       },
     },
-    { title: '计划时间', dataIndex: 'planned_at', render: formatDateTime, width: 170 },
+    {
+      title: '计划时间',
+      dataIndex: 'planned_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
     { title: '负责人', dataIndex: 'assigned_to_name', width: 100 },
     { title: '备注', dataIndex: 'notes', ellipsis: true },
-    { title: '创建时间', dataIndex: 'created_at', render: formatDateTime, width: 170 },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
   ];
 
   return (

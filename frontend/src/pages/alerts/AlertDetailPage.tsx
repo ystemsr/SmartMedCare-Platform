@@ -7,7 +7,6 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Grid,
   Stack,
   Step,
   StepLabel,
@@ -26,9 +25,17 @@ import type { Alert } from '../../types/alert';
 
 const statusSteps = ['pending', 'processing', 'resolved'] as const;
 
-function DetailItem({ label, value, fullWidth = false }: { label: string; value?: React.ReactNode; fullWidth?: boolean }) {
+function DetailItem({
+  label,
+  value,
+  fullWidth = false,
+}: {
+  label: string;
+  value?: React.ReactNode;
+  fullWidth?: boolean;
+}) {
   return (
-    <Grid item xs={12} sm={fullWidth ? 12 : 6}>
+    <Box sx={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
       <Stack spacing={0.5}>
         <Typography variant="caption" color="text.secondary">
           {label}
@@ -37,7 +44,7 @@ function DetailItem({ label, value, fullWidth = false }: { label: string; value?
           {value ?? '-'}
         </Typography>
       </Stack>
-    </Grid>
+    </Box>
   );
 }
 
@@ -79,9 +86,8 @@ const AlertDetailPage: React.FC = () => {
     }
   };
 
-  const currentStep = alert?.status === 'ignored'
-    ? 0
-    : statusSteps.indexOf(alert?.status || 'pending');
+  const currentStep =
+    alert?.status === 'ignored' ? 0 : statusSteps.indexOf(alert?.status || 'pending');
 
   if (loading) {
     return (
@@ -136,7 +142,14 @@ const AlertDetailPage: React.FC = () => {
             </Stack>
           </Stack>
 
-          <Grid container spacing={2} sx={{ mt: 2 }}>
+          <Box
+            sx={{
+              mt: 2,
+              display: 'grid',
+              gap: 2,
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+            }}
+          >
             <DetailItem label="预警标题" value={alert?.title} />
             <DetailItem label="预警类型" value={alert?.type} />
             <DetailItem
@@ -174,7 +187,7 @@ const AlertDetailPage: React.FC = () => {
             <DetailItem label="触发时间" value={formatDateTime(alert?.triggered_at)} fullWidth />
             <DetailItem label="描述" value={alert?.description} fullWidth />
             {alert?.remark && <DetailItem label="备注" value={alert.remark} fullWidth />}
-          </Grid>
+          </Box>
         </CardContent>
       </Card>
 

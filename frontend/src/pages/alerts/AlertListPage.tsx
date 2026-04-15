@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import {
-  Box,
   Button,
   Chip,
   FormControl,
@@ -15,6 +14,7 @@ import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import ManageSearchRoundedIcon from '@mui/icons-material/ManageSearchRounded';
 import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
 import BlockRoundedIcon from '@mui/icons-material/BlockRounded';
+import { useNavigate } from 'react-router-dom';
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
@@ -145,7 +145,12 @@ const AlertListPage: React.FC = () => {
         );
       },
     },
-    { title: '触发时间', dataIndex: 'triggered_at', render: formatDateTime, width: 170 },
+    {
+      title: '触发时间',
+      dataIndex: 'triggered_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
     {
       title: '操作',
       key: 'actions',

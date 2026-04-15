@@ -19,8 +19,9 @@ api_router.include_router(assessments.router, prefix="/assessments", tags=["健�
 api_router.include_router(files.router, prefix="/files", tags=["文件管理"])
 
 # ===== Alert & Followup routes (feat/backend-alert-followup) =====
-# from app.api.v1.endpoints import alerts, followups, interventions, dashboard
-# api_router.include_router(alerts.router, prefix="/alerts", tags=["风险预警"])
-# api_router.include_router(followups.router, prefix="/followups", tags=["随访管理"])
-# api_router.include_router(interventions.router, prefix="/interventions", tags=["干预记录"])
-# api_router.include_router(dashboard.router, prefix="/dashboard", tags=["工作台"])
+from app.api.v1.endpoints import alerts, followups, interventions, dashboard, analytics
+api_router.include_router(alerts.router, prefix="/alerts", tags=["风险预警"])
+api_router.include_router(followups.router, prefix="/followups", tags=["随访管理"])
+api_router.include_router(interventions.router, prefix="/interventions", tags=["干预记录"])
+api_router.include_router(dashboard.router, prefix="/dashboard", tags=["工作台"])
+api_router.include_router(analytics.router, prefix="/analytics", tags=["数据分析"])

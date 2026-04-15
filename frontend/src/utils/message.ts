@@ -39,5 +39,7 @@ export const message = {
 
 export function subscribeMessage(listener: MessageListener) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }

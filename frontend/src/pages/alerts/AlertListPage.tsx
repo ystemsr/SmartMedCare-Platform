@@ -34,7 +34,6 @@ import {
   ALERT_STATUS_COLORS,
 } from '../../utils/constants';
 import { message } from '../../utils/message';
-import { useNavigate } from 'react-router-dom';
 import type { Alert, AlertListQuery } from '../../types/alert';
 
 const createFields: FormFieldConfig[] = [

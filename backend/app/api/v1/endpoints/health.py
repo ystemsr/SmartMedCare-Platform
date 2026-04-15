@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db, require_permission
 from app.core.minio_client import check_health as minio_check_health
-from app.core.redis_client import redis_client
+from app.core import redis_client as redis_module
 from app.models.user import User
 from app.schemas.system import HealthCheckResponse, RuntimeInfo
 from app.utils.response import success_response
@@ -42,8 +42,8 @@ async def health_check(
     # Redis
     redis_status = "ok"
     try:
-        if redis_client is not None:
-            await redis_client.ping()
+        if redis_module.redis_client is not None:
+            await redis_module.redis_client.ping()
         else:
             redis_status = "error"
     except Exception:

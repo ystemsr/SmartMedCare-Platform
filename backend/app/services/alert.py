@@ -1,7 +1,7 @@
 """Service layer for alert business logic."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,7 @@ class AlertService:
     async def create(db: AsyncSession, data: dict) -> AlertResponse:
         """Create a new alert manually."""
         data.setdefault("source", "manual")
-        data.setdefault("triggered_at", datetime.utcnow())
+        data.setdefault("triggered_at", datetime.now(timezone.utc))
         alert = await AlertRepository.create(db, data)
         await db.commit()
         return AlertResponse.model_validate(alert)

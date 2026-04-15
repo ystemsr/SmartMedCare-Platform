@@ -23,19 +23,19 @@ class Elder(BaseModel):
     id_card: Mapped[Optional[str]] = mapped_column(
         String(18), nullable=True, unique=True
     )
-    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    address: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    address: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     account_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="active"
     )
-    account_password_hash: Mapped[Optional[str]] = mapped_column(
-        String(256), nullable=True
+    account_password_hash: Mapped[str] = mapped_column(
+        String(256), nullable=False, default=""
     )
-    emergency_contact_name: Mapped[Optional[str]] = mapped_column(
-        String(64), nullable=True
+    emergency_contact_name: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
     )
-    emergency_contact_phone: Mapped[Optional[str]] = mapped_column(
-        String(20), nullable=True
+    emergency_contact_phone: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=""
     )
 
     # Relationships

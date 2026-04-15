@@ -1,7 +1,7 @@
 """Service layer for dashboard business logic."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import func, select, text, case, literal_column
@@ -53,7 +53,7 @@ class DashboardService:
         todo_followup_total = followup_todo_result.scalar_one()
 
         # Completed followups today
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         followup_done_stmt = select(func.count(Followup.id)).where(
             Followup.status == "completed",
             Followup.updated_at >= today_start,
@@ -144,7 +144,7 @@ class DashboardService:
 
         # Parse range
         days = {"7d": 7, "30d": 30, "90d": 90}.get(range_, 7)
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         # Build date series and aggregate
         trends: dict[str, TrendData] = {}

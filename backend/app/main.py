@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.logger import setup_logging
+from app.core.minio_client import init_minio
 from app.core.redis_client import close_redis, init_redis
 from app.api.v1.router import api_router
 from app.utils.response import (
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     logger.info("Starting %s application", settings.APP_NAME)
     await init_redis()
+    await init_minio()
     yield
     await close_redis()
     logger.info("Application shutdown complete")

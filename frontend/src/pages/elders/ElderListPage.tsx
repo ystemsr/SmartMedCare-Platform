@@ -57,14 +57,15 @@ const ElderListPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (values: Record<string, unknown>) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleSubmit = async (values: any) => {
     setSubmitLoading(true);
     try {
       if (editingElder) {
         await updateElder(editingElder.id, values);
         message.success('更新成功');
       } else {
-        await createElder(values as Parameters<typeof createElder>[0]);
+        await createElder(values);
         message.success('创建成功');
       }
       setFormVisible(false);

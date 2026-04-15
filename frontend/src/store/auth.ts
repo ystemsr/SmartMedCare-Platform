@@ -20,7 +20,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   login: async (credentials) => {
     const res = await loginApi(credentials);
-    const { access_token, user } = res.data;
+    const { access_token } = res.data;
     setToken(access_token);
     set({ token: access_token });
 
@@ -30,9 +30,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       user: meRes.data,
       permissions: meRes.data.permissions || [],
     });
-
-    // Store basic user info from login response for quick access
-    void user;
   },
 
   logout: async () => {

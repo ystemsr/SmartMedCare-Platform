@@ -1,7 +1,7 @@
 """Repository for Followup and FollowupRecord model database operations."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -101,7 +101,7 @@ class FollowupRepository:
         followup = await FollowupRepository.get_by_id(db, followup_id)
         if followup is None:
             return False
-        followup.deleted_at = datetime.utcnow()
+        followup.deleted_at = datetime.now(timezone.utc)
         await db.flush()
         return True
 

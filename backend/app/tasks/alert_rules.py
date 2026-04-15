@@ -1,7 +1,7 @@
 """Alert rule engine for evaluating health data thresholds."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -70,7 +70,7 @@ async def evaluate_health_rules(
     # Import here to avoid circular imports
     from app.models.health_archive import HealthRecord
 
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
     # Fetch recent health records
     stmt = (
@@ -99,7 +99,7 @@ async def evaluate_health_rules(
     existing_types = {row[0] for row in existing_result.all()}
 
     new_alerts: list[Alert] = []
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     for rule in HEALTH_RULES:
         if rule["alert_type"] in existing_types:

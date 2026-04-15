@@ -12,12 +12,13 @@ export interface FormFieldConfig {
   rules?: object[];
 }
 
-interface AppFormProps {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface AppFormProps<T = any> {
   title: string;
   visible: boolean;
   fields: FormFieldConfig[];
-  initialValues?: Record<string, unknown>;
-  onSubmit: (values: Record<string, unknown>) => Promise<void> | void;
+  initialValues?: T;
+  onSubmit: (values: T) => Promise<void> | void;
   onCancel: () => void;
   confirmLoading?: boolean;
   width?: number;

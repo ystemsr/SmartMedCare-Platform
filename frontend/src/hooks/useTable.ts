@@ -29,7 +29,8 @@ interface UseTableReturn<TItem, TQuery> {
  * @param fetchFn - API function that returns paginated data
  * @param options - default page size and query overrides
  */
-export function useTable<TItem, TQuery extends Record<string, unknown> = Record<string, unknown>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useTable<TItem, TQuery extends Record<string, any> = Record<string, any>>(
   fetchFn: (params: TQuery & { page: number; page_size: number }) => Promise<ApiResponse<PaginatedData<TItem>>>,
   options?: UseTableOptions<TQuery>,
 ): UseTableReturn<TItem, TQuery> {

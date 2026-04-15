@@ -9,6 +9,8 @@
 datasets/
 multitask_health_model_teacher.pt
 
+.claude/worktrees/
+
 # Node.js
 node_modules/
 npm-debug.log*

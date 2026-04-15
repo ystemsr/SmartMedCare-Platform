@@ -28,7 +28,7 @@ class Followup(BaseModel):
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    records = relationship(
+    records: Mapped[list["FollowupRecord"]] = relationship(
         "FollowupRecord", back_populates="followup", lazy="selectin"
     )
 

@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import func, select, text
@@ -98,7 +98,7 @@ class AnalyticsService:
         """Get age distribution of elders (60-69, 70-79, 80-89, 90+)."""
         from app.models.elder import Elder
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         ranges = [
             ("60-69", 60, 69),
             ("70-79", 70, 79),
@@ -170,7 +170,7 @@ class AnalyticsService:
     ) -> list[AlertTrend]:
         """Get alert trend data."""
         days = {"7d": 7, "30d": 30, "90d": 90}.get(range_, 7)
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         if granularity == "month":
             date_expr = func.date_format(Alert.created_at, "%Y-%m")
@@ -288,7 +288,7 @@ class AnalyticsService:
         db: AsyncSession, job_type: str, date: Optional[str] = None
     ) -> AnalyticsJobResponse:
         """Create and run an analytics job."""
-        job_id = f"job_{datetime.utcnow().strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}"
+        job_id = f"job_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}"
         job = AnalyticsJob(
             job_type=job_type,
             job_id=job_id,

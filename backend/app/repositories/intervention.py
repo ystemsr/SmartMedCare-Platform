@@ -1,7 +1,7 @@
 """Repository for Intervention model database operations."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -88,7 +88,7 @@ class InterventionRepository:
         if result is not None:
             intervention.result = result
         if status == "completed":
-            intervention.performed_at = datetime.utcnow()
+            intervention.performed_at = datetime.now(timezone.utc)
         await db.flush()
         await db.refresh(intervention)
         return intervention
@@ -99,6 +99,6 @@ class InterventionRepository:
         intervention = await InterventionRepository.get_by_id(db, intervention_id)
         if intervention is None:
             return False
-        intervention.deleted_at = datetime.utcnow()
+        intervention.deleted_at = datetime.now(timezone.utc)
         await db.flush()
         return True

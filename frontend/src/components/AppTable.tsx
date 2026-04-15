@@ -30,6 +30,8 @@ export interface AppTableColumn<T> {
   render?: (value: unknown, record: T, index: number) => React.ReactNode;
 }
 
+export type ColumnsType<T> = AppTableColumn<T>[];
+
 export interface AppTablePagination {
   current: number;
   pageSize: number;

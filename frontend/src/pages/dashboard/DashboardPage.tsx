@@ -1,17 +1,31 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Row, Col, Card, List, Tag, Select, message } from 'antd';
 import {
-  TeamOutlined,
-  AlertOutlined,
-  ScheduleOutlined,
-  CheckCircleOutlined,
-  WarningOutlined,
-  FileSearchOutlined,
-} from '@ant-design/icons';
+  Box,
+  Card,
+  CardContent,
+  Chip,
+  FormControl,
+  Grid,
+  InputLabel,
+  List,
+  ListItem,
+  ListItemText,
+  MenuItem,
+  Select,
+  Stack,
+  Typography,
+} from '@mui/material';
+import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import PendingActionsRoundedIcon from '@mui/icons-material/PendingActionsRounded';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import SickRoundedIcon from '@mui/icons-material/SickRounded';
+import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
 import ReactECharts from 'echarts-for-react';
 import StatCard from '../../components/StatCard';
 import { getOverview, getTodos, getTrends } from '../../api/dashboard';
 import type { DashboardOverview, TodoItem, TrendData } from '../../api/dashboard';
+import { message } from '../../utils/message';
 
 const DashboardPage: React.FC = () => {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
@@ -57,109 +71,166 @@ const DashboardPage: React.FC = () => {
       }
     : {};
 
+  const todoPriorityColor: Record<string, 'default' | 'primary' | 'warning' | 'error'> = {
+    low: 'default',
+    medium: 'primary',
+    high: 'warning',
+    urgent: 'error',
+  };
+
   return (
-    <div>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={4}>
+    <Box sx={{ display: 'grid', gap: 2 }}>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard
             title="老人总数"
             value={overview?.elder_total ?? '-'}
-            icon={<TeamOutlined />}
-            color="#1677ff"
+            icon={<GroupsRoundedIcon />}
+            color="#1f6feb"
             loading={loading}
           />
-        </Col>
-        <Col xs={24} sm={12} lg={4}>
+        </Grid>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard
             title="高风险人数"
             value={overview?.high_risk_total ?? '-'}
-            icon={<WarningOutlined />}
-            color="#ff4d4f"
+            icon={<WarningAmberRoundedIcon />}
+            color="#d14343"
             loading={loading}
           />
-        </Col>
-        <Col xs={24} sm={12} lg={4}>
+        </Grid>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard
             title="待处理预警"
             value={overview?.pending_alert_total ?? '-'}
-            icon={<AlertOutlined />}
-            color="#faad14"
+            icon={<PendingActionsRoundedIcon />}
+            color="#d9822b"
             loading={loading}
           />
-        </Col>
-        <Col xs={24} sm={12} lg={4}>
+        </Grid>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard
             title="待随访任务"
             value={overview?.todo_followup_total ?? '-'}
-            icon={<ScheduleOutlined />}
-            color="#722ed1"
+            icon={<SickRoundedIcon />}
+            color="#0f9d8f"
             loading={loading}
           />
-        </Col>
-        <Col xs={24} sm={12} lg={4}>
+        </Grid>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard
             title="今日已完成随访"
             value={overview?.completed_followup_today ?? '-'}
-            icon={<CheckCircleOutlined />}
-            color="#52c41a"
+            icon={<CheckCircleRoundedIcon />}
+            color="#1f9d63"
             loading={loading}
           />
-        </Col>
-        <Col xs={24} sm={12} lg={4}>
+        </Grid>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard
             title="今日评估数"
             value={overview?.assessment_total_today ?? '-'}
-            icon={<FileSearchOutlined />}
+            icon={<AssessmentRoundedIcon />}
             color="#13c2c2"
             loading={loading}
           />
-        </Col>
-      </Row>
+        </Grid>
+      </Grid>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} lg={16}>
-          <Card
-            title="趋势数据"
-            extra={
-              <Select
-                value={trendRange}
-                onChange={setTrendRange}
-                options={[
-                  { label: '近7天', value: '7d' },
-                  { label: '近30天', value: '30d' },
-                  { label: '近90天', value: '90d' },
-                ]}
-                style={{ width: 100 }}
-              />
-            }
-          >
-            {trends && <ReactECharts option={chartOption} style={{ height: 350 }} />}
-          </Card>
-        </Col>
-        <Col xs={24} lg={8}>
-          <Card title="近期待办" style={{ height: '100%' }}>
-            <List
-              loading={loading}
-              dataSource={todos}
-              renderItem={(item) => (
-                <List.Item>
-                  <List.Item.Meta
-                    title={
-                      <span>
-                        <Tag color="blue">{item.type}</Tag>
-                        {item.title}
-                      </span>
-                    }
-                    description={item.description}
-                  />
-                </List.Item>
+      <Grid container spacing={2}>
+        <Grid item xs={12} lg={8}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                justifyContent="space-between"
+                spacing={2}
+                sx={{ mb: 2 }}
+              >
+                <Box>
+                  <Typography variant="h6">趋势数据</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    近期开奖、随访和评估的变化趋势
+                  </Typography>
+                </Box>
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <InputLabel>时间范围</InputLabel>
+                  <Select
+                    label="时间范围"
+                    value={trendRange}
+                    onChange={(event) => setTrendRange(event.target.value)}
+                  >
+                    <MenuItem value="7d">近7天</MenuItem>
+                    <MenuItem value="30d">近30天</MenuItem>
+                    <MenuItem value="90d">近90天</MenuItem>
+                  </Select>
+                </FormControl>
+              </Stack>
+              {trends ? (
+                <ReactECharts option={chartOption} style={{ height: 350 }} />
+              ) : (
+                <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
+                  暂无趋势数据
+                </Typography>
               )}
-              locale={{ emptyText: '暂无待办事项' }}
-            />
+            </CardContent>
           </Card>
-        </Col>
-      </Row>
-    </div>
+        </Grid>
+        <Grid item xs={12} lg={4}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                近期待办
+              </Typography>
+              <List disablePadding>
+                {todos.map((item) => (
+                  <ListItem
+                    key={item.id}
+                    divider
+                    disableGutters
+                    sx={{ py: 1.25, alignItems: 'flex-start' }}
+                  >
+                    <ListItemText
+                      primary={
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          flexWrap="wrap"
+                          sx={{ mb: 0.5 }}
+                        >
+                          <Chip label={item.type} size="small" variant="outlined" />
+                          <Chip
+                            label={item.priority}
+                            size="small"
+                            color={todoPriorityColor[item.priority] || 'default'}
+                          />
+                        </Stack>
+                      }
+                      secondary={
+                        <>
+                          <Typography component="span" variant="body2" color="text.primary">
+                            {item.title}
+                          </Typography>
+                          <Typography component="span" variant="body2" display="block">
+                            {item.description}
+                          </Typography>
+                        </>
+                      }
+                    />
+                  </ListItem>
+                ))}
+                {!loading && todos.length === 0 && (
+                  <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+                    暂无待办事项
+                  </Typography>
+                )}
+              </List>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
   );
 };
 

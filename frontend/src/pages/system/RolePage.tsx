@@ -1,12 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Button, Space, Modal, Tree, Table, message } from 'antd';
-import { PlusOutlined, SettingOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Box,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  Stack,
+  Typography,
+} from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import ManageAccountsRoundedIcon from '@mui/icons-material/ManageAccountsRounded';
+import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
 import { getRoles, createRole, updateRolePermissions, getPermissionsTree } from '../../api/system';
 import { formatDateTime } from '../../utils/formatter';
-import type { Role, PermissionNode } from '../../types/user';
+import type { PermissionNode, Role } from '../../types/user';
+import { message } from '../../utils/message';
 
 const formFields: FormFieldConfig[] = [
   { name: 'name', label: '角色标识', required: true, placeholder: '如 doctor, admin' },
@@ -14,17 +27,71 @@ const formFields: FormFieldConfig[] = [
   { name: 'description', label: '描述', type: 'textarea' },
 ];
 
+function collectNodeKeys(node: PermissionNode): string[] {
+  return [node.key, ...(node.children?.flatMap(collectNodeKeys) ?? [])];
+}
+
+function PermissionTreeNode({
+  node,
+  depth,
+  selectedKeys,
+  onToggle,
+}: {
+  node: PermissionNode;
+  depth: number;
+  selectedKeys: Set<string>;
+  onToggle: (node: PermissionNode, checked: boolean) => void;
+}) {
+  const nodeKeys = useMemo(() => collectNodeKeys(node), [node]);
+  const selectedCount = nodeKeys.filter((key) => selectedKeys.has(key)).length;
+  const checked = selectedCount === nodeKeys.length;
+  const indeterminate = selectedCount > 0 && selectedCount < nodeKeys.length;
+
+  return (
+    <Box sx={{ pl: depth * 2 }}>
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={checked}
+            indeterminate={indeterminate}
+            onChange={(_, nextChecked) => onToggle(node, nextChecked)}
+          />
+        }
+        label={
+          <Typography variant="body2" sx={{ fontWeight: depth === 0 ? 600 : 400 }}>
+            {node.title}
+          </Typography>
+        }
+        sx={{ alignItems: 'flex-start', mr: 0 }}
+      />
+      <Stack spacing={0.25}>
+        {node.children?.map((child) => (
+          <PermissionTreeNode
+            key={child.key}
+            node={child}
+            depth={depth + 1}
+            selectedKeys={selectedKeys}
+            onToggle={onToggle}
+          />
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
 const RolePage: React.FC = () => {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
 
-  // Permission assignment
   const [permModalVisible, setPermModalVisible] = useState(false);
   const [permissionsTree, setPermissionsTree] = useState<PermissionNode[]>([]);
-  const [checkedKeys, setCheckedKeys] = useState<React.Key[]>([]);
+  const [checkedKeys, setCheckedKeys] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
   const [permLoading, setPermLoading] = useState(false);
+
+  const checkedKeySet = useMemo(() => new Set(checkedKeys), [checkedKeys]);
 
   const fetchRoles = useCallback(async () => {
     setLoading(true);
@@ -49,16 +116,31 @@ const RolePage: React.FC = () => {
       const res = await getPermissionsTree();
       setPermissionsTree(res.data);
     } catch {
-      // silent
+      setPermissionsTree([]);
     }
     setPermModalVisible(true);
+  };
+
+  const handlePermToggle = (node: PermissionNode, checked: boolean) => {
+    const nodeKeys = collectNodeKeys(node);
+    setCheckedKeys((previous) => {
+      const next = new Set(previous);
+      nodeKeys.forEach((key) => {
+        if (checked) {
+          next.add(key);
+        } else {
+          next.delete(key);
+        }
+      });
+      return Array.from(next);
+    });
   };
 
   const handlePermSubmit = async () => {
     if (!currentRole) return;
     setPermLoading(true);
     try {
-      await updateRolePermissions(currentRole.id, checkedKeys as string[]);
+      await updateRolePermissions(currentRole.id, checkedKeys);
       message.success('权限更新成功');
       setPermModalVisible(false);
       fetchRoles();
@@ -69,7 +151,7 @@ const RolePage: React.FC = () => {
     }
   };
 
-  const columns: ColumnsType<Role> = [
+  const columns: AppTableColumn<Role>[] = [
     { title: '角色标识', dataIndex: 'name', width: 150 },
     { title: '角色名称', dataIndex: 'display_name', width: 150 },
     { title: '描述', dataIndex: 'description', ellipsis: true },
@@ -79,76 +161,89 @@ const RolePage: React.FC = () => {
       key: 'actions',
       width: 150,
       render: (_, record) => (
-        <Space>
-          <PermissionGuard permission="role:manage">
-            <Button
-              type="link"
-              size="small"
-              icon={<SettingOutlined />}
-              onClick={() => openPermModal(record)}
-            >
-              配置权限
-            </Button>
-          </PermissionGuard>
-        </Space>
+        <PermissionGuard permission="role:manage">
+          <Button
+            size="small"
+            variant="text"
+            startIcon={<ManageAccountsRoundedIcon fontSize="small" />}
+            onClick={() => openPermModal(record)}
+          >
+            配置权限
+          </Button>
+        </PermissionGuard>
       ),
     },
   ];
 
   return (
     <>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-        <PermissionGuard permission="role:manage">
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormVisible(true)}>
-            新增角色
-          </Button>
-        </PermissionGuard>
-      </div>
-
-      <Table<Role>
+      <AppTable<Role>
         columns={columns}
         dataSource={roles}
         loading={loading}
-        rowKey="id"
         pagination={false}
+        toolbar={
+          <PermissionGuard permission="role:manage">
+            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setFormVisible(true)}>
+              新增角色
+            </Button>
+          </PermissionGuard>
+        }
       />
 
       <AppForm
         title="新增角色"
         visible={formVisible}
         fields={formFields}
+        confirmLoading={submitLoading}
         onSubmit={async (values) => {
-          await createRole(values as Parameters<typeof createRole>[0]);
-          message.success('创建成功');
-          setFormVisible(false);
-          fetchRoles();
+          setSubmitLoading(true);
+          try {
+            await createRole(values as Parameters<typeof createRole>[0]);
+            message.success('创建成功');
+            setFormVisible(false);
+            fetchRoles();
+          } finally {
+            setSubmitLoading(false);
+          }
         }}
         onCancel={() => setFormVisible(false)}
       />
 
-      <Modal
-        title={`配置权限 - ${currentRole?.display_name || ''}`}
+      <Dialog
         open={permModalVisible}
-        onOk={handlePermSubmit}
-        onCancel={() => setPermModalVisible(false)}
-        confirmLoading={permLoading}
-        width={480}
+        onClose={() => setPermModalVisible(false)}
+        maxWidth="sm"
+        fullWidth
       >
-        <Tree
-          checkable
-          checkedKeys={checkedKeys}
-          onCheck={(keys) => setCheckedKeys(keys as React.Key[])}
-          treeData={permissionsTree.map((node) => ({
-            key: node.key,
-            title: node.title,
-            children: node.children?.map((child) => ({
-              key: child.key,
-              title: child.title,
-            })),
-          }))}
-          defaultExpandAll
-        />
-      </Modal>
+        <DialogTitle>{`配置权限 - ${currentRole?.display_name || ''}`}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              勾选权限后将覆盖该角色现有权限。
+            </Typography>
+            <Stack spacing={0.5}>
+              {permissionsTree.map((node) => (
+                <PermissionTreeNode
+                  key={node.key}
+                  node={node}
+                  depth={0}
+                  selectedKeys={checkedKeySet}
+                  onToggle={handlePermToggle}
+                />
+              ))}
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setPermModalVisible(false)} color="inherit">
+            取消
+          </Button>
+          <Button onClick={handlePermSubmit} variant="contained" disabled={permLoading}>
+            {permLoading ? '保存中...' : '确定'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

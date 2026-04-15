@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
-import type { ColumnsType } from 'antd/es/table';
-import AppTable from '../../components/AppTable';
+import { Chip } from '@mui/material';
+import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import { useTable } from '../../hooks/useTable';
 import { getFamilyMembers } from '../../api/family';
 import { formatDateTime } from '../../utils/formatter';
@@ -16,12 +16,19 @@ const FamilyMemberPage: React.FC = () => {
   const { data, loading, pagination, handleTableChange, handleSearch } =
     useTable<FamilyMemberAdmin, PaginationParams>(fetchFn);
 
-  const columns: ColumnsType<FamilyMemberAdmin> = [
+  const columns: AppTableColumn<FamilyMemberAdmin>[] = [
     { title: '用户名', dataIndex: 'username', width: 130 },
     { title: '姓名', dataIndex: 'real_name', width: 100 },
     { title: '手机号', dataIndex: 'phone', width: 130 },
     { title: '关联老人', dataIndex: 'elder_name', width: 120 },
-    { title: '关系', dataIndex: 'relationship', width: 100 },
+    {
+      title: '关系',
+      dataIndex: 'relationship',
+      width: 100,
+      render: (relationship: string) => (
+        <Chip size="small" label={relationship || '-'} variant="outlined" />
+      ),
+    },
     { title: '注册时间', dataIndex: 'created_at', render: formatDateTime, width: 170 },
   ];
 

@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Table, Tag, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Chip } from '@mui/material';
+import type { AppTableColumn } from '../../components/AppTable';
+import AppTable from '../../components/AppTable';
 import { getFollowups } from '../../api/followups';
 import { formatDateTime, formatFollowupStatus, formatPlanType } from '../../utils/formatter';
 import { FOLLOWUP_STATUS_COLORS } from '../../utils/constants';
+import { message } from '../../utils/message';
 import type { Followup } from '../../types/followup';
 
 const FollowupRecordPage: React.FC = () => {
@@ -11,7 +13,7 @@ const FollowupRecordPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
 
-  const fetchData = async (page = 1, pageSize = 20) => {
+  const fetchData = useCallback(async (page = 1, pageSize = 20) => {
     setLoading(true);
     try {
       const res = await getFollowups({
@@ -26,13 +28,13 @@ const FollowupRecordPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  const columns: ColumnsType<Followup> = [
+  const columns: AppTableColumn<Followup>[] = [
     { title: '老人ID', dataIndex: 'elder_id', width: 80 },
     { title: '老人姓名', dataIndex: 'elder_name', width: 100 },
     {
@@ -45,9 +47,21 @@ const FollowupRecordPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       width: 100,
-      render: (status: string) => (
-        <Tag color={FOLLOWUP_STATUS_COLORS[status]}>{formatFollowupStatus(status)}</Tag>
-      ),
+      render: (status: unknown) => {
+        const followupStatus = String(status ?? '');
+        return (
+          <Chip
+            size="small"
+            label={formatFollowupStatus(followupStatus)}
+            sx={{
+              color: FOLLOWUP_STATUS_COLORS[followupStatus] || 'text.primary',
+              borderColor: FOLLOWUP_STATUS_COLORS[followupStatus] || 'divider',
+              bgcolor: 'transparent',
+            }}
+            variant="outlined"
+          />
+        );
+      },
     },
     { title: '计划时间', dataIndex: 'planned_at', render: formatDateTime, width: 170 },
     { title: '负责人', dataIndex: 'assigned_to_name', width: 100 },
@@ -56,21 +70,14 @@ const FollowupRecordPage: React.FC = () => {
   ];
 
   return (
-    <Card title="随访记录">
-      <Table<Followup>
-        columns={columns}
-        dataSource={data}
-        loading={loading}
-        rowKey="id"
-        pagination={{
-          ...pagination,
-          showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
-        }}
-        onChange={(pag) => fetchData(pag.current, pag.pageSize)}
-        scroll={{ x: 'max-content' }}
-      />
-    </Card>
+    <AppTable<Followup>
+      columns={columns}
+      dataSource={data}
+      loading={loading}
+      pagination={pagination}
+      onChange={(pag) => fetchData(pag.current, pag.pageSize)}
+      emptyText="暂无随访记录"
+    />
   );
 };
 

@@ -1,8 +1,21 @@
-import React, { useState, useCallback } from 'react';
-import { Button, Tag, Space, Select, DatePicker, Popconfirm, message } from 'antd';
-import { PlusOutlined, EyeOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import type { ColumnsType } from 'antd/es/table';
+import React, { useCallback, useState } from 'react';
+import {
+  Box,
+  Button,
+  Chip,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+} from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import ManageSearchRoundedIcon from '@mui/icons-material/ManageSearchRounded';
+import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
+import BlockRoundedIcon from '@mui/icons-material/BlockRounded';
+import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -20,9 +33,9 @@ import {
   RISK_LEVEL_COLORS,
   ALERT_STATUS_COLORS,
 } from '../../utils/constants';
+import { message } from '../../utils/message';
+import { useNavigate } from 'react-router-dom';
 import type { Alert, AlertListQuery } from '../../types/alert';
-
-const { RangePicker } = DatePicker;
 
 const createFields: FormFieldConfig[] = [
   { name: 'elder_id', label: '老人ID', type: 'number', required: true },
@@ -51,9 +64,13 @@ const AlertListPage: React.FC = () => {
   const { data, loading, pagination, handleTableChange, refresh, handleSearch, query, setQuery } =
     useTable<Alert, AlertListQuery>(fetchFn);
 
-  const handleStatusUpdate = async (id: number, status: string) => {
+  const handleStatusUpdate = async (id: number, status: Alert['status']) => {
+    if (!window.confirm(`确认将该预警标记为${formatAlertStatus(status)}？`)) {
+      return;
+    }
+
     try {
-      await updateAlertStatus(id, { status: status as Alert['status'] });
+      await updateAlertStatus(id, { status });
       message.success('状态更新成功');
       refresh();
     } catch (err) {
@@ -66,6 +83,11 @@ const AlertListPage: React.FC = () => {
       message.warning('请选择要处理的预警');
       return;
     }
+
+    if (!window.confirm(`确认将选中的预警批量标记为${formatAlertStatus(status)}？`)) {
+      return;
+    }
+
     try {
       await batchUpdateAlertStatus({
         ids: selectedRowKeys as number[],
@@ -80,24 +102,48 @@ const AlertListPage: React.FC = () => {
     }
   };
 
-  const columns: ColumnsType<Alert> = [
-    { title: '预警标题', dataIndex: 'title', width: 200 },
+  const columns: AppTableColumn<Alert>[] = [
+    { title: '预警标题', dataIndex: 'title', width: 220 },
     { title: '类型', dataIndex: 'type', width: 150 },
     {
       title: '风险等级',
       dataIndex: 'risk_level',
-      width: 100,
-      render: (level: string) => (
-        <Tag color={RISK_LEVEL_COLORS[level]}>{formatRiskLevel(level)}</Tag>
-      ),
+      width: 110,
+      render: (level: unknown) => {
+        const riskLevel = String(level ?? '');
+        return (
+          <Chip
+            size="small"
+            label={formatRiskLevel(riskLevel)}
+            sx={{
+              color: RISK_LEVEL_COLORS[riskLevel] || 'text.primary',
+              borderColor: RISK_LEVEL_COLORS[riskLevel] || 'divider',
+              bgcolor: 'transparent',
+            }}
+            variant="outlined"
+          />
+        );
+      },
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 100,
-      render: (status: string) => (
-        <Tag color={ALERT_STATUS_COLORS[status]}>{formatAlertStatus(status)}</Tag>
-      ),
+      width: 110,
+      render: (status: unknown) => {
+        const alertStatus = String(status ?? '');
+        return (
+          <Chip
+            size="small"
+            label={formatAlertStatus(alertStatus)}
+            sx={{
+              color: ALERT_STATUS_COLORS[alertStatus] || 'text.primary',
+              borderColor: ALERT_STATUS_COLORS[alertStatus] || 'divider',
+              bgcolor: 'transparent',
+            }}
+            variant="outlined"
+          />
+        );
+      },
     },
     { title: '触发时间', dataIndex: 'triggered_at', render: formatDateTime, width: 170 },
     {
@@ -106,42 +152,47 @@ const AlertListPage: React.FC = () => {
       width: 280,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap">
           <Button
-            type="link"
             size="small"
-            icon={<EyeOutlined />}
+            startIcon={<VisibilityRoundedIcon />}
             onClick={() => navigate(`/alerts/${record.id}`)}
           >
             详情
           </Button>
           <PermissionGuard permission="alert:update">
             {record.status === 'pending' && (
-              <Popconfirm
-                title="确认开始处理？"
-                onConfirm={() => handleStatusUpdate(record.id, 'processing')}
+              <Button
+                size="small"
+                color="primary"
+                startIcon={<ManageSearchRoundedIcon />}
+                onClick={() => handleStatusUpdate(record.id, 'processing')}
               >
-                <Button type="link" size="small">处理</Button>
-              </Popconfirm>
+                处理
+              </Button>
             )}
             {record.status === 'processing' && (
-              <Popconfirm
-                title="确认已解决？"
-                onConfirm={() => handleStatusUpdate(record.id, 'resolved')}
+              <Button
+                size="small"
+                color="success"
+                startIcon={<TaskAltRoundedIcon />}
+                onClick={() => handleStatusUpdate(record.id, 'resolved')}
               >
-                <Button type="link" size="small">解决</Button>
-              </Popconfirm>
+                解决
+              </Button>
             )}
             {(record.status === 'pending' || record.status === 'processing') && (
-              <Popconfirm
-                title="确认忽略？"
-                onConfirm={() => handleStatusUpdate(record.id, 'ignored')}
+              <Button
+                size="small"
+                color="inherit"
+                startIcon={<BlockRoundedIcon />}
+                onClick={() => handleStatusUpdate(record.id, 'ignored')}
               >
-                <Button type="link" size="small" danger>忽略</Button>
-              </Popconfirm>
+                忽略
+              </Button>
             )}
           </PermissionGuard>
-        </Space>
+        </Stack>
       ),
     },
   ];
@@ -161,42 +212,85 @@ const AlertListPage: React.FC = () => {
           onChange: setSelectedRowKeys,
         }}
         toolbar={
-          <Space wrap>
-            <Select
-              placeholder="状态"
-              allowClear
-              options={ALERT_STATUS_OPTIONS}
-              style={{ width: 120 }}
-              value={query.status || undefined}
-              onChange={(val) => setQuery((prev) => ({ ...prev, status: val }))}
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} flexWrap="wrap">
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>状态</InputLabel>
+              <Select
+                label="状态"
+                value={query.status || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, status: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                {ALERT_STATUS_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>风险等级</InputLabel>
+              <Select
+                label="风险等级"
+                value={query.risk_level || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, risk_level: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                {RISK_LEVEL_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="开始日期"
+              type="date"
+              size="small"
+              value={query.date_start || ''}
+              onChange={(event) =>
+                setQuery((prev) => ({ ...prev, date_start: event.target.value || undefined }))
+              }
+              InputLabelProps={{ shrink: true }}
             />
-            <Select
-              placeholder="风险等级"
-              allowClear
-              options={RISK_LEVEL_OPTIONS}
-              style={{ width: 120 }}
-              value={query.risk_level || undefined}
-              onChange={(val) => setQuery((prev) => ({ ...prev, risk_level: val }))}
+            <TextField
+              label="结束日期"
+              type="date"
+              size="small"
+              value={query.date_end || ''}
+              onChange={(event) =>
+                setQuery((prev) => ({ ...prev, date_end: event.target.value || undefined }))
+              }
+              InputLabelProps={{ shrink: true }}
             />
-            <RangePicker
-              onChange={(dates) => {
-                setQuery((prev) => ({
-                  ...prev,
-                  date_start: dates?.[0]?.format('YYYY-MM-DD') || undefined,
-                  date_end: dates?.[1]?.format('YYYY-MM-DD') || undefined,
-                }));
-              }}
-            />
+            <Button
+              variant="outlined"
+              onClick={() => handleBatchStatus('resolved')}
+              disabled={selectedRowKeys.length === 0}
+            >
+              批量解决
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => handleBatchStatus('ignored')}
+              disabled={selectedRowKeys.length === 0}
+            >
+              批量忽略
+            </Button>
             <PermissionGuard permission="alert:update">
-              <Button onClick={() => handleBatchStatus('resolved')}>批量解决</Button>
-              <Button onClick={() => handleBatchStatus('ignored')}>批量忽略</Button>
-            </PermissionGuard>
-            <PermissionGuard permission="alert:update">
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormVisible(true)}>
+              <Button
+                variant="contained"
+                startIcon={<AddRoundedIcon />}
+                onClick={() => setFormVisible(true)}
+              >
                 手动创建
               </Button>
             </PermissionGuard>
-          </Space>
+          </Stack>
         }
       />
 

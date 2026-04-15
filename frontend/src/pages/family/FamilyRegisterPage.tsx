@@ -1,16 +1,29 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Form, Input, Button, Card, Select, message } from 'antd';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  KeyOutlined,
-  UserOutlined,
-  PhoneOutlined,
-  LockOutlined,
-  TeamOutlined,
-} from '@ant-design/icons';
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  FormControl,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import KeyRoundedIcon from '@mui/icons-material/KeyRounded';
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
+import PhoneRoundedIcon from '@mui/icons-material/PhoneRounded';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import SlideCaptcha from '../../components/SlideCaptcha';
 import { validateInviteCode, registerFamily } from '../../api/family';
 import type { InviteCodeValidation } from '../../types/family';
+import { message } from '../../utils/message';
 
 interface RegisterFormValues {
   invite_code: string;
@@ -21,6 +34,8 @@ interface RegisterFormValues {
   relationship: string;
 }
 
+type RegisterFormErrors = Partial<Record<keyof RegisterFormValues, string>>;
+
 const relationshipOptions = [
   { value: '子女', label: '子女' },
   { value: '配偶', label: '配偶' },
@@ -28,19 +43,29 @@ const relationshipOptions = [
   { value: '其他', label: '其他' },
 ];
 
+const initialValues: RegisterFormValues = {
+  invite_code: '',
+  real_name: '',
+  phone: '',
+  password: '',
+  confirm_password: '',
+  relationship: '',
+};
+
 const FamilyRegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [form] = Form.useForm<RegisterFormValues>();
   const [loading, setLoading] = useState(false);
   const [captchaVisible, setCaptchaVisible] = useState(false);
   const [codeValidation, setCodeValidation] = useState<InviteCodeValidation | null>(null);
   const [validating, setValidating] = useState(false);
+  const [values, setValues] = useState<RegisterFormValues>(initialValues);
+  const [errors, setErrors] = useState<RegisterFormErrors>({});
 
   const sessionId = useMemo(() => crypto.randomUUID(), []);
 
   const doValidateCode = useCallback(async (code: string) => {
-    if (!code || code.trim().length === 0) {
+    if (!code.trim()) {
       setCodeValidation(null);
       return;
     }
@@ -55,40 +80,120 @@ const FamilyRegisterPage: React.FC = () => {
     }
   }, []);
 
-  // Auto-fill and validate from URL query parameter
+  const ensureInviteCodeValid = useCallback(async (code: string) => {
+    setValidating(true);
+    try {
+      const res = await validateInviteCode(code);
+      const data = res.data as InviteCodeValidation;
+      setCodeValidation(data);
+      return data.valid;
+    } catch {
+      setCodeValidation({ valid: false, elder_name: '', remaining_slots: 0 });
+      return false;
+    } finally {
+      setValidating(false);
+    }
+  }, []);
+
+  const validateValues = useCallback((nextValues: RegisterFormValues) => {
+    const nextErrors: RegisterFormErrors = {};
+
+    if (!nextValues.invite_code.trim()) {
+      nextErrors.invite_code = '请输入邀请码';
+    }
+    if (!nextValues.real_name.trim()) {
+      nextErrors.real_name = '请输入姓名';
+    }
+    if (!nextValues.phone.trim()) {
+      nextErrors.phone = '请输入手机号';
+    } else if (!/^1\d{10}$/.test(nextValues.phone.trim())) {
+      nextErrors.phone = '请输入正确的手机号';
+    }
+    if (!nextValues.password) {
+      nextErrors.password = '请设置密码';
+    } else if (nextValues.password.length < 6) {
+      nextErrors.password = '密码至少6位';
+    }
+    if (!nextValues.confirm_password) {
+      nextErrors.confirm_password = '请确认密码';
+    } else if (nextValues.confirm_password !== nextValues.password) {
+      nextErrors.confirm_password = '两次密码不一致';
+    }
+    if (!nextValues.relationship) {
+      nextErrors.relationship = '请选择与老人的关系';
+    }
+
+    return nextErrors;
+  }, []);
+
+  const updateField = <K extends keyof RegisterFormValues>(key: K, value: RegisterFormValues[K]) => {
+    setValues((current) => {
+      const next = { ...current, [key]: value };
+      if (
+        key === 'password'
+        && current.confirm_password
+        && current.confirm_password !== value
+      ) {
+        setErrors((previous) => ({
+          ...previous,
+          confirm_password: '两次密码不一致',
+        }));
+      }
+      return next;
+    });
+    setErrors((current) => ({
+      ...current,
+      [key]: '',
+    }));
+  };
+
   useEffect(() => {
     const code = searchParams.get('code');
     if (code) {
-      form.setFieldsValue({ invite_code: code });
-      doValidateCode(code);
+      setValues((current) => ({
+        ...current,
+        invite_code: code,
+      }));
+      void doValidateCode(code);
     }
-  }, [searchParams, form, doValidateCode]);
+  }, [searchParams, doValidateCode]);
 
-  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    if (value.length >= 8) {
-      doValidateCode(value);
+  const handleCodeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    updateField('invite_code', value);
+    if (value.trim().length >= 8) {
+      void doValidateCode(value);
     } else {
       setCodeValidation(null);
     }
   };
 
   const handleCodeBlur = () => {
-    const code = form.getFieldValue('invite_code') as string;
-    if (code && code.trim().length > 0) {
-      doValidateCode(code);
+    const code = values.invite_code;
+    if (code.trim()) {
+      void doValidateCode(code);
     }
   };
 
-  const handleSubmit = () => {
-    form.validateFields().then(() => {
-      setCaptchaVisible(true);
-    });
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextErrors = validateValues(values);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    const isValid = await ensureInviteCodeValid(values.invite_code.trim());
+    if (!isValid) {
+      message.error('邀请码无效');
+      return;
+    }
+
+    setCaptchaVisible(true);
   };
 
   const handleCaptchaSuccess = async (captchaToken: string) => {
     setCaptchaVisible(false);
-    const values = form.getFieldsValue();
     setLoading(true);
     try {
       await registerFamily({
@@ -114,135 +219,161 @@ const FamilyRegisterPage: React.FC = () => {
   };
 
   return (
-    <>
+    <Box sx={{ width: '100%', maxWidth: 560 }}>
       <Card
-        style={{
-          width: 480,
-          borderRadius: 12,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+        sx={{
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider',
         }}
-        styles={{ body: { padding: '40px 32px' } }}
       >
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: '#1677ff',
-              margin: 0,
-              lineHeight: 1.4,
-            }}
-          >
-            家属注册
-          </h1>
-          <p style={{ color: '#8c8c8c', fontSize: 14, margin: '8px 0 0' }}>
-            智慧医养大数据公共服务平台
-          </p>
-        </div>
+        <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
+          <Stack spacing={3}>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h5" sx={{ fontWeight: 800, color: 'primary.main' }}>
+                家属注册
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                智慧医养大数据公共服务平台
+              </Typography>
+            </Box>
 
-        <Form<RegisterFormValues>
-          form={form}
-          onFinish={handleSubmit}
-          size="large"
-          autoComplete="off"
-        >
-          <Form.Item
-            name="invite_code"
-            rules={[{ required: true, message: '请输入邀请码' }]}
-          >
-            <Input
-              prefix={<KeyOutlined />}
-              placeholder="请输入邀请码"
-              onChange={handleCodeChange}
-              onBlur={handleCodeBlur}
-            />
-          </Form.Item>
+            <Box component="form" onSubmit={handleSubmit} noValidate>
+              <Stack spacing={2.5}>
+                <TextField
+                  label="邀请码"
+                  value={values.invite_code}
+                  onChange={handleCodeChange}
+                  onBlur={handleCodeBlur}
+                  error={Boolean(errors.invite_code)}
+                  helperText={errors.invite_code || ' '}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <KeyRoundedIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
 
-          {/* Invite code validation feedback */}
-          {(validating || codeValidation) && (
-            <div style={{ marginTop: -16, marginBottom: 16, fontSize: 13 }}>
-              {validating && (
-                <span style={{ color: '#8c8c8c' }}>验证中...</span>
-              )}
-              {!validating && codeValidation?.valid && (
-                <span style={{ color: '#52c41a' }}>
-                  关联老人：{codeValidation.elder_name}
-                </span>
-              )}
-              {!validating && codeValidation && !codeValidation.valid && (
-                <span style={{ color: '#ff4d4f' }}>邀请码无效</span>
-              )}
-            </div>
-          )}
+                {(validating || codeValidation) && (
+                  <Alert severity={validating ? 'info' : codeValidation?.valid ? 'success' : 'error'}>
+                    {validating
+                      ? '验证中...'
+                      : codeValidation?.valid
+                        ? `关联老人：${codeValidation.elder_name}`
+                        : '邀请码无效'}
+                  </Alert>
+                )}
 
-          <Form.Item
-            name="real_name"
-            rules={[{ required: true, message: '请输入姓名' }]}
-          >
-            <Input prefix={<UserOutlined />} placeholder="请输入姓名" />
-          </Form.Item>
+                <TextField
+                  label="姓名"
+                  value={values.real_name}
+                  onChange={(event) => updateField('real_name', event.target.value)}
+                  error={Boolean(errors.real_name)}
+                  helperText={errors.real_name || ' '}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PersonOutlineRoundedIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
 
-          <Form.Item
-            name="phone"
-            rules={[
-              { required: true, message: '请输入手机号' },
-              { pattern: /^1\d{10}$/, message: '请输入正确的手机号' },
-            ]}
-          >
-            <Input prefix={<PhoneOutlined />} placeholder="请输入手机号" />
-          </Form.Item>
+                <TextField
+                  label="手机号"
+                  value={values.phone}
+                  onChange={(event) => updateField('phone', event.target.value)}
+                  error={Boolean(errors.phone)}
+                  helperText={errors.phone || ' '}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PhoneRoundedIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
 
-          <Form.Item
-            name="password"
-            rules={[
-              { required: true, message: '请设置密码' },
-              { min: 6, message: '密码至少6位' },
-            ]}
-          >
-            <Input.Password prefix={<LockOutlined />} placeholder="请设置密码（至少6位）" />
-          </Form.Item>
+                <TextField
+                  label="密码"
+                  type="password"
+                  value={values.password}
+                  onChange={(event) => updateField('password', event.target.value)}
+                  error={Boolean(errors.password)}
+                  helperText={errors.password || ' '}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockOutlinedIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
 
-          <Form.Item
-            name="confirm_password"
-            dependencies={['password']}
-            rules={[
-              { required: true, message: '请确认密码' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('password') === value) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('两次密码不一致'));
-                },
-              }),
-            ]}
-          >
-            <Input.Password prefix={<LockOutlined />} placeholder="请确认密码" />
-          </Form.Item>
+                <TextField
+                  label="确认密码"
+                  type="password"
+                  value={values.confirm_password}
+                  onChange={(event) => updateField('confirm_password', event.target.value)}
+                  error={Boolean(errors.confirm_password)}
+                  helperText={errors.confirm_password || ' '}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockOutlinedIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
 
-          <Form.Item
-            name="relationship"
-            rules={[{ required: true, message: '请选择与老人的关系' }]}
-          >
-            <Select
-              placeholder="请选择与老人的关系"
-              options={relationshipOptions}
-              suffixIcon={<TeamOutlined />}
-            />
-          </Form.Item>
+                <FormControl fullWidth error={Boolean(errors.relationship)}>
+                  <InputLabel id="relationship-label">与老人关系</InputLabel>
+                  <Select
+                    labelId="relationship-label"
+                    label="与老人关系"
+                    value={values.relationship}
+                    onChange={(event) => updateField('relationship', String(event.target.value))}
+                    displayEmpty
+                    startAdornment={
+                      <InputAdornment position="start" sx={{ ml: 1, mr: 0 }}>
+                        <GroupsRoundedIcon fontSize="small" />
+                      </InputAdornment>
+                    }
+                  >
+                    <MenuItem value="">
+                      <em>请选择与老人的关系</em>
+                    </MenuItem>
+                    {relationshipOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5, minHeight: 20 }}>
+                    {errors.relationship || ' '}
+                  </Typography>
+                </FormControl>
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block>
-              注 册
-            </Button>
-          </Form.Item>
-        </Form>
+                <Button type="submit" variant="contained" size="large" fullWidth disabled={loading}>
+                  {loading ? '注册中...' : '注册'}
+                </Button>
+              </Stack>
+            </Box>
 
-        <div style={{ textAlign: 'center', marginTop: -8 }}>
-          <Button type="link" onClick={() => navigate('/login')}>
-            返回登录
-          </Button>
-        </div>
+            <Box sx={{ textAlign: 'center', mt: -0.5 }}>
+              <Button variant="text" onClick={() => navigate('/login')}>
+                返回登录
+              </Button>
+            </Box>
+          </Stack>
+        </CardContent>
       </Card>
 
       <SlideCaptcha
@@ -251,7 +382,7 @@ const FamilyRegisterPage: React.FC = () => {
         onSuccess={handleCaptchaSuccess}
         onCancel={handleCaptchaCancel}
       />
-    </>
+    </Box>
   );
 };
 

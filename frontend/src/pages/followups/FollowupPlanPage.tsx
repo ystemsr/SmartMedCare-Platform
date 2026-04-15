@@ -1,7 +1,24 @@
 import React, { useState, useCallback } from 'react';
-import { Button, Tag, Space, Select, DatePicker, Popconfirm, message, Modal, Form, Input } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import {
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+} from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
+import NoteAddRoundedIcon from '@mui/icons-material/NoteAddRounded';
+import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -20,10 +37,8 @@ import {
   FOLLOWUP_TYPE_OPTIONS,
   FOLLOWUP_STATUS_COLORS,
 } from '../../utils/constants';
+import { message } from '../../utils/message';
 import type { Followup, FollowupListQuery } from '../../types/followup';
-
-const { RangePicker } = DatePicker;
-const { TextArea } = Input;
 
 const formFields: FormFieldConfig[] = [
   { name: 'elder_id', label: '老人ID', type: 'number', required: true },
@@ -39,7 +54,8 @@ const FollowupPlanPage: React.FC = () => {
   const [editingFollowup, setEditingFollowup] = useState<Followup | null>(null);
   const [recordModalVisible, setRecordModalVisible] = useState(false);
   const [recordFollowupId, setRecordFollowupId] = useState<number | null>(null);
-  const [recordForm] = Form.useForm();
+  const [recordResult, setRecordResult] = useState('');
+  const [recordNextAction, setRecordNextAction] = useState('');
 
   const fetchFn = useCallback(
     (params: FollowupListQuery & { page: number; page_size: number }) => getFollowups(params),
@@ -60,6 +76,10 @@ const FollowupPlanPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
+    if (!window.confirm('确定删除该随访计划？')) {
+      return;
+    }
+
     try {
       await deleteFollowup(id);
       message.success('删除成功');
@@ -69,9 +89,13 @@ const FollowupPlanPage: React.FC = () => {
     }
   };
 
-  const handleStatusUpdate = async (id: number, status: string) => {
+  const handleStatusUpdate = async (id: number, status: Followup['status']) => {
+    if (!window.confirm(`确认将该随访标记为${formatFollowupStatus(status)}？`)) {
+      return;
+    }
+
     try {
-      await updateFollowupStatus(id, { status: status as Followup['status'] });
+      await updateFollowupStatus(id, { status });
       message.success('状态更新成功');
       refresh();
     } catch (err) {
@@ -81,30 +105,38 @@ const FollowupPlanPage: React.FC = () => {
 
   const handleAddRecord = (followupId: number) => {
     setRecordFollowupId(followupId);
+    setRecordResult('');
+    setRecordNextAction('');
     setRecordModalVisible(true);
   };
 
   const handleRecordSubmit = async () => {
+    if (!recordResult.trim()) {
+      message.warning('请输入随访结果');
+      return;
+    }
+
     try {
-      const values = await recordForm.validateFields();
       if (recordFollowupId) {
         await addFollowupRecord(recordFollowupId, {
           actual_time: new Date().toISOString(),
-          result: values.result,
-          next_action: values.next_action,
+          result: recordResult,
+          next_action: recordNextAction,
           status: 'completed',
         });
         message.success('记录添加成功');
         setRecordModalVisible(false);
-        recordForm.resetFields();
+        setRecordFollowupId(null);
+        setRecordResult('');
+        setRecordNextAction('');
         refresh();
       }
-    } catch {
-      // validation errors
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '记录失败');
     }
   };
 
-  const columns: ColumnsType<Followup> = [
+  const columns: AppTableColumn<Followup>[] = [
     { title: '老人ID', dataIndex: 'elder_id', width: 80 },
     { title: '老人姓名', dataIndex: 'elder_name', width: 100 },
     {
@@ -117,9 +149,21 @@ const FollowupPlanPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       width: 100,
-      render: (status: string) => (
-        <Tag color={FOLLOWUP_STATUS_COLORS[status]}>{formatFollowupStatus(status)}</Tag>
-      ),
+      render: (status: unknown) => {
+        const followupStatus = String(status ?? '');
+        return (
+          <Chip
+            size="small"
+            label={formatFollowupStatus(followupStatus)}
+            sx={{
+              color: FOLLOWUP_STATUS_COLORS[followupStatus] || 'text.primary',
+              borderColor: FOLLOWUP_STATUS_COLORS[followupStatus] || 'divider',
+              bgcolor: 'transparent',
+            }}
+            variant="outlined"
+          />
+        );
+      },
     },
     { title: '计划时间', dataIndex: 'planned_at', render: formatDateTime, width: 170 },
     { title: '负责人', dataIndex: 'assigned_to_name', width: 100 },
@@ -130,32 +174,47 @@ const FollowupPlanPage: React.FC = () => {
       width: 320,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap">
           <PermissionGuard permission="followup:update">
-            <Button type="link" size="small" onClick={() => handleEdit(record)}>
+            <Button
+              size="small"
+              startIcon={<EditRoundedIcon />}
+              onClick={() => handleEdit(record)}
+            >
               编辑
             </Button>
             {record.status === 'todo' && (
               <Button
-                type="link"
                 size="small"
+                color="primary"
+                startIcon={<PlayArrowRoundedIcon />}
                 onClick={() => handleStatusUpdate(record.id, 'in_progress')}
               >
                 开始
               </Button>
             )}
             {record.status === 'in_progress' && (
-              <Button type="link" size="small" onClick={() => handleAddRecord(record.id)}>
+              <Button
+                size="small"
+                color="secondary"
+                startIcon={<NoteAddRoundedIcon />}
+                onClick={() => handleAddRecord(record.id)}
+              >
                 记录结果
               </Button>
             )}
           </PermissionGuard>
           <PermissionGuard permission="followup:update">
-            <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
-              <Button type="link" size="small" danger>删除</Button>
-            </Popconfirm>
+            <Button
+              size="small"
+              color="inherit"
+              startIcon={<DeleteRoundedIcon />}
+              onClick={() => handleDelete(record.id)}
+            >
+              删除
+            </Button>
           </PermissionGuard>
-        </Space>
+        </Stack>
       ),
     },
   ];
@@ -171,38 +230,67 @@ const FollowupPlanPage: React.FC = () => {
         onSearch={handleSearch}
         searchPlaceholder="搜索随访计划"
         toolbar={
-          <Space wrap>
-            <Select
-              placeholder="状态"
-              allowClear
-              options={FOLLOWUP_STATUS_OPTIONS}
-              style={{ width: 120 }}
-              value={query.status || undefined}
-              onChange={(val) => setQuery((prev) => ({ ...prev, status: val }))}
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} flexWrap="wrap">
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>状态</InputLabel>
+              <Select
+                label="状态"
+                value={query.status || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, status: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                {FOLLOWUP_STATUS_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>随访方式</InputLabel>
+              <Select
+                label="随访方式"
+                value={query.plan_type || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, plan_type: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                {FOLLOWUP_TYPE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="开始日期"
+              type="date"
+              size="small"
+              value={query.date_start || ''}
+              onChange={(event) =>
+                setQuery((prev) => ({ ...prev, date_start: event.target.value || undefined }))
+              }
+              InputLabelProps={{ shrink: true }}
             />
-            <Select
-              placeholder="随访方式"
-              allowClear
-              options={FOLLOWUP_TYPE_OPTIONS}
-              style={{ width: 120 }}
-              value={query.plan_type || undefined}
-              onChange={(val) => setQuery((prev) => ({ ...prev, plan_type: val }))}
-            />
-            <RangePicker
-              onChange={(dates) => {
-                setQuery((prev) => ({
-                  ...prev,
-                  date_start: dates?.[0]?.format('YYYY-MM-DD') || undefined,
-                  date_end: dates?.[1]?.format('YYYY-MM-DD') || undefined,
-                }));
-              }}
+            <TextField
+              label="结束日期"
+              type="date"
+              size="small"
+              value={query.date_end || ''}
+              onChange={(event) =>
+                setQuery((prev) => ({ ...prev, date_end: event.target.value || undefined }))
+              }
+              InputLabelProps={{ shrink: true }}
             />
             <PermissionGuard permission="followup:create">
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={handleCreate}>
                 新建随访计划
               </Button>
             </PermissionGuard>
-          </Space>
+          </Stack>
         }
       />
 
@@ -224,24 +312,52 @@ const FollowupPlanPage: React.FC = () => {
         onCancel={() => setFormVisible(false)}
       />
 
-      <Modal
-        title="记录随访结果"
+      <Dialog
         open={recordModalVisible}
-        onOk={handleRecordSubmit}
-        onCancel={() => {
+        onClose={() => {
           setRecordModalVisible(false);
-          recordForm.resetFields();
+          setRecordFollowupId(null);
         }}
+        fullWidth
+        maxWidth="sm"
       >
-        <Form form={recordForm} layout="vertical">
-          <Form.Item name="result" label="随访结果" rules={[{ required: true, message: '请输入随访结果' }]}>
-            <TextArea rows={3} placeholder="请输入随访结果" />
-          </Form.Item>
-          <Form.Item name="next_action" label="后续行动">
-            <TextArea rows={2} placeholder="请输入后续行动建议" />
-          </Form.Item>
-        </Form>
-      </Modal>
+        <DialogTitle>记录随访结果</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField
+              label="随访结果"
+              value={recordResult}
+              onChange={(event) => setRecordResult(event.target.value)}
+              multiline
+              minRows={3}
+              fullWidth
+              required
+            />
+            <TextField
+              label="后续行动"
+              value={recordNextAction}
+              onChange={(event) => setRecordNextAction(event.target.value)}
+              multiline
+              minRows={2}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            color="inherit"
+            onClick={() => {
+              setRecordModalVisible(false);
+              setRecordFollowupId(null);
+            }}
+          >
+            取消
+          </Button>
+          <Button variant="contained" onClick={handleRecordSubmit}>
+            保存
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

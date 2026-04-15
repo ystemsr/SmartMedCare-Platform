@@ -1,12 +1,14 @@
 import React, { useCallback } from 'react';
-import { Button, Tag, Space, Popconfirm, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import AppTable from '../../components/AppTable';
+import { Button, Chip, Stack } from '@mui/material';
+import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
+import PowerSettingsNewRoundedIcon from '@mui/icons-material/PowerSettingsNewRounded';
+import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PermissionGuard from '../../components/PermissionGuard';
 import { useTable } from '../../hooks/useTable';
 import { getElders, resetElderPassword, updateElderAccountStatus } from '../../api/elders';
 import { formatGender } from '../../utils/formatter';
 import type { Elder, ElderListQuery } from '../../types/elder';
+import { message } from '../../utils/message';
 
 const ElderAccountPage: React.FC = () => {
   const fetchFn = useCallback(
@@ -18,6 +20,10 @@ const ElderAccountPage: React.FC = () => {
     useTable<Elder, ElderListQuery>(fetchFn);
 
   const handleResetPassword = async (elderId: number) => {
+    if (!window.confirm('确定重置密码？')) {
+      return;
+    }
+
     try {
       await resetElderPassword(elderId);
       message.success('密码重置成功');
@@ -28,6 +34,10 @@ const ElderAccountPage: React.FC = () => {
 
   const handleToggleStatus = async (elderId: number, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    if (!window.confirm(`确定${newStatus === 'active' ? '启用' : '禁用'}该账户？`)) {
+      return;
+    }
+
     try {
       await updateElderAccountStatus(elderId, newStatus);
       message.success(newStatus === 'active' ? '已启用' : '已禁用');
@@ -37,7 +47,7 @@ const ElderAccountPage: React.FC = () => {
     }
   };
 
-  const columns: ColumnsType<Elder> = [
+  const columns: AppTableColumn<Elder>[] = [
     { title: '姓名', dataIndex: 'name', width: 100 },
     { title: '性别', dataIndex: 'gender', width: 80, render: formatGender },
     { title: '联系电话', dataIndex: 'phone', width: 130 },
@@ -47,9 +57,12 @@ const ElderAccountPage: React.FC = () => {
       dataIndex: 'account_status',
       width: 100,
       render: (status: string) => (
-        <Tag color={status === 'active' ? 'green' : 'red'}>
-          {status === 'active' ? '正常' : '已禁用'}
-        </Tag>
+        <Chip
+          size="small"
+          color={status === 'active' ? 'success' : 'error'}
+          variant="outlined"
+          label={status === 'active' ? '正常' : '已禁用'}
+        />
       ),
     },
     {
@@ -58,28 +71,27 @@ const ElderAccountPage: React.FC = () => {
       width: 220,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Stack direction="row" spacing={0.5}>
           <PermissionGuard permission="elder:update">
-            <Popconfirm
-              title="确定重置密码？"
-              onConfirm={() => handleResetPassword(record.id)}
+            <Button
+              size="small"
+              variant="text"
+              startIcon={<RestartAltRoundedIcon fontSize="small" />}
+              onClick={() => handleResetPassword(record.id)}
             >
-              <Button type="link" size="small">重置密码</Button>
-            </Popconfirm>
-            <Popconfirm
-              title={`确定${record.account_status === 'active' ? '禁用' : '启用'}该账户？`}
-              onConfirm={() => handleToggleStatus(record.id, record.account_status)}
+              重置密码
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              color={record.account_status === 'active' ? 'error' : 'primary'}
+              startIcon={<PowerSettingsNewRoundedIcon fontSize="small" />}
+              onClick={() => handleToggleStatus(record.id, record.account_status)}
             >
-              <Button
-                type="link"
-                size="small"
-                danger={record.account_status === 'active'}
-              >
-                {record.account_status === 'active' ? '禁用' : '启用'}
-              </Button>
-            </Popconfirm>
+              {record.account_status === 'active' ? '禁用' : '启用'}
+            </Button>
           </PermissionGuard>
-        </Space>
+        </Stack>
       ),
     },
   ];

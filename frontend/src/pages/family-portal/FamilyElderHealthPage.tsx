@@ -1,11 +1,21 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Tabs, Table, Spin, Empty, Descriptions, Tag, Typography } from 'antd';
-import { HeartOutlined, AlertOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Box,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Stack,
+  Tab,
+  Tabs,
+  Typography,
+} from '@mui/material';
+import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { getFamilySelf, getFamilyElder, getElderHealthRecords, getElderAlerts } from '../../api/family';
 import type { FamilyMemberInfo, FamilyElderInfo } from '../../types/family';
-
-const { Text } = Typography;
+import AppTable, { type AppTableColumn } from '../../components/AppTable';
+import { formatDateTime } from '../../utils/formatter';
 
 interface HealthRecord {
   id: number;
@@ -29,10 +39,10 @@ interface AlertRecord {
   created_at: string;
 }
 
-const alertLevelColorMap: Record<string, string> = {
-  high: 'red',
-  medium: 'orange',
-  low: 'blue',
+const alertLevelColorMap: Record<string, 'error' | 'warning' | 'primary'> = {
+  high: 'error',
+  medium: 'warning',
+  low: 'primary',
 };
 
 const alertStatusLabelMap: Record<string, string> = {
@@ -42,7 +52,7 @@ const alertStatusLabelMap: Record<string, string> = {
   closed: '已关闭',
 };
 
-const healthColumns: ColumnsType<HealthRecord> = [
+const healthColumns: AppTableColumn<HealthRecord>[] = [
   {
     title: '记录日期',
     dataIndex: 'record_date',
@@ -78,7 +88,7 @@ const healthColumns: ColumnsType<HealthRecord> = [
     render: (val?: number) => val ?? '-',
   },
   {
-    title: '体温 (*C)',
+    title: '体温 (°C)',
     dataIndex: 'temperature',
     key: 'temperature',
     width: 100,
@@ -93,7 +103,7 @@ const healthColumns: ColumnsType<HealthRecord> = [
   },
 ];
 
-const alertColumns: ColumnsType<AlertRecord> = [
+const alertColumns: AppTableColumn<AlertRecord>[] = [
   {
     title: '预警类型',
     dataIndex: 'alert_type',
@@ -104,9 +114,9 @@ const alertColumns: ColumnsType<AlertRecord> = [
     title: '级别',
     dataIndex: 'level',
     key: 'level',
-    width: 80,
+    width: 100,
     render: (level: string) => (
-      <Tag color={alertLevelColorMap[level] || 'default'}>{level}</Tag>
+      <Chip size="small" color={alertLevelColorMap[level] || 'primary'} label={level} />
     ),
   },
   {
@@ -119,7 +129,7 @@ const alertColumns: ColumnsType<AlertRecord> = [
     title: '状态',
     dataIndex: 'status',
     key: 'status',
-    width: 100,
+    width: 110,
     render: (status: string) => alertStatusLabelMap[status] || status,
   },
   {
@@ -127,6 +137,7 @@ const alertColumns: ColumnsType<AlertRecord> = [
     dataIndex: 'created_at',
     key: 'created_at',
     width: 180,
+    render: (value) => formatDateTime(value as string | undefined),
   },
 ];
 
@@ -142,16 +153,14 @@ const FamilyElderHealthPage: React.FC = () => {
   const [alertsTotal, setAlertsTotal] = useState(0);
   const [healthPage, setHealthPage] = useState(1);
   const [alertsPage, setAlertsPage] = useState(1);
+  const [tab, setTab] = useState<'health' | 'alerts'>('health');
   const pageSize = 10;
 
   useEffect(() => {
     const fetchBaseData = async () => {
       setLoading(true);
       try {
-        const [selfRes, elderRes] = await Promise.all([
-          getFamilySelf(),
-          getFamilyElder(),
-        ]);
+        const [selfRes, elderRes] = await Promise.all([getFamilySelf(), getFamilyElder()]);
         setFamilyInfo(selfRes.data as FamilyMemberInfo);
         setElderInfo(elderRes.data as FamilyElderInfo);
       } catch {
@@ -160,165 +169,201 @@ const FamilyElderHealthPage: React.FC = () => {
         setLoading(false);
       }
     };
-    fetchBaseData();
+    void fetchBaseData();
   }, []);
 
-  const fetchHealthRecords = useCallback(async (page: number) => {
-    if (!familyInfo) return;
-    setHealthLoading(true);
-    try {
-      const res = await getElderHealthRecords(familyInfo.elder_id, {
-        page,
-        page_size: pageSize,
-      });
-      const data = res.data as { items: HealthRecord[]; total: number };
-      setHealthRecords(data.items || []);
-      setHealthTotal(data.total || 0);
-    } catch {
-      // Error handled by http interceptor
-    } finally {
-      setHealthLoading(false);
-    }
-  }, [familyInfo]);
+  const fetchHealthRecords = useCallback(
+    async (page: number) => {
+      if (!familyInfo) return;
+      setHealthLoading(true);
+      try {
+        const res = await getElderHealthRecords(familyInfo.elder_id, {
+          page,
+          page_size: pageSize,
+        });
+        const data = res.data as { items: HealthRecord[]; total: number };
+        setHealthRecords(data.items || []);
+        setHealthTotal(data.total || 0);
+      } catch {
+        // Error handled by http interceptor
+      } finally {
+        setHealthLoading(false);
+      }
+    },
+    [familyInfo],
+  );
 
-  const fetchAlerts = useCallback(async (page: number) => {
-    if (!familyInfo) return;
-    setAlertsLoading(true);
-    try {
-      const res = await getElderAlerts({
-        elder_id: familyInfo.elder_id,
-        page,
-        page_size: pageSize,
-      });
-      const data = res.data as { items: AlertRecord[]; total: number };
-      setAlerts(data.items || []);
-      setAlertsTotal(data.total || 0);
-    } catch {
-      // Error handled by http interceptor
-    } finally {
-      setAlertsLoading(false);
-    }
-  }, [familyInfo]);
+  const fetchAlerts = useCallback(
+    async (page: number) => {
+      if (!familyInfo) return;
+      setAlertsLoading(true);
+      try {
+        const res = await getElderAlerts({
+          elder_id: familyInfo.elder_id,
+          page,
+          page_size: pageSize,
+        });
+        const data = res.data as { items: AlertRecord[]; total: number };
+        setAlerts(data.items || []);
+        setAlertsTotal(data.total || 0);
+      } catch {
+        // Error handled by http interceptor
+      } finally {
+        setAlertsLoading(false);
+      }
+    },
+    [familyInfo],
+  );
 
-  // Fetch health records when familyInfo is ready or page changes
   useEffect(() => {
     if (familyInfo) {
-      fetchHealthRecords(healthPage);
+      void fetchHealthRecords(healthPage);
     }
   }, [familyInfo, healthPage, fetchHealthRecords]);
 
-  // Fetch alerts when familyInfo is ready or page changes
   useEffect(() => {
     if (familyInfo) {
-      fetchAlerts(alertsPage);
+      void fetchAlerts(alertsPage);
     }
   }, [familyInfo, alertsPage, fetchAlerts]);
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <Spin size="large" />
-      </div>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+        <CircularProgress size={44} />
+      </Box>
     );
   }
 
-  const tabItems = [
+  const tabs = [
     {
-      key: 'health',
-      label: (
-        <span>
-          <HeartOutlined style={{ marginRight: 4 }} />
-          健康记录
-        </span>
-      ),
-      children: (
-        <Spin spinning={healthLoading}>
-          {healthRecords.length === 0 && !healthLoading ? (
-            <Empty description="暂无健康记录" />
-          ) : (
-            <Table<HealthRecord>
+      value: 'health',
+      label: '健康记录',
+      icon: <FavoriteRoundedIcon fontSize="small" />,
+    },
+    {
+      value: 'alerts',
+      label: '风险预警',
+      icon: <WarningAmberRoundedIcon fontSize="small" />,
+    },
+  ] as const;
+
+  return (
+    <Stack spacing={3}>
+      {elderInfo && (
+        <Card>
+          <CardContent>
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <FavoriteRoundedIcon color="error" />
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  {elderInfo.name} 的健康信息
+                </Typography>
+              </Stack>
+
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+                  gap: 2,
+                }}
+              >
+                <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'background.default' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    性别
+                  </Typography>
+                  <Typography variant="subtitle1" sx={{ mt: 0.5, fontWeight: 600 }}>
+                    {elderInfo.gender}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'background.default' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    联系电话
+                  </Typography>
+                  <Typography variant="subtitle1" sx={{ mt: 0.5, fontWeight: 600 }}>
+                    {elderInfo.phone}
+                  </Typography>
+                </Box>
+                <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'background.default' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    住址
+                  </Typography>
+                  <Typography variant="subtitle1" sx={{ mt: 0.5, fontWeight: 600 }}>
+                    {elderInfo.address}
+                  </Typography>
+                </Box>
+              </Box>
+
+              {elderInfo.tags.length > 0 && (
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  {elderInfo.tags.map((tag) => (
+                    <Chip key={tag} color="primary" variant="outlined" label={tag} />
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardContent>
+          <Tabs
+            value={tab}
+            onChange={(_, nextValue) => setTab(nextValue)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+          >
+            {tabs.map((item) => (
+              <Tab
+                key={item.value}
+                value={item.value}
+                icon={item.icon}
+                iconPosition="start"
+                label={item.label}
+              />
+            ))}
+          </Tabs>
+
+          {tab === 'health' ? (
+            <AppTable<HealthRecord>
               columns={healthColumns}
               dataSource={healthRecords}
+              loading={healthLoading}
               rowKey="id"
               pagination={{
                 current: healthPage,
                 pageSize,
                 total: healthTotal,
-                onChange: (page) => setHealthPage(page),
                 showTotal: (total) => `共 ${total} 条`,
               }}
-              scroll={{ x: 800 }}
+              onChange={({ current }) => {
+                if (current) setHealthPage(current);
+              }}
+              emptyText="暂无健康记录"
             />
-          )}
-        </Spin>
-      ),
-    },
-    {
-      key: 'alerts',
-      label: (
-        <span>
-          <AlertOutlined style={{ marginRight: 4 }} />
-          风险预警
-        </span>
-      ),
-      children: (
-        <Spin spinning={alertsLoading}>
-          {alerts.length === 0 && !alertsLoading ? (
-            <Empty description="暂无风险预警" />
           ) : (
-            <Table<AlertRecord>
+            <AppTable<AlertRecord>
               columns={alertColumns}
               dataSource={alerts}
+              loading={alertsLoading}
               rowKey="id"
               pagination={{
                 current: alertsPage,
                 pageSize,
                 total: alertsTotal,
-                onChange: (page) => setAlertsPage(page),
                 showTotal: (total) => `共 ${total} 条`,
               }}
-              scroll={{ x: 700 }}
+              onChange={({ current }) => {
+                if (current) setAlertsPage(current);
+              }}
+              emptyText="暂无风险预警"
             />
           )}
-        </Spin>
-      ),
-    },
-  ];
-
-  return (
-    <div>
-      {/* Elder info header */}
-      {elderInfo && (
-        <Card style={{ marginBottom: 24 }}>
-          <Descriptions
-            title={
-              <span>
-                <HeartOutlined style={{ marginRight: 8, color: '#ff4d4f' }} />
-                {elderInfo.name} 的健康信息
-              </span>
-            }
-            column={{ xs: 1, sm: 3 }}
-          >
-            <Descriptions.Item label="性别">{elderInfo.gender}</Descriptions.Item>
-            <Descriptions.Item label="联系电话">{elderInfo.phone}</Descriptions.Item>
-            <Descriptions.Item label="住址">{elderInfo.address}</Descriptions.Item>
-          </Descriptions>
-          {elderInfo.tags.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <Text strong style={{ marginRight: 8 }}>标签：</Text>
-              {elderInfo.tags.map((tag) => (
-                <Tag key={tag} color="blue">{tag}</Tag>
-              ))}
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Tabbed health data */}
-      <Card>
-        <Tabs items={tabItems} />
+        </CardContent>
       </Card>
-    </div>
+    </Stack>
   );
 };
 

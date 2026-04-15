@@ -23,3 +23,4 @@ from app.models.analytics import AnalyticsJob, ElderRiskProfile, DashboardSnapsh
 
 # ===== Elder & Family Role models =====
 from app.models.invite_code import ElderInviteCode  # noqa: F401
+from app.models.family_member import FamilyMember  # noqa: F401

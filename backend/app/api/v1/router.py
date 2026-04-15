@@ -25,3 +25,7 @@ api_router.include_router(followups.router, prefix="/followups", tags=["随访�
 api_router.include_router(interventions.router, prefix="/interventions", tags=["干预记录"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["工作台"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["数据分析"])
+
+# ===== Family Role routes (feat/family-role-backend) =====
+from app.api.v1.endpoints import family
+api_router.include_router(family.router, prefix="/family", tags=["家属管理"])

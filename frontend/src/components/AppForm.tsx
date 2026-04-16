@@ -14,6 +14,15 @@ import {
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
+import { message } from '../utils/message';
+
+export interface FormFieldRule {
+  minLength?: number;
+  maxLength?: number;
+  pattern?: RegExp;
+  patternMessage?: string;
+  message?: string;
+}
 
 export interface FormFieldConfig {
   name: string;
@@ -22,7 +31,7 @@ export interface FormFieldConfig {
   required?: boolean;
   options?: { label: string; value: string | number }[];
   placeholder?: string;
-  rules?: object[];
+  rules?: FormFieldRule[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,12 +94,37 @@ const AppForm: React.FC<AppFormProps> = ({
       const value = values[field.name];
       if (field.required && (value === '' || value === null || value === undefined)) {
         result[field.name] = `请输入${field.label}`;
+        return result;
       }
+
+      if (field.rules && value !== '' && value !== null && value !== undefined) {
+        const strValue = String(value);
+        for (const rule of field.rules) {
+          if (rule.minLength && strValue.length < rule.minLength) {
+            result[field.name] = rule.message || `${field.label}至少${rule.minLength}个字符`;
+            break;
+          }
+          if (rule.maxLength && strValue.length > rule.maxLength) {
+            result[field.name] = rule.message || `${field.label}最多${rule.maxLength}个字符`;
+            break;
+          }
+          if (rule.pattern && !rule.pattern.test(strValue)) {
+            result[field.name] = rule.patternMessage || rule.message || `${field.label}格式不正确`;
+            break;
+          }
+        }
+      }
+
       return result;
     }, {});
 
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    if (Object.keys(nextErrors).length > 0) {
+      const firstError = Object.values(nextErrors)[0];
+      message.warning(firstError || '请填写所有必填项');
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async () => {
@@ -117,8 +151,8 @@ const AppForm: React.FC<AppFormProps> = ({
 
             if (field.type === 'select') {
               return (
-                <FormControl key={field.name} fullWidth error={Boolean(errors[field.name])}>
-                  <InputLabel>{field.label}</InputLabel>
+                <FormControl key={field.name} fullWidth error={Boolean(errors[field.name])} required={field.required}>
+                  <InputLabel required={field.required}>{field.label}</InputLabel>
                   <Select
                     label={field.label}
                     value={(value as string | number | '') ?? ''}
@@ -146,6 +180,7 @@ const AppForm: React.FC<AppFormProps> = ({
                   slotProps={{
                     textField: {
                       fullWidth: true,
+                      required: field.required,
                       error: Boolean(errors[field.name]),
                       helperText: errors[field.name] || ' ',
                     },
@@ -158,6 +193,7 @@ const AppForm: React.FC<AppFormProps> = ({
               <TextField
                 key={field.name}
                 fullWidth
+                required={field.required}
                 label={field.label}
                 type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}
                 multiline={field.type === 'textarea'}

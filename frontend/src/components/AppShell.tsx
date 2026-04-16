@@ -91,6 +91,8 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
           justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
           px: sidebarCollapsed ? 1.5 : 3,
           gap: 1.5,
+          background: (theme) =>
+            `linear-gradient(135deg, ${theme.palette.primary.main}08 0%, ${theme.palette.primary.main}03 100%)`,
         }}
       >
         <Avatar
@@ -99,16 +101,17 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
             width: 42,
             height: 42,
             fontWeight: 700,
+            boxShadow: '0 2px 8px rgba(25, 118, 210, 0.25)',
           }}
         >
           医
         </Avatar>
         {!sidebarCollapsed && (
           <Box>
-            <Typography variant="subtitle1" fontWeight={700}>
+            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.3}>
               智慧医养平台
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.5 }}>
               Smart MedCare
             </Typography>
           </Box>
@@ -118,11 +121,41 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
     [sidebarCollapsed],
   );
 
+  const navItemSx = (isSelected: boolean | undefined) => ({
+    minHeight: 50,
+    mb: 0.5,
+    px: sidebarCollapsed ? 1.5 : 2,
+    justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+    borderRadius: 3,
+    transition: 'all 0.2s ease-in-out',
+    borderLeft: isSelected ? '3px solid' : '3px solid transparent',
+    borderColor: isSelected ? 'primary.main' : 'transparent',
+    bgcolor: isSelected ? 'action.selected' : 'transparent',
+    '&:hover': {
+      bgcolor: isSelected ? 'action.selected' : 'action.hover',
+      transform: 'translateX(2px)',
+    },
+  });
+
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {brand}
       <Divider />
-      <List sx={{ px: 1.5, py: 2, flex: 1 }}>
+      <List
+        sx={{
+          px: 1.5,
+          py: 2,
+          flex: 1,
+          overflowY: 'auto',
+          '&::-webkit-scrollbar': { width: 4 },
+          '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
+          '&::-webkit-scrollbar-thumb': {
+            bgcolor: 'divider',
+            borderRadius: 2,
+          },
+          '&::-webkit-scrollbar-thumb:hover': { bgcolor: 'action.disabled' },
+        }}
+      >
         {items.map((item) => {
           const selected = matchesPath(item.key, location.pathname)
             || item.children?.some((child) => matchesPath(child.key, location.pathname));
@@ -137,13 +170,7 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
                 <ListItemButton
                   selected={selected}
                   onClick={() => handleNavigate(item.key)}
-                  sx={{
-                    minHeight: 50,
-                    mb: 0.5,
-                    px: sidebarCollapsed ? 1.5 : 2,
-                    justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
-                    borderRadius: 3,
-                  }}
+                  sx={navItemSx(selected)}
                 >
                   <ListItemIcon
                     sx={{
@@ -151,11 +178,19 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
                       mr: sidebarCollapsed ? 0 : 1.5,
                       justifyContent: 'center',
                       color: selected ? 'primary.main' : 'inherit',
+                      transition: 'color 0.2s ease-in-out',
                     }}
                   >
                     {item.icon}
                   </ListItemIcon>
-                  {!sidebarCollapsed && <ListItemText primary={item.label} />}
+                  {!sidebarCollapsed && (
+                    <ListItemText
+                      primary={item.label}
+                      primaryTypographyProps={{
+                        fontWeight: selected ? 600 : 400,
+                      }}
+                    />
+                  )}
                 </ListItemButton>
               </Tooltip>
             );
@@ -174,13 +209,7 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
                       [item.key]: !expanded,
                     }))
                   }
-                  sx={{
-                    minHeight: 50,
-                    mb: 0.5,
-                    px: sidebarCollapsed ? 1.5 : 2,
-                    justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
-                    borderRadius: 3,
-                  }}
+                  sx={navItemSx(selected)}
                 >
                   <ListItemIcon
                     sx={{
@@ -188,13 +217,19 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
                       mr: sidebarCollapsed ? 0 : 1.5,
                       justifyContent: 'center',
                       color: selected ? 'primary.main' : 'inherit',
+                      transition: 'color 0.2s ease-in-out',
                     }}
                   >
                     {item.icon}
                   </ListItemIcon>
                   {!sidebarCollapsed && (
                     <>
-                      <ListItemText primary={item.label} />
+                      <ListItemText
+                        primary={item.label}
+                        primaryTypographyProps={{
+                          fontWeight: selected ? 600 : 400,
+                        }}
+                      />
                       {expanded ? <ExpandLessRoundedIcon /> : <ExpandMoreRoundedIcon />}
                     </>
                   )}
@@ -203,17 +238,37 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
               {!sidebarCollapsed && (
                 <Collapse in={expanded} timeout="auto" unmountOnExit>
                   <List disablePadding sx={{ pl: 1 }}>
-                    {item.children.map((child) => (
-                      <ListItemButton
-                        key={child.key}
-                        selected={matchesPath(child.key, location.pathname)}
-                        onClick={() => handleNavigate(child.key)}
-                        sx={{ minHeight: 44, borderRadius: 3, mb: 0.5, pl: 4 }}
-                      >
-                        <ListItemIcon sx={{ minWidth: 32 }}>{child.icon}</ListItemIcon>
-                        <ListItemText primary={child.label} />
-                      </ListItemButton>
-                    ))}
+                    {item.children.map((child) => {
+                      const childSelected = matchesPath(child.key, location.pathname);
+                      return (
+                        <ListItemButton
+                          key={child.key}
+                          selected={childSelected}
+                          onClick={() => handleNavigate(child.key)}
+                          sx={{
+                            minHeight: 44,
+                            borderRadius: 3,
+                            mb: 0.5,
+                            pl: 4,
+                            transition: 'all 0.2s ease-in-out',
+                            bgcolor: childSelected ? 'action.selected' : 'transparent',
+                            '&:hover': {
+                              bgcolor: childSelected ? 'action.selected' : 'action.hover',
+                              transform: 'translateX(2px)',
+                            },
+                          }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 32 }}>{child.icon}</ListItemIcon>
+                          <ListItemText
+                            primary={child.label}
+                            primaryTypographyProps={{
+                              fontWeight: childSelected ? 600 : 400,
+                              fontSize: '0.875rem',
+                            }}
+                          />
+                        </ListItemButton>
+                      );
+                    })}
                   </List>
                 </Collapse>
               )}
@@ -263,7 +318,17 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
         </Toolbar>
       </AppBar>
 
-      <Box component="nav" sx={{ width: { lg: drawerWidth }, flexShrink: { lg: 0 } }}>
+      <Box
+        component="nav"
+        sx={{
+          width: { lg: drawerWidth },
+          flexShrink: { lg: 0 },
+          transition: (theme: Theme) =>
+            theme.transitions.create('width', {
+              duration: theme.transitions.duration.shorter,
+            }),
+        }}
+      >
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -306,11 +371,10 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
         sx={{
           flex: 1,
           minWidth: 0,
-          ml: { lg: `${drawerWidth}px` },
         }}
       >
         <Toolbar sx={{ minHeight: '72px !important' }} />
-        <Box sx={{ p: { xs: 2, md: 3 } }}>
+        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: 'auto' }}>
           <Outlet />
         </Box>
       </Box>
@@ -319,26 +383,47 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
         anchorEl={menuAnchorEl}
         open={Boolean(menuAnchorEl)}
         onClose={() => setMenuAnchorEl(null)}
+        slotProps={{
+          paper: {
+            sx: {
+              minWidth: 180,
+              mt: 1,
+              borderRadius: 2,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            },
+          },
+        }}
       >
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="subtitle2" fontWeight={600}>
+            {user?.real_name || user?.username || '用户'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {user?.phone || ''}
+          </Typography>
+        </Box>
         <MenuItem
           onClick={() => {
             setMenuAnchorEl(null);
             navigate(personalPath);
           }}
+          sx={{ py: 1.25, mt: 0.5 }}
         >
           <ListItemIcon>
             <PersonRoundedIcon fontSize="small" />
           </ListItemIcon>
           个人账户
         </MenuItem>
+        <Divider />
         <MenuItem
           onClick={() => {
             setMenuAnchorEl(null);
             handleLogout();
           }}
+          sx={{ py: 1.25, color: 'error.main' }}
         >
           <ListItemIcon>
-            <LogoutRoundedIcon fontSize="small" />
+            <LogoutRoundedIcon fontSize="small" color="error" />
           </ListItemIcon>
           退出登录
         </MenuItem>

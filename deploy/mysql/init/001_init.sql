@@ -517,14 +517,14 @@ INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
 (3, 24),  -- elder:self_read
 (3, 22),  -- elder:invite
 (3, 7),   -- health_record:read
-(3, 8);   -- alert:read
+(3, 10);  -- alert:read
 
 -- Family role permissions
 INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
 (4, 1),   -- auth:login
 (4, 23),  -- family:read
 (4, 7),   -- health_record:read
-(4, 8);   -- alert:read
+(4, 10);  -- alert:read
 
 -- Admin and doctor get elder:invite
 INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES

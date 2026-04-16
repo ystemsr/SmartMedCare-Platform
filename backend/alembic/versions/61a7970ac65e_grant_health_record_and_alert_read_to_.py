@@ -19,12 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute(
         "INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES "
-        "(3, 7), (3, 8), (4, 7), (4, 8)"
+        "(3, 7), (3, 10), (4, 7), (4, 10)"
     )
 
 
 def downgrade() -> None:
     op.execute(
         "DELETE FROM role_permissions "
-        "WHERE (role_id, permission_id) IN ((3, 7), (3, 8), (4, 7), (4, 8))"
+        "WHERE (role_id, permission_id) IN ((3, 7), (3, 10), (4, 7), (4, 10))"
     )

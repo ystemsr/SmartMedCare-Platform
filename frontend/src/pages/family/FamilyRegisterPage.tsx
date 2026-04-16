@@ -12,7 +12,7 @@ import {
   X,
   AlertCircle,
   PartyPopper,
-  Loader,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -21,12 +21,13 @@ import {
   BlurFade,
   GradientBackground,
   Confetti,
-  TextLoop,
   GLASS_STYLES,
 } from '@/components/ui/sign-up';
 import type { ConfettiRef } from '@/components/ui/sign-up';
 import SlideCaptcha from '../../components/SlideCaptcha';
 import { validateInviteCode, registerFamily } from '../../api/family';
+import { useAuthStore, getHomeRoute } from '../../store/auth';
+import { setToken } from '../../utils/storage';
 import type { InviteCodeValidation } from '../../types/family';
 
 // ---------------------------------------------------------------------------
@@ -39,13 +40,12 @@ const relationshipOptions = [
   { value: '其他', label: '其他' },
 ];
 
-const modalSteps = [
-  { message: '正在注册...', icon: <Loader className="w-12 h-12 text-[var(--color-primary)] animate-spin" /> },
-  { message: '正在初始化账户...', icon: <Loader className="w-12 h-12 text-[var(--color-primary)] animate-spin" /> },
-  { message: '即将完成...', icon: <Loader className="w-12 h-12 text-[var(--color-primary)] animate-spin" /> },
-  { message: '注册成功！', icon: <PartyPopper className="w-12 h-12 text-green-500" /> },
+const LOADING_STEPS = [
+  '正在注册...',
+  '正在初始化账户...',
+  '即将完成...',
 ];
-const TEXT_LOOP_INTERVAL = 1.5;
+const STEP_DURATION = 1200; // ms per step
 
 type Step = 'inviteAndName' | 'phoneAndRelation' | 'password';
 
@@ -131,15 +131,92 @@ const RelationshipSelect: React.FC<RelationshipSelectProps> = ({
 );
 
 // ---------------------------------------------------------------------------
+// ProgressStep — animated step indicator with checkmark
+// ---------------------------------------------------------------------------
+const ProgressStep: React.FC<{
+  label: string;
+  state: 'pending' | 'active' | 'done';
+  delay?: number;
+}> = ({ label, state, delay = 0 }) => (
+  <motion.div
+    initial={{ opacity: 0, x: -12 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ delay, duration: 0.3 }}
+    className="flex items-center gap-3"
+  >
+    <div className="relative w-7 h-7 flex-shrink-0 flex items-center justify-center">
+      {state === 'done' ? (
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+          className="w-7 h-7 rounded-full bg-[#1f9d63] flex items-center justify-center"
+        >
+          <Check className="w-4 h-4 text-white" strokeWidth={3} />
+        </motion.div>
+      ) : state === 'active' ? (
+        <div className="w-7 h-7 rounded-full border-2 border-[#1f6feb] flex items-center justify-center">
+          <motion.div
+            className="w-3 h-3 rounded-full bg-[#1f6feb]"
+            animate={{ scale: [1, 1.3, 1] }}
+            transition={{ repeat: Infinity, duration: 1 }}
+          />
+        </div>
+      ) : (
+        <div className="w-7 h-7 rounded-full border-2 border-border" />
+      )}
+    </div>
+    <span
+      className={cn(
+        'text-sm font-medium transition-colors duration-300',
+        state === 'done' && 'text-[#1f9d63]',
+        state === 'active' && 'text-foreground',
+        state === 'pending' && 'text-muted-foreground/50'
+      )}
+    >
+      {label}
+    </span>
+  </motion.div>
+);
+
+// ---------------------------------------------------------------------------
+// ProgressRing — circular progress indicator
+// ---------------------------------------------------------------------------
+const ProgressRing: React.FC<{ progress: number }> = ({ progress }) => {
+  const r = 36;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference - progress * circumference;
+  return (
+    <svg width="88" height="88" viewBox="0 0 88 88" className="mb-2">
+      <circle cx="44" cy="44" r={r} fill="none" stroke="currentColor" strokeWidth="4" className="text-border" />
+      <motion.circle
+        cx="44"
+        cy="44"
+        r={r}
+        fill="none"
+        stroke="#1f6feb"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+      />
+    </svg>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // StatusModal — module-level
 // ---------------------------------------------------------------------------
 interface StatusModalProps {
   status: 'closed' | 'loading' | 'error' | 'success';
   errorMessage: string;
   onClose: () => void;
+  activeLoadingStep: number;
 }
 
-const StatusModal: React.FC<StatusModalProps> = ({ status, errorMessage, onClose }) => (
+const StatusModal: React.FC<StatusModalProps> = ({ status, errorMessage, onClose, activeLoadingStep }) => (
   <AnimatePresence>
     {status !== 'closed' && (
       <motion.div
@@ -152,7 +229,7 @@ const StatusModal: React.FC<StatusModalProps> = ({ status, errorMessage, onClose
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="relative bg-card/80 border-4 border-border rounded-2xl p-8 w-full max-w-sm flex flex-col items-center gap-4 mx-2"
+          className="relative bg-card/80 border-4 border-border rounded-2xl p-8 w-full max-w-sm flex flex-col items-center gap-4 mx-4"
         >
           {(status === 'error' || status === 'success') && (
             <button
@@ -172,22 +249,38 @@ const StatusModal: React.FC<StatusModalProps> = ({ status, errorMessage, onClose
             </>
           )}
           {status === 'loading' && (
-            <TextLoop interval={TEXT_LOOP_INTERVAL} stopOnEnd>
-              {modalSteps.slice(0, -1).map((s, i) => (
-                <div key={i} className="flex flex-col items-center gap-4">
-                  {s.icon}
-                  <p className="text-lg font-medium text-foreground">{s.message}</p>
-                </div>
-              ))}
-            </TextLoop>
+            <div className="flex flex-col items-center gap-5 w-full">
+              <ProgressRing progress={(activeLoadingStep + 1) / LOADING_STEPS.length} />
+              <div className="flex flex-col gap-3 w-full pl-4">
+                {LOADING_STEPS.map((label, i) => (
+                  <ProgressStep
+                    key={label}
+                    label={label}
+                    state={i < activeLoadingStep ? 'done' : i === activeLoadingStep ? 'active' : 'pending'}
+                    delay={i * 0.1}
+                  />
+                ))}
+              </div>
+            </div>
           )}
           {status === 'success' && (
-            <div className="flex flex-col items-center gap-4">
-              {modalSteps[modalSteps.length - 1].icon}
-              <p className="text-lg font-medium text-foreground">
-                {modalSteps[modalSteps.length - 1].message}
-              </p>
-            </div>
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+              className="flex flex-col items-center gap-4"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 15, delay: 0.1 }}
+                className="w-16 h-16 rounded-full bg-[#1f9d63] flex items-center justify-center"
+              >
+                <PartyPopper className="w-8 h-8 text-white" />
+              </motion.div>
+              <p className="text-xl font-semibold text-foreground">注册成功！</p>
+              <p className="text-sm text-muted-foreground">正在为您自动登录...</p>
+            </motion.div>
           )}
         </motion.div>
       </motion.div>
@@ -222,9 +315,11 @@ const FamilyRegisterPage: React.FC = () => {
   // Business logic state
   const [codeValidation, setCodeValidation] = useState<InviteCodeValidation | null>(null);
   const [validating, setValidating] = useState(false);
+  const [activeLoadingStep, setActiveLoadingStep] = useState(0);
 
   const confettiRef = useRef<ConfettiRef>(null);
   const sessionId = useMemo(() => crypto.randomUUID(), []);
+  const fetchUser = useAuthStore((s) => s.fetchUser);
 
   // Input refs for auto-focus
   const phoneInputRef = useRef<HTMLInputElement>(null);
@@ -357,9 +452,19 @@ const FamilyRegisterPage: React.FC = () => {
     async (captchaToken: string) => {
       setCaptchaVisible(false);
       setModalStatus('loading');
+      setActiveLoadingStep(0);
 
       try {
-        await registerFamily({
+        // Step through loading animation while registering
+        const stepTimer = setInterval(() => {
+          setActiveLoadingStep((prev) => {
+            if (prev < LOADING_STEPS.length - 1) return prev + 1;
+            clearInterval(stepTimer);
+            return prev;
+          });
+        }, STEP_DURATION);
+
+        const res = await registerFamily({
           invite_code: inviteCode.trim(),
           real_name: realName.trim(),
           phone: phone.trim(),
@@ -369,21 +474,36 @@ const FamilyRegisterPage: React.FC = () => {
           session_id: sessionId,
         });
 
-        const loadingStepsCount = modalSteps.length - 1;
-        const totalDuration = loadingStepsCount * TEXT_LOOP_INTERVAL * 1000;
+        // Ensure all loading steps have animated through
+        clearInterval(stepTimer);
+        setActiveLoadingStep(LOADING_STEPS.length - 1);
+
+        // Auto-login: use the access_token returned by register
+        const accessToken = res.data?.access_token;
+        if (accessToken) {
+          setToken(accessToken);
+          useAuthStore.setState({ token: accessToken });
+          await fetchUser();
+        }
+
+        // Show success after a brief moment for the last step to animate
         setTimeout(() => {
           fireSideCanons();
           setModalStatus('success');
+
+          // Navigate to family home
           setTimeout(() => {
-            navigate('/login', { replace: true });
-          }, 2000);
-        }, totalDuration);
+            const user = useAuthStore.getState().user;
+            const home = getHomeRoute(user?.roles || []);
+            navigate(home, { replace: true });
+          }, 1500);
+        }, STEP_DURATION);
       } catch (err) {
         setModalErrorMessage(err instanceof Error ? err.message : '注册失败');
         setModalStatus('error');
       }
     },
-    [inviteCode, realName, phone, password, relationship, sessionId, fireSideCanons, navigate]
+    [inviteCode, realName, phone, password, relationship, sessionId, fireSideCanons, navigate, fetchUser]
   );
 
   const handleCaptchaCancel = useCallback(() => {
@@ -425,7 +545,7 @@ const FamilyRegisterPage: React.FC = () => {
         manualstart
         className="fixed top-0 left-0 w-full h-full pointer-events-none z-[999]"
       />
-      <StatusModal status={modalStatus} errorMessage={modalErrorMessage} onClose={closeModal} />
+      <StatusModal status={modalStatus} errorMessage={modalErrorMessage} onClose={closeModal} activeLoadingStep={activeLoadingStep} />
 
       {/* Brand header */}
       <div
@@ -449,7 +569,7 @@ const FamilyRegisterPage: React.FC = () => {
         </div>
         <fieldset
           disabled={modalStatus !== 'closed'}
-          className="relative z-10 flex flex-col items-center gap-8 w-[320px] mx-auto p-4"
+          className="relative z-10 flex flex-col items-center gap-8 w-full max-w-[440px] mx-auto px-5 sm:px-4 py-4"
         >
           {/* Step titles */}
           <AnimatePresence mode="wait">
@@ -464,7 +584,7 @@ const FamilyRegisterPage: React.FC = () => {
               >
                 <BlurFade delay={0.25} className="w-full">
                   <div className="text-center">
-                    <p className="font-serif font-light text-4xl sm:text-5xl tracking-tight text-foreground whitespace-nowrap">
+                    <p className="font-serif font-light text-3xl sm:text-4xl md:text-5xl tracking-tight text-foreground whitespace-nowrap">
                       家属注册
                     </p>
                   </div>
@@ -487,7 +607,7 @@ const FamilyRegisterPage: React.FC = () => {
               >
                 <BlurFade delay={0} className="w-full">
                   <div className="text-center">
-                    <p className="font-serif font-light text-4xl sm:text-5xl tracking-tight text-foreground whitespace-nowrap">
+                    <p className="font-serif font-light text-3xl sm:text-4xl md:text-5xl tracking-tight text-foreground whitespace-nowrap">
                       联系方式
                     </p>
                   </div>
@@ -510,7 +630,7 @@ const FamilyRegisterPage: React.FC = () => {
               >
                 <BlurFade delay={0} className="w-full">
                   <div className="text-center">
-                    <p className="font-serif font-light text-4xl sm:text-5xl tracking-tight text-foreground whitespace-nowrap">
+                    <p className="font-serif font-light text-3xl sm:text-4xl md:text-5xl tracking-tight text-foreground whitespace-nowrap">
                       设置密码
                     </p>
                   </div>
@@ -525,7 +645,7 @@ const FamilyRegisterPage: React.FC = () => {
           </AnimatePresence>
 
           {/* Form */}
-          <form onSubmit={handleFinalSubmit} className="w-[320px] flex flex-col gap-6">
+          <form onSubmit={handleFinalSubmit} className="w-full flex flex-col gap-6">
             <AnimatePresence mode="wait">
               {/* Step 1: Invite code + Real name */}
               {step === 'inviteAndName' && (
@@ -656,7 +776,7 @@ const FamilyRegisterPage: React.FC = () => {
                   </BlurFade>
 
                   <BlurFade delay={0.3} inView className="w-full">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">
                       <button
                         type="button"
                         onClick={handleGoBack}
@@ -666,12 +786,12 @@ const FamilyRegisterPage: React.FC = () => {
                       </button>
                       <div
                         className={cn(
-                          'transition-all duration-300 ease-in-out',
+                          'transition-all duration-300 ease-in-out w-full sm:w-auto',
                           isStep2Valid ? 'opacity-100' : 'opacity-40 pointer-events-none'
                         )}
                       >
-                        <GlassButton type="button" onClick={handleProgressStep} size="sm">
-                          <span className="flex items-center gap-2">
+                        <GlassButton type="button" onClick={handleProgressStep} size="sm" className="w-full sm:w-auto">
+                          <span className="flex items-center justify-center gap-2">
                             下一步 <ArrowRight className="w-4 h-4" />
                           </span>
                         </GlassButton>

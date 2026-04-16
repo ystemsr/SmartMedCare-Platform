@@ -145,7 +145,7 @@ function AppTable<T extends object>({
   };
 
   return (
-    <Card sx={{ overflow: 'hidden' }}>
+    <Card sx={{ overflow: 'hidden', p: 2.5 }}>
       <Stack
         direction={{ xs: 'column', lg: 'row' }}
         justifyContent="space-between"
@@ -201,7 +201,7 @@ function AppTable<T extends object>({
           </Box>
         )}
 
-        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 4 }}>
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
           <Table stickyHeader sx={{ minWidth: 720 }}>
             <TableHead>
               <TableRow>

@@ -95,17 +95,16 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
             `linear-gradient(135deg, ${theme.palette.primary.main}08 0%, ${theme.palette.primary.main}03 100%)`,
         }}
       >
-        <Avatar
+        <Box
+          component="img"
+          src="/favicon.svg"
+          alt="SmartMedCare"
           sx={{
-            bgcolor: 'primary.main',
-            width: 42,
-            height: 42,
-            fontWeight: 700,
-            boxShadow: '0 2px 8px rgba(25, 118, 210, 0.25)',
+            width: 36,
+            height: 36,
+            flexShrink: 0,
           }}
-        >
-          医
-        </Avatar>
+        />
         {!sidebarCollapsed && (
           <Box>
             <Typography variant="subtitle1" fontWeight={700} lineHeight={1.3}>
@@ -168,7 +167,6 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
                 placement="right"
               >
                 <ListItemButton
-                  selected={selected}
                   onClick={() => handleNavigate(item.key)}
                   sx={navItemSx(selected)}
                 >
@@ -202,7 +200,6 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
             <Fragment key={item.key}>
               <Tooltip title={sidebarCollapsed ? item.label : ''} placement="right">
                 <ListItemButton
-                  selected={selected}
                   onClick={() =>
                     setExpandedGroups((previous) => ({
                       ...previous,
@@ -243,7 +240,6 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
                       return (
                         <ListItemButton
                           key={child.key}
-                          selected={childSelected}
                           onClick={() => handleNavigate(child.key)}
                           sx={{
                             minHeight: 44,

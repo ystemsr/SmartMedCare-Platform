@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import ElderlyRoundedIcon from '@mui/icons-material/ElderlyRounded';
 import FamilyRestroomRoundedIcon from '@mui/icons-material/FamilyRestroomRounded';
-import HealingRoundedIcon from '@mui/icons-material/HealingRounded';
 import MedicalInformationRoundedIcon from '@mui/icons-material/MedicalInformationRounded';
 import MedicationRoundedIcon from '@mui/icons-material/MedicationRounded';
 import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
@@ -29,10 +28,6 @@ const BasicLayout: React.FC = () => {
         key: '/elders',
         icon: <ElderlyRoundedIcon />,
         label: '老人管理',
-        children: [
-          { key: '/elders', label: '老人列表', icon: <ElderlyRoundedIcon fontSize="small" /> },
-          { key: '/elders/archive', label: '老人档案', icon: <MedicalInformationRoundedIcon fontSize="small" /> },
-        ],
       });
     }
 
@@ -49,10 +44,6 @@ const BasicLayout: React.FC = () => {
         key: '/followups',
         icon: <TimelineRoundedIcon />,
         label: '随访管理',
-        children: [
-          { key: '/followups/plans', label: '随访计划', icon: <TimelineRoundedIcon fontSize="small" /> },
-          { key: '/followups/records', label: '随访记录', icon: <HealingRoundedIcon fontSize="small" /> },
-        ],
       });
     }
 

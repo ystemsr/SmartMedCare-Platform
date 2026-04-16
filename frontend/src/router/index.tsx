@@ -11,11 +11,9 @@ const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const ElderListPage = lazy(() => import('../pages/elders/ElderListPage'));
 const ElderDetailPage = lazy(() => import('../pages/elders/ElderDetailPage'));
 const ElderArchivePage = lazy(() => import('../pages/elders/ElderArchivePage'));
-const ElderArchiveListPage = lazy(() => import('../pages/elders/ElderArchiveListPage'));
 const AlertListPage = lazy(() => import('../pages/alerts/AlertListPage'));
 const AlertDetailPage = lazy(() => import('../pages/alerts/AlertDetailPage'));
 const FollowupPlanPage = lazy(() => import('../pages/followups/FollowupPlanPage'));
-const FollowupRecordPage = lazy(() => import('../pages/followups/FollowupRecordPage'));
 const InterventionPage = lazy(() => import('../pages/interventions/InterventionPage'));
 const AssessmentPage = lazy(() => import('../pages/assessments/AssessmentPage'));
 const PersonalAccountPage = lazy(() => import('../pages/accounts/PersonalAccountPage'));
@@ -76,13 +74,11 @@ const AppRouter: React.FC = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/elders" element={<ElderListPage />} />
-          <Route path="/elders/archive" element={<ElderArchiveListPage />} />
           <Route path="/elders/:id" element={<ElderDetailPage />} />
           <Route path="/elders/:id/archive" element={<ElderArchivePage />} />
           <Route path="/alerts" element={<AlertListPage />} />
           <Route path="/alerts/:id" element={<AlertDetailPage />} />
-          <Route path="/followups/plans" element={<FollowupPlanPage />} />
-          <Route path="/followups/records" element={<FollowupRecordPage />} />
+          <Route path="/followups" element={<FollowupPlanPage />} />
           <Route path="/interventions" element={<InterventionPage />} />
           <Route path="/assessments" element={<AssessmentPage />} />
           <Route path="/doctors" element={<DoctorPage />} />

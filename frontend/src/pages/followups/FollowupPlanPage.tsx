@@ -1,5 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
+  Box,
   Button,
   Chip,
   Dialog,
@@ -11,6 +12,8 @@ import {
   MenuItem,
   Select,
   Stack,
+  Tab,
+  Tabs,
   TextField,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
@@ -50,12 +53,86 @@ const formFields: FormFieldConfig[] = [
 ];
 
 const FollowupPlanPage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState(0);
   const [formVisible, setFormVisible] = useState(false);
   const [editingFollowup, setEditingFollowup] = useState<Followup | null>(null);
   const [recordModalVisible, setRecordModalVisible] = useState(false);
   const [recordFollowupId, setRecordFollowupId] = useState<number | null>(null);
   const [recordResult, setRecordResult] = useState('');
   const [recordNextAction, setRecordNextAction] = useState('');
+
+  // Records tab state
+  const [recordsData, setRecordsData] = useState<Followup[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsPagination, setRecordsPagination] = useState({ current: 1, pageSize: 20, total: 0 });
+
+  const fetchRecords = useCallback(async (page = 1, pageSize = 20) => {
+    setRecordsLoading(true);
+    try {
+      const res = await getFollowups({
+        page,
+        page_size: pageSize,
+        status: 'completed',
+      });
+      setRecordsData(res.data.items);
+      setRecordsPagination({ current: res.data.page, pageSize: res.data.page_size, total: res.data.total });
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '加载失败');
+    } finally {
+      setRecordsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 1) {
+      fetchRecords();
+    }
+  }, [activeTab, fetchRecords]);
+
+  const recordsColumns: AppTableColumn<Followup>[] = [
+    { title: '老人ID', dataIndex: 'elder_id', width: 80 },
+    { title: '老人姓名', dataIndex: 'elder_name', width: 100 },
+    {
+      title: '随访方式',
+      dataIndex: 'plan_type',
+      width: 100,
+      render: (value) => formatPlanType(value as string | null | undefined),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 100,
+      render: (status: unknown) => {
+        const followupStatus = String(status ?? '');
+        return (
+          <Chip
+            size="small"
+            label={formatFollowupStatus(followupStatus)}
+            sx={{
+              color: FOLLOWUP_STATUS_COLORS[followupStatus] || 'text.primary',
+              borderColor: FOLLOWUP_STATUS_COLORS[followupStatus] || 'divider',
+              bgcolor: 'transparent',
+            }}
+            variant="outlined"
+          />
+        );
+      },
+    },
+    {
+      title: '计划时间',
+      dataIndex: 'planned_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
+    { title: '负责人', dataIndex: 'assigned_to_name', width: 100 },
+    { title: '备注', dataIndex: 'notes', ellipsis: true },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
+  ];
 
   const fetchFn = useCallback(
     (params: FollowupListQuery & { page: number; page_size: number }) => getFollowups(params),
@@ -225,145 +302,163 @@ const FollowupPlanPage: React.FC = () => {
   ];
 
   return (
-    <>
-      <AppTable<Followup>
-        columns={columns}
-        dataSource={data}
-        loading={loading}
-        pagination={pagination}
-        onChange={handleTableChange}
-        onSearch={handleSearch}
-        searchPlaceholder="搜索随访计划"
-        toolbar={
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} flexWrap="wrap">
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>状态</InputLabel>
-              <Select
-                label="状态"
-                value={query.status || ''}
-                onChange={(event) =>
-                  setQuery((prev) => ({ ...prev, status: event.target.value || undefined }))
-                }
-              >
-                <MenuItem value="">全部</MenuItem>
-                {FOLLOWUP_STATUS_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>随访方式</InputLabel>
-              <Select
-                label="随访方式"
-                value={query.plan_type || ''}
-                onChange={(event) =>
-                  setQuery((prev) => ({ ...prev, plan_type: event.target.value || undefined }))
-                }
-              >
-                <MenuItem value="">全部</MenuItem>
-                {FOLLOWUP_TYPE_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label="开始日期"
-              type="date"
-              size="small"
-              value={query.date_start || ''}
-              onChange={(event) =>
-                setQuery((prev) => ({ ...prev, date_start: event.target.value || undefined }))
-              }
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              label="结束日期"
-              type="date"
-              size="small"
-              value={query.date_end || ''}
-              onChange={(event) =>
-                setQuery((prev) => ({ ...prev, date_end: event.target.value || undefined }))
-              }
-              InputLabelProps={{ shrink: true }}
-            />
-            <PermissionGuard permission="followup:create">
-              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={handleCreate}>
-                新建随访计划
-              </Button>
-            </PermissionGuard>
-          </Stack>
-        }
-      />
+    <Box>
+      <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
+        <Tab label="随访计划" />
+        <Tab label="随访记录" />
+      </Tabs>
 
-      <AppForm
-        title={editingFollowup ? '编辑随访计划' : '新建随访计划'}
-        visible={formVisible}
-        fields={formFields}
-        initialValues={editingFollowup || undefined}
-        onSubmit={async (values) => {
-          if (editingFollowup) {
-            await updateFollowup(editingFollowup.id, values as Parameters<typeof updateFollowup>[1]);
-          } else {
-            await createFollowup(values as Parameters<typeof createFollowup>[0]);
-          }
-          message.success(editingFollowup ? '更新成功' : '创建成功');
-          setFormVisible(false);
-          refresh();
-        }}
-        onCancel={() => setFormVisible(false)}
-      />
+      {activeTab === 0 ? (
+        <>
+          <AppTable<Followup>
+            columns={columns}
+            dataSource={data}
+            loading={loading}
+            pagination={pagination}
+            onChange={handleTableChange}
+            onSearch={handleSearch}
+            searchPlaceholder="搜索随访计划"
+            toolbar={
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} flexWrap="wrap">
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>状态</InputLabel>
+                  <Select
+                    label="状态"
+                    value={query.status || ''}
+                    onChange={(event) =>
+                      setQuery((prev) => ({ ...prev, status: event.target.value || undefined }))
+                    }
+                  >
+                    <MenuItem value="">全部</MenuItem>
+                    {FOLLOWUP_STATUS_OPTIONS.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>随访方式</InputLabel>
+                  <Select
+                    label="随访方式"
+                    value={query.plan_type || ''}
+                    onChange={(event) =>
+                      setQuery((prev) => ({ ...prev, plan_type: event.target.value || undefined }))
+                    }
+                  >
+                    <MenuItem value="">全部</MenuItem>
+                    {FOLLOWUP_TYPE_OPTIONS.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="开始日期"
+                  type="date"
+                  size="small"
+                  value={query.date_start || ''}
+                  onChange={(event) =>
+                    setQuery((prev) => ({ ...prev, date_start: event.target.value || undefined }))
+                  }
+                  InputLabelProps={{ shrink: true }}
+                />
+                <TextField
+                  label="结束日期"
+                  type="date"
+                  size="small"
+                  value={query.date_end || ''}
+                  onChange={(event) =>
+                    setQuery((prev) => ({ ...prev, date_end: event.target.value || undefined }))
+                  }
+                  InputLabelProps={{ shrink: true }}
+                />
+                <PermissionGuard permission="followup:create">
+                  <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={handleCreate}>
+                    新建随访计划
+                  </Button>
+                </PermissionGuard>
+              </Stack>
+            }
+          />
 
-      <Dialog
-        open={recordModalVisible}
-        onClose={() => {
-          setRecordModalVisible(false);
-          setRecordFollowupId(null);
-        }}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>记录随访结果</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <TextField
-              label="随访结果"
-              value={recordResult}
-              onChange={(event) => setRecordResult(event.target.value)}
-              multiline
-              minRows={3}
-              fullWidth
-              required
-            />
-            <TextField
-              label="后续行动"
-              value={recordNextAction}
-              onChange={(event) => setRecordNextAction(event.target.value)}
-              multiline
-              minRows={2}
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            color="inherit"
-            onClick={() => {
+          <AppForm
+            title={editingFollowup ? '编辑随访计划' : '新建随访计划'}
+            visible={formVisible}
+            fields={formFields}
+            initialValues={editingFollowup || undefined}
+            onSubmit={async (values) => {
+              if (editingFollowup) {
+                await updateFollowup(editingFollowup.id, values as Parameters<typeof updateFollowup>[1]);
+              } else {
+                await createFollowup(values as Parameters<typeof createFollowup>[0]);
+              }
+              message.success(editingFollowup ? '更新成功' : '创建成功');
+              setFormVisible(false);
+              refresh();
+            }}
+            onCancel={() => setFormVisible(false)}
+          />
+
+          <Dialog
+            open={recordModalVisible}
+            onClose={() => {
               setRecordModalVisible(false);
               setRecordFollowupId(null);
             }}
+            fullWidth
+            maxWidth="sm"
           >
-            取消
-          </Button>
-          <Button variant="contained" onClick={handleRecordSubmit}>
-            保存
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
+            <DialogTitle>记录随访结果</DialogTitle>
+            <DialogContent>
+              <Stack spacing={2} sx={{ pt: 1 }}>
+                <TextField
+                  label="随访结果"
+                  value={recordResult}
+                  onChange={(event) => setRecordResult(event.target.value)}
+                  multiline
+                  minRows={3}
+                  fullWidth
+                  required
+                />
+                <TextField
+                  label="后续行动"
+                  value={recordNextAction}
+                  onChange={(event) => setRecordNextAction(event.target.value)}
+                  multiline
+                  minRows={2}
+                  fullWidth
+                />
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                color="inherit"
+                onClick={() => {
+                  setRecordModalVisible(false);
+                  setRecordFollowupId(null);
+                }}
+              >
+                取消
+              </Button>
+              <Button variant="contained" onClick={handleRecordSubmit}>
+                保存
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </>
+      ) : (
+        <AppTable<Followup>
+          columns={recordsColumns}
+          dataSource={recordsData}
+          loading={recordsLoading}
+          pagination={recordsPagination}
+          onChange={(pag) => fetchRecords(pag.current, pag.pageSize)}
+          emptyText="暂无随访记录"
+        />
+      )}
+    </Box>
   );
 };
 

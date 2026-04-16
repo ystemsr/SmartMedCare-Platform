@@ -1,23 +1,33 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Box,
   Button,
+  Card,
+  CardActionArea,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
   FormControl,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
   Stack,
+  Tab,
+  Tabs,
+  TextField,
+  Typography,
   type SelectChangeEvent,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import LockResetRoundedIcon from '@mui/icons-material/LockResetRounded';
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import ToggleOnRoundedIcon from '@mui/icons-material/ToggleOnRounded';
 import VerifiedUserRoundedIcon from '@mui/icons-material/VerifiedUserRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
@@ -59,6 +69,8 @@ interface ConfirmState {
 
 const ElderListPage: React.FC = () => {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState(0);
+  const [archiveKeyword, setArchiveKeyword] = useState('');
   const [formVisible, setFormVisible] = useState(false);
   const [editingElder, setEditingElder] = useState<Elder | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -306,6 +318,60 @@ const ElderListPage: React.FC = () => {
     [navigate, openConfirm],
   );
 
+  const handleArchiveSearch = useCallback(() => {
+    setQuery((prev) => ({ ...prev, keyword: archiveKeyword.trim() } as ElderListQuery));
+  }, [archiveKeyword, setQuery]);
+
+  const archiveCards = useMemo(
+    () =>
+      data.map((elder) => (
+        <Box key={elder.id} sx={{ width: { xs: '100%', sm: '50%', md: '33.333%', lg: '25%' } }}>
+          <Card
+            variant="outlined"
+            sx={{ height: '100%', borderRadius: 4, overflow: 'hidden' }}
+          >
+            <CardActionArea
+              onClick={() => navigate(`/elders/${elder.id}/archive`)}
+              sx={{ height: '100%', alignItems: 'stretch' }}
+            >
+              <Box sx={{ p: 2.5, height: '100%' }}>
+                <Stack spacing={1.5} sx={{ height: '100%' }}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+                      {elder.name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {formatGender(elder.gender)} · {elder.phone || '-'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                      标签
+                    </Typography>
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                      {elder.tags?.length ? (
+                        elder.tags.map((tag) => (
+                          <Chip key={tag} label={tag} color="primary" variant="outlined" size="small" />
+                        ))
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          暂无标签
+                        </Typography>
+                      )}
+                    </Stack>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    点击查看健康档案
+                  </Typography>
+                </Stack>
+              </Box>
+            </CardActionArea>
+          </Card>
+        </Box>
+      )),
+    [data, navigate],
+  );
+
   const filterBar = (
     <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
       <FormControl size="small" sx={{ minWidth: 120 }}>
@@ -371,52 +437,115 @@ const ElderListPage: React.FC = () => {
   );
 
   return (
-    <>
-      <AppTable<Elder>
-        columns={columns}
-        dataSource={data}
-        loading={loading}
-        pagination={pagination}
-        onChange={handleTableChange}
-        onSearch={handleSearch}
-        searchPlaceholder="搜索姓名/手机号/身份证"
-        toolbar={filterBar}
-      />
+    <Box>
+      <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
+        <Tab label="列表管理" />
+        <Tab label="健康档案" />
+      </Tabs>
 
-      <AppForm
-        title={editingElder ? '编辑老人信息' : '新增老人'}
-        visible={formVisible}
-        fields={formFields}
-        initialValues={editingElder || undefined}
-        onSubmit={handleSubmit}
-        onCancel={() => setFormVisible(false)}
-        confirmLoading={submitLoading}
-        width={600}
-      />
+      {activeTab === 0 ? (
+        <>
+          <AppTable<Elder>
+            columns={columns}
+            dataSource={data}
+            loading={loading}
+            pagination={pagination}
+            onChange={handleTableChange}
+            onSearch={handleSearch}
+            searchPlaceholder="搜索姓名/手机号/身份证"
+            toolbar={filterBar}
+          />
 
-      <Dialog open={Boolean(confirmState)} onClose={closeConfirm}>
-        <DialogTitle>{confirmState?.title}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{confirmState?.content}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeConfirm} color="inherit">
-            取消
-          </Button>
-          <Button
-            onClick={async () => {
-              const action = confirmState?.onConfirm;
-              closeConfirm();
-              await action?.();
-            }}
-            color="error"
-            variant="contained"
+          <AppForm
+            title={editingElder ? '编辑老人信息' : '新增老人'}
+            visible={formVisible}
+            fields={formFields}
+            initialValues={editingElder || undefined}
+            onSubmit={handleSubmit}
+            onCancel={() => setFormVisible(false)}
+            confirmLoading={submitLoading}
+            width={600}
+          />
+
+          <Dialog open={Boolean(confirmState)} onClose={closeConfirm}>
+            <DialogTitle>{confirmState?.title}</DialogTitle>
+            <DialogContent>
+              <DialogContentText>{confirmState?.content}</DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={closeConfirm} color="inherit">
+                取消
+              </Button>
+              <Button
+                onClick={async () => {
+                  const action = confirmState?.onConfirm;
+                  closeConfirm();
+                  await action?.();
+                }}
+                color="error"
+                variant="contained"
+              >
+                确认
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </>
+      ) : (
+        <Stack spacing={2.5}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            justifyContent="space-between"
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+            spacing={2}
           >
-            确认
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
+                老人健康档案
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                查看并进入单个老人的健康档案详情
+              </Typography>
+            </Box>
+
+            <TextField
+              value={archiveKeyword}
+              onChange={(event) => setArchiveKeyword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  handleArchiveSearch();
+                }
+              }}
+              placeholder="搜索姓名/手机号/身份证"
+              size="small"
+              sx={{ width: { xs: '100%', sm: 340 } }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <SearchRoundedIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Stack>
+
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 320 }}>
+              <CircularProgress size={36} />
+            </Box>
+          ) : data.length === 0 ? (
+            <Card variant="outlined" sx={{ p: 4 }}>
+              <Typography variant="body2" color="text.secondary" align="center">
+                暂无老人档案
+              </Typography>
+            </Card>
+          ) : (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+              {archiveCards}
+            </Box>
+          )}
+        </Stack>
+      )}
+    </Box>
   );
 };
 

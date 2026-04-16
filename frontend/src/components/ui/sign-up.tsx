@@ -68,13 +68,13 @@ export function TextLoop({ children, className, interval = 2, transition = { dur
 }
 
 interface BlurFadeProps { children: React.ReactNode; className?: string; variant?: { hidden: { y: number }; visible: { y: number } }; duration?: number; delay?: number; yOffset?: number; inView?: boolean; inViewMargin?: string; blur?: string; }
-export function BlurFade({ children, className, variant, duration = 0.4, delay = 0, yOffset = 6, inView = true, inViewMargin = "-50px", blur = "6px" }: BlurFadeProps) {
+export function BlurFade({ children, className, variant, duration = 0.4, delay = 0, yOffset = 6, inView = true, inViewMargin = "-50px" }: BlurFadeProps) {
   const ref = useRef(null);
   const inViewResult = useInView(ref, { once: true, margin: inViewMargin as `${number}px` });
   const isInView = !inView || inViewResult;
   const defaultVariants: Variants = {
-    hidden: { y: yOffset, opacity: 0, filter: `blur(${blur})` },
-    visible: { y: -yOffset, opacity: 1, filter: `blur(0px)` },
+    hidden: { y: yOffset, opacity: 0 },
+    visible: { y: 0, opacity: 1 },
   };
   const combinedVariants = variant || defaultVariants;
   return (
@@ -104,6 +104,77 @@ export const GlassButton = React.forwardRef<HTMLButtonElement, GlassButtonProps>
   }
 );
 GlassButton.displayName = "GlassButton";
+
+// ---------------------------------------------------------------------------
+// GlassInput — reusable glass-morphism input
+// ---------------------------------------------------------------------------
+export interface GlassInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  icon?: React.ReactNode;
+  showArrow?: boolean;
+  onArrowClick?: () => void;
+  toggleVisibility?: () => void;
+  isVisible?: boolean;
+  validForToggle?: boolean;
+  inputRef?: React.Ref<HTMLInputElement>;
+}
+
+export const GlassInput: React.FC<GlassInputProps> = ({
+  icon,
+  showArrow = false,
+  onArrowClick,
+  toggleVisibility,
+  isVisible,
+  validForToggle,
+  inputRef,
+  className,
+  ...inputProps
+}) => (
+  <div className="glass-input-wrap w-full">
+    <div className="glass-input">
+      <span className="glass-input-text-area"></span>
+      <div className="relative z-10 flex-shrink-0 flex items-center justify-center w-10 pl-2">
+        {validForToggle && toggleVisibility ? (
+          <button
+            type="button"
+            aria-label="Toggle visibility"
+            onClick={toggleVisibility}
+            className="text-foreground/80 hover:text-foreground transition-colors p-2 rounded-full"
+          >
+            {isVisible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          </button>
+        ) : (
+          icon
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        {...inputProps}
+        className={cn(
+          "relative z-10 h-full w-0 flex-grow bg-transparent text-foreground placeholder:text-foreground/60 focus:outline-none transition-[padding-right] duration-300 ease-in-out",
+          showArrow ? "pr-2" : "pr-0",
+          className
+        )}
+      />
+      <div
+        className={cn(
+          "relative z-10 flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
+          showArrow ? "w-10 pr-1" : "w-0"
+        )}
+      >
+        <GlassButton
+          type="button"
+          onClick={onArrowClick}
+          size="icon"
+          aria-label="Continue"
+          contentClassName="text-foreground/80 hover:text-foreground"
+        >
+          <ArrowRight className="w-5 h-5" />
+        </GlassButton>
+      </div>
+    </div>
+  </div>
+);
+GlassInput.displayName = "GlassInput";
 
 export const GradientBackground = () => (
     <>

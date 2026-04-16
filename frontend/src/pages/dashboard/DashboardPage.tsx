@@ -82,11 +82,11 @@ const DashboardPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
+    <Box sx={{ display: 'grid', gap: 3 }}>
       <Box
         sx={{
           display: 'grid',
-          gap: 2,
+          gap: 2.5,
           gridTemplateColumns: {
             xs: '1fr',
             sm: 'repeat(2, minmax(0, 1fr))',
@@ -105,7 +105,7 @@ const DashboardPage: React.FC = () => {
       <Box
         sx={{
           display: 'grid',
-          gap: 2,
+          gap: 2.5,
           gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(320px, 1fr)' },
         }}
       >

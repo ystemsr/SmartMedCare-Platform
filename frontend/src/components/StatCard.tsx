@@ -23,8 +23,8 @@ const StatCard: React.FC<StatCardProps> = ({
   loading,
 }) => {
   return (
-    <Card sx={{ height: '100%' }}>
-      <Stack direction="row" spacing={2} alignItems="center">
+    <Card sx={{ height: '100%', p: 2.5 }}>
+      <Stack direction="row" spacing={2.5} alignItems="center">
         {icon && (
           <Avatar
             sx={{

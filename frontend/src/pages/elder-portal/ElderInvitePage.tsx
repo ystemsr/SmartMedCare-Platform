@@ -19,6 +19,7 @@ import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import GroupAddRoundedIcon from '@mui/icons-material/GroupAddRounded';
 import { useAuthStore } from '../../store/auth';
 import {
   getInviteCode,
@@ -164,16 +165,19 @@ const ElderInvitePage: React.FC = () => {
   }
 
   return (
-    <Stack spacing={3}>
-      <Card>
-        <CardContent>
-          <Stack spacing={2.5}>
+    <Stack spacing={3.5}>
+      <Card sx={{ borderRadius: 4 }}>
+        <CardContent sx={{ p: { xs: 2.5, sm: 3.5 } }}>
+          <Stack spacing={3}>
             <Box>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                邀请家属
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                生成邀请码分享给家属，家属可通过邀请码注册并绑定账号。每位老人最多绑定 {MAX_FAMILY_MEMBERS} 位家属。
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <GroupAddRoundedIcon sx={{ color: '#5c6bc0' }} />
+                <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.15rem' }}>
+                  邀请家属
+                </Typography>
+              </Stack>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 1.5, fontSize: '0.95rem', lineHeight: 1.8 }}>
+                您可以生成一个邀请码，将其分享给您的家属。家属使用邀请码注册后，即可在手机上查看您的健康信息。每位老人最多可绑定 <strong>{MAX_FAMILY_MEMBERS}</strong> 位家属。
               </Typography>
             </Box>
 
@@ -253,7 +257,7 @@ const ElderInvitePage: React.FC = () => {
       </Card>
 
       <Box>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontSize: '1.15rem' }}>
           已绑定家属
         </Typography>
         <AppTable<FamilyMember>

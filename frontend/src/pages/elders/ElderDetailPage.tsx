@@ -1,32 +1,25 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Card,
-  Descriptions,
-  Tabs,
-  Table,
+  Box,
   Button,
-  Space,
-  Tag,
-  message,
-  Spin,
-  Upload,
-} from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+  Card,
+  Chip,
+  CircularProgress,
+  Divider,
+  Stack,
+  Tab,
+  Tabs,
+  Typography,
+} from '@mui/material';
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
-import {
-  getElderDetail,
-  getHealthRecords,
-  createHealthRecord,
-  importHealthRecords,
-  getMedicalRecords,
-  createMedicalRecord,
-  getCareRecords,
-  createCareRecord,
-} from '../../api/elders';
+import AppTable, { type AppTableColumn } from '../../components/AppTable';
+import UploadFile from '../../components/UploadFile';
+import { importHealthRecords, getElderDetail, getHealthRecords, createHealthRecord, getMedicalRecords, createMedicalRecord, getCareRecords, createCareRecord } from '../../api/elders';
 import { formatGender, formatDate, formatDateTime } from '../../utils/formatter';
-import { getToken } from '../../utils/storage';
+import { message } from '../../utils/message';
 import type { Elder, HealthRecord, MedicalRecord, CareRecord } from '../../types/elder';
 
 const healthRecordFields: FormFieldConfig[] = [
@@ -64,6 +57,24 @@ const careRecordFields: FormFieldConfig[] = [
   { name: 'caregiver_name', label: '照护人员', required: true },
 ];
 
+interface DetailItemProps {
+  label: string;
+  value: React.ReactNode;
+}
+
+function DetailItem({ label, value }: DetailItemProps) {
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
 const ElderDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -74,6 +85,7 @@ const ElderDetailPage: React.FC = () => {
   const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
   const [careRecords, setCareRecords] = useState<CareRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'health' | 'medical' | 'care'>('health');
 
   const [healthFormVisible, setHealthFormVisible] = useState(false);
   const [medicalFormVisible, setMedicalFormVisible] = useState(false);
@@ -93,7 +105,7 @@ const ElderDetailPage: React.FC = () => {
       const res = await getHealthRecords(elderId);
       setHealthRecords(res.data.items);
     } catch {
-      // silent
+      // keep the page usable if one record source fails
     }
   }, [elderId]);
 
@@ -102,7 +114,7 @@ const ElderDetailPage: React.FC = () => {
       const res = await getMedicalRecords(elderId);
       setMedicalRecords(res.data.items);
     } catch {
-      // silent
+      // keep the page usable if one record source fails
     }
   }, [elderId]);
 
@@ -111,7 +123,7 @@ const ElderDetailPage: React.FC = () => {
       const res = await getCareRecords(elderId);
       setCareRecords(res.data.items);
     } catch {
-      // silent
+      // keep the page usable if one record source fails
     }
   }, [elderId]);
 
@@ -121,165 +133,271 @@ const ElderDetailPage: React.FC = () => {
       .finally(() => setLoading(false));
   }, [fetchElder, fetchHealthRecords, fetchMedicalRecords, fetchCareRecords]);
 
-  const healthColumns: ColumnsType<HealthRecord> = [
-    { title: '身高(cm)', dataIndex: 'height_cm', width: 100 },
-    { title: '体重(kg)', dataIndex: 'weight_kg', width: 100 },
-    { title: '收缩压', dataIndex: 'blood_pressure_systolic', width: 90 },
-    { title: '舒张压', dataIndex: 'blood_pressure_diastolic', width: 90 },
-    { title: '血糖', dataIndex: 'blood_glucose', width: 80 },
-    { title: '心率', dataIndex: 'heart_rate', width: 80 },
-    { title: '体温', dataIndex: 'temperature', width: 80 },
-    {
-      title: '慢性病',
-      dataIndex: 'chronic_diseases',
-      render: (diseases: string[]) => diseases?.join(', ') || '-',
-    },
-    { title: '记录时间', dataIndex: 'recorded_at', render: formatDateTime, width: 170 },
-  ];
+  const healthColumns = useMemo<AppTableColumn<HealthRecord>[]>(
+    () => [
+      { title: '身高(cm)', dataIndex: 'height_cm', width: 100 },
+      { title: '体重(kg)', dataIndex: 'weight_kg', width: 100 },
+      { title: '收缩压', dataIndex: 'blood_pressure_systolic', width: 90 },
+      { title: '舒张压', dataIndex: 'blood_pressure_diastolic', width: 90 },
+      { title: '血糖', dataIndex: 'blood_glucose', width: 80 },
+      { title: '心率', dataIndex: 'heart_rate', width: 80 },
+      { title: '体温', dataIndex: 'temperature', width: 80 },
+      {
+        title: '慢性病',
+        dataIndex: 'chronic_diseases',
+        render: (value: unknown) => {
+          const diseases = value as string[] | undefined;
+          return diseases?.join(', ') || '-';
+        },
+      },
+      {
+        title: '记录时间',
+        dataIndex: 'recorded_at',
+        render: (value: unknown) => formatDateTime(value as string | undefined | null),
+        width: 170,
+      },
+    ],
+    [],
+  );
 
-  const medicalColumns: ColumnsType<MedicalRecord> = [
-    { title: '就诊日期', dataIndex: 'visit_date', render: formatDate, width: 120 },
-    { title: '医院', dataIndex: 'hospital_name', width: 150 },
-    { title: '科室', dataIndex: 'department', width: 100 },
-    { title: '诊断', dataIndex: 'diagnosis', width: 200 },
-    {
-      title: '用药',
-      dataIndex: 'medications',
-      render: (meds: string[]) =>
-        meds?.map((m) => <Tag key={m}>{m}</Tag>) || '-',
-    },
-    { title: '备注', dataIndex: 'remarks', ellipsis: true },
-  ];
+  const medicalColumns = useMemo<AppTableColumn<MedicalRecord>[]>(
+    () => [
+      {
+        title: '就诊日期',
+        dataIndex: 'visit_date',
+        render: (value: unknown) => formatDate(value as string | undefined | null),
+        width: 120,
+      },
+      { title: '医院', dataIndex: 'hospital_name', width: 150 },
+      { title: '科室', dataIndex: 'department', width: 100 },
+      { title: '诊断', dataIndex: 'diagnosis', width: 200 },
+      {
+        title: '用药',
+        dataIndex: 'medications',
+        render: (value: unknown) => {
+          const meds = value as string[] | undefined;
+          return meds?.length ? (
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+              {meds.map((med) => (
+                <Chip key={med} label={med} size="small" variant="outlined" />
+              ))}
+            </Stack>
+          ) : (
+            '-'
+          );
+        },
+      },
+      { title: '备注', dataIndex: 'remarks', ellipsis: true },
+    ],
+    [],
+  );
 
-  const careColumns: ColumnsType<CareRecord> = [
-    { title: '照护类型', dataIndex: 'care_type', width: 120 },
-    { title: '照护日期', dataIndex: 'care_date', render: formatDate, width: 120 },
-    { title: '照护内容', dataIndex: 'content', ellipsis: true },
-    { title: '照护人员', dataIndex: 'caregiver_name', width: 120 },
-  ];
+  const careColumns = useMemo<AppTableColumn<CareRecord>[]>(
+    () => [
+      { title: '照护类型', dataIndex: 'care_type', width: 120 },
+      {
+        title: '照护日期',
+        dataIndex: 'care_date',
+        render: (value: unknown) => formatDate(value as string | undefined | null),
+        width: 120,
+      },
+      { title: '照护内容', dataIndex: 'content', ellipsis: true },
+      { title: '照护人员', dataIndex: 'caregiver_name', width: 120 },
+    ],
+    [],
+  );
 
   const handleImport = async (file: File) => {
+    await importHealthRecords(elderId, file);
+    message.success('导入成功');
     try {
-      await importHealthRecords(elderId, file);
-      message.success('导入成功');
-      fetchHealthRecords();
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '导入失败');
+      await fetchHealthRecords();
+    } catch {
+      // import succeeded; keep the success signal even if refresh fails
     }
-    return false; // prevent default upload
   };
 
   if (loading) {
-    return <div style={{ textAlign: 'center', padding: 100 }}><Spin size="large" /></div>;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+        <CircularProgress size={36} />
+      </Box>
+    );
   }
 
+  const detailGridSx = {
+    display: 'grid',
+    gap: 2,
+    gridTemplateColumns: {
+      xs: '1fr',
+      sm: 'repeat(2, minmax(0, 1fr))',
+      lg: 'repeat(3, minmax(0, 1fr))',
+    },
+  } as const;
+
   return (
-    <div>
+    <Stack spacing={2.5}>
       <Button
-        icon={<ArrowLeftOutlined />}
+        variant="text"
+        startIcon={<ArrowBackRoundedIcon />}
         onClick={() => navigate('/elders')}
-        style={{ marginBottom: 16 }}
+        sx={{ alignSelf: 'flex-start' }}
       >
         返回列表
       </Button>
 
-      <Card title="基本信息" style={{ marginBottom: 16 }}>
-        <Descriptions column={{ xs: 1, sm: 2, lg: 3 }}>
-          <Descriptions.Item label="姓名">{elder?.name}</Descriptions.Item>
-          <Descriptions.Item label="性别">{formatGender(elder?.gender)}</Descriptions.Item>
-          <Descriptions.Item label="出生日期">{formatDate(elder?.birth_date)}</Descriptions.Item>
-          <Descriptions.Item label="身份证号">{elder?.id_card}</Descriptions.Item>
-          <Descriptions.Item label="联系电话">{elder?.phone}</Descriptions.Item>
-          <Descriptions.Item label="地址">{elder?.address}</Descriptions.Item>
-          <Descriptions.Item label="紧急联系人">{elder?.emergency_contact_name || '-'}</Descriptions.Item>
-          <Descriptions.Item label="紧急联系电话">{elder?.emergency_contact_phone || '-'}</Descriptions.Item>
-          <Descriptions.Item label="标签">
-            {elder?.tags?.map((t) => <Tag key={t} color="blue">{t}</Tag>) || '-'}
-          </Descriptions.Item>
-        </Descriptions>
+      <Card>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>
+            {elder?.name || '老人档案'}
+          </Typography>
+          <Box sx={detailGridSx}>
+            <DetailItem label="姓名" value={elder?.name || '-'} />
+            <DetailItem label="性别" value={formatGender(elder?.gender)} />
+            <DetailItem label="出生日期" value={formatDate(elder?.birth_date)} />
+            <DetailItem label="身份证号" value={elder?.id_card || '-'} />
+            <DetailItem label="联系电话" value={elder?.phone || '-'} />
+            <DetailItem label="地址" value={elder?.address || '-'} />
+            <DetailItem label="紧急联系人" value={elder?.emergency_contact_name || '-'} />
+            <DetailItem label="紧急联系电话" value={elder?.emergency_contact_phone || '-'} />
+            <DetailItem
+              label="标签"
+              value={
+                elder?.tags?.length ? (
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                    {elder.tags.map((tag) => (
+                      <Chip key={tag} label={tag} color="primary" variant="outlined" size="small" />
+                    ))}
+                  </Stack>
+                ) : (
+                  '-'
+                )
+              }
+            />
+          </Box>
+        </Box>
       </Card>
 
       <Card>
-        <Tabs
-          defaultActiveKey="health"
-          items={[
-            {
-              key: 'health',
-              label: '健康记录',
-              children: (
-                <>
-                  <Space style={{ marginBottom: 16 }}>
-                    <Button
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      onClick={() => setHealthFormVisible(true)}
-                    >
-                      新增健康记录
-                    </Button>
-                    <Upload
-                      accept=".csv,.xlsx,.xls"
-                      showUploadList={false}
-                      headers={{ Authorization: `Bearer ${getToken() || ''}` }}
-                      beforeUpload={(file) => { handleImport(file); return false; }}
-                    >
-                      <Button icon={<UploadOutlined />}>导入数据</Button>
-                    </Upload>
-                  </Space>
-                  <Table<HealthRecord>
-                    columns={healthColumns}
-                    dataSource={healthRecords}
-                    rowKey="id"
-                    scroll={{ x: 'max-content' }}
-                  />
-                </>
-              ),
-            },
-            {
-              key: 'medical',
-              label: '医疗记录',
-              children: (
-                <>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            记录概览
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Card variant="outlined" sx={{ flex: 1 }}>
+              <Box sx={{ p: 2.5 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  健康记录数
+                </Typography>
+                <Typography variant="h4" color="primary.main">
+                  {healthRecords.length}
+                </Typography>
+              </Box>
+            </Card>
+            <Card variant="outlined" sx={{ flex: 1 }}>
+              <Box sx={{ p: 2.5 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  医疗记录数
+                </Typography>
+                <Typography variant="h4" color="success.main">
+                  {medicalRecords.length}
+                </Typography>
+              </Box>
+            </Card>
+            <Card variant="outlined" sx={{ flex: 1 }}>
+              <Box sx={{ p: 2.5 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  照护记录数
+                </Typography>
+                <Typography variant="h4" color="warning.main">
+                  {careRecords.length}
+                </Typography>
+              </Box>
+            </Card>
+          </Stack>
+        </Box>
+      </Card>
+
+      <Card>
+        <Box sx={{ px: 3, pt: 2 }}>
+          <Tabs
+            value={tab}
+            onChange={(_, nextTab: 'health' | 'medical' | 'care') => setTab(nextTab)}
+          >
+            <Tab value="health" label="健康记录" />
+            <Tab value="medical" label="医疗记录" />
+            <Tab value="care" label="照护记录" />
+          </Tabs>
+        </Box>
+        <Divider />
+        <Box sx={{ p: 3 }}>
+          {tab === 'health' && (
+            <AppTable<HealthRecord>
+              columns={healthColumns}
+              dataSource={healthRecords}
+              rowKey="id"
+              loading={false}
+              pagination={false}
+              emptyText="暂无健康记录"
+              toolbar={
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
                   <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => setMedicalFormVisible(true)}
-                    style={{ marginBottom: 16 }}
+                    variant="contained"
+                    startIcon={<AddRoundedIcon />}
+                    onClick={() => setHealthFormVisible(true)}
                   >
-                    新增医疗记录
+                    新增健康记录
                   </Button>
-                  <Table<MedicalRecord>
-                    columns={medicalColumns}
-                    dataSource={medicalRecords}
-                    rowKey="id"
-                    scroll={{ x: 'max-content' }}
+                  <UploadFile
+                    accept=".csv,.xlsx,.xls"
+                    buttonText="导入数据"
+                    onUpload={handleImport}
                   />
-                </>
-              ),
-            },
-            {
-              key: 'care',
-              label: '照护记录',
-              children: (
-                <>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => setCareFormVisible(true)}
-                    style={{ marginBottom: 16 }}
-                  >
-                    新增照护记录
-                  </Button>
-                  <Table<CareRecord>
-                    columns={careColumns}
-                    dataSource={careRecords}
-                    rowKey="id"
-                    scroll={{ x: 'max-content' }}
-                  />
-                </>
-              ),
-            },
-          ]}
-        />
+                </Stack>
+              }
+            />
+          )}
+
+          {tab === 'medical' && (
+            <AppTable<MedicalRecord>
+              columns={medicalColumns}
+              dataSource={medicalRecords}
+              rowKey="id"
+              loading={false}
+              pagination={false}
+              emptyText="暂无医疗记录"
+              toolbar={
+                <Button
+                  variant="contained"
+                  startIcon={<AddRoundedIcon />}
+                  onClick={() => setMedicalFormVisible(true)}
+                >
+                  新增医疗记录
+                </Button>
+              }
+            />
+          )}
+
+          {tab === 'care' && (
+            <AppTable<CareRecord>
+              columns={careColumns}
+              dataSource={careRecords}
+              rowKey="id"
+              loading={false}
+              pagination={false}
+              emptyText="暂无照护记录"
+              toolbar={
+                <Button
+                  variant="contained"
+                  startIcon={<AddRoundedIcon />}
+                  onClick={() => setCareFormVisible(true)}
+                >
+                  新增照护记录
+                </Button>
+              }
+            />
+          )}
+        </Box>
       </Card>
 
       <AppForm
@@ -323,7 +441,7 @@ const ElderDetailPage: React.FC = () => {
         }}
         onCancel={() => setCareFormVisible(false)}
       />
-    </div>
+    </Stack>
   );
 };
 

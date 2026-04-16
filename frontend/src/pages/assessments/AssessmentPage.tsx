@@ -1,7 +1,23 @@
 import React, { useState, useCallback } from 'react';
-import { Button, Tag, Space, Select, DatePicker, Popconfirm, Modal, Form, InputNumber, message } from 'antd';
-import { PlusOutlined, ThunderboltOutlined, DeleteOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import {
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+} from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -15,9 +31,8 @@ import {
 } from '../../api/assessments';
 import { formatDateTime, formatRiskLevel } from '../../utils/formatter';
 import { RISK_LEVEL_OPTIONS, RISK_LEVEL_COLORS } from '../../utils/constants';
+import { message } from '../../utils/message';
 import type { Assessment, AssessmentListQuery } from '../../types/assessment';
-
-const { RangePicker } = DatePicker;
 
 const ASSESSMENT_TYPE_OPTIONS = [
   { label: '综合评估', value: 'comprehensive' },
@@ -38,7 +53,7 @@ const AssessmentPage: React.FC = () => {
   const [formVisible, setFormVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<Assessment | null>(null);
   const [generateModalVisible, setGenerateModalVisible] = useState(false);
-  const [generateForm] = Form.useForm();
+  const [generateElderId, setGenerateElderId] = useState('');
   const [generateLoading, setGenerateLoading] = useState(false);
 
   const fetchFn = useCallback(
@@ -60,6 +75,10 @@ const AssessmentPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
+    if (!window.confirm('确定删除该评估记录？')) {
+      return;
+    }
+
     try {
       await deleteAssessment(id);
       message.success('删除成功');
@@ -70,25 +89,30 @@ const AssessmentPage: React.FC = () => {
   };
 
   const handleGenerate = async () => {
+    const elderId = Number(generateElderId);
+    if (!Number.isFinite(elderId) || elderId <= 0) {
+      message.warning('请输入有效的老人ID');
+      return;
+    }
+
     try {
-      const values = await generateForm.validateFields();
       setGenerateLoading(true);
       await generateAssessment({
-        elder_id: values.elder_id,
+        elder_id: elderId,
         force_recalculate: true,
       });
       message.success('评估生成成功');
       setGenerateModalVisible(false);
-      generateForm.resetFields();
+      setGenerateElderId('');
       refresh();
     } catch (err) {
-      if (err instanceof Error) message.error(err.message);
+      message.error(err instanceof Error ? err.message : '生成失败');
     } finally {
       setGenerateLoading(false);
     }
   };
 
-  const columns: ColumnsType<Assessment> = [
+  const columns: AppTableColumn<Assessment>[] = [
     { title: '老人ID', dataIndex: 'elder_id', width: 80 },
     { title: '老人姓名', dataIndex: 'elder_name', width: 100 },
     { title: '评估类型', dataIndex: 'assessment_type', width: 120 },
@@ -97,32 +121,54 @@ const AssessmentPage: React.FC = () => {
       title: '风险等级',
       dataIndex: 'risk_level',
       width: 100,
-      render: (level: string) => (
-        <Tag color={RISK_LEVEL_COLORS[level]}>{formatRiskLevel(level)}</Tag>
-      ),
+      render: (level: unknown) => {
+        const riskLevel = String(level ?? '');
+        return (
+          <Chip
+            size="small"
+            label={formatRiskLevel(riskLevel)}
+            sx={{
+              color: RISK_LEVEL_COLORS[riskLevel] || 'text.primary',
+              borderColor: RISK_LEVEL_COLORS[riskLevel] || 'divider',
+              bgcolor: 'transparent',
+            }}
+            variant="outlined"
+          />
+        );
+      },
     },
     { title: '评估摘要', dataIndex: 'summary', ellipsis: true },
-    { title: '创建时间', dataIndex: 'created_at', render: formatDateTime, width: 170 },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      render: (value) => formatDateTime(value as string | null | undefined),
+      width: 170,
+    },
     {
       title: '操作',
       key: 'actions',
       width: 180,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap">
           <PermissionGuard permission="assessment:create">
-            <Button type="link" size="small" onClick={() => handleEdit(record)}>
+            <Button
+              size="small"
+              startIcon={<EditRoundedIcon />}
+              onClick={() => handleEdit(record)}
+            >
               编辑
             </Button>
+            <Button
+              size="small"
+              color="inherit"
+              startIcon={<DeleteRoundedIcon />}
+              onClick={() => handleDelete(record.id)}
+            >
+              删除
+            </Button>
           </PermissionGuard>
-          <PermissionGuard permission="assessment:create">
-            <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
-              <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-                删除
-              </Button>
-            </Popconfirm>
-          </PermissionGuard>
-        </Space>
+        </Stack>
       ),
     },
   ];
@@ -138,44 +184,74 @@ const AssessmentPage: React.FC = () => {
         onSearch={handleSearch}
         searchPlaceholder="搜索评估"
         toolbar={
-          <Space wrap>
-            <Select
-              placeholder="风险等级"
-              allowClear
-              options={RISK_LEVEL_OPTIONS}
-              style={{ width: 120 }}
-              value={query.risk_level || undefined}
-              onChange={(val) => setQuery((prev) => ({ ...prev, risk_level: val }))}
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} flexWrap="wrap">
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>风险等级</InputLabel>
+              <Select
+                label="风险等级"
+                value={query.risk_level || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, risk_level: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                {RISK_LEVEL_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>评估类型</InputLabel>
+              <Select
+                label="评估类型"
+                value={query.assessment_type || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, assessment_type: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                {ASSESSMENT_TYPE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="开始日期"
+              type="date"
+              size="small"
+              value={query.date_start || ''}
+              onChange={(event) =>
+                setQuery((prev) => ({ ...prev, date_start: event.target.value || undefined }))
+              }
+              InputLabelProps={{ shrink: true }}
             />
-            <Select
-              placeholder="评估类型"
-              allowClear
-              options={ASSESSMENT_TYPE_OPTIONS}
-              style={{ width: 120 }}
-              value={query.assessment_type || undefined}
-              onChange={(val) => setQuery((prev) => ({ ...prev, assessment_type: val }))}
-            />
-            <RangePicker
-              onChange={(dates) => {
-                setQuery((prev) => ({
-                  ...prev,
-                  date_start: dates?.[0]?.format('YYYY-MM-DD') || undefined,
-                  date_end: dates?.[1]?.format('YYYY-MM-DD') || undefined,
-                }));
-              }}
+            <TextField
+              label="结束日期"
+              type="date"
+              size="small"
+              value={query.date_end || ''}
+              onChange={(event) =>
+                setQuery((prev) => ({ ...prev, date_end: event.target.value || undefined }))
+              }
+              InputLabelProps={{ shrink: true }}
             />
             <PermissionGuard permission="assessment:create">
               <Button
-                icon={<ThunderboltOutlined />}
+                variant="outlined"
+                startIcon={<BoltRoundedIcon />}
                 onClick={() => setGenerateModalVisible(true)}
               >
                 自动生成评估
               </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={handleCreate}>
                 新建评估
               </Button>
             </PermissionGuard>
-          </Space>
+          </Stack>
         }
       />
 
@@ -197,26 +273,41 @@ const AssessmentPage: React.FC = () => {
         onCancel={() => setFormVisible(false)}
       />
 
-      <Modal
-        title="自动生成评估"
+      <Dialog
         open={generateModalVisible}
-        onOk={handleGenerate}
-        onCancel={() => {
+        onClose={() => {
           setGenerateModalVisible(false);
-          generateForm.resetFields();
+          setGenerateElderId('');
         }}
-        confirmLoading={generateLoading}
+        fullWidth
+        maxWidth="sm"
       >
-        <Form form={generateForm} layout="vertical">
-          <Form.Item
-            name="elder_id"
+        <DialogTitle>自动生成评估</DialogTitle>
+        <DialogContent>
+          <TextField
             label="老人ID"
-            rules={[{ required: true, message: '请输入老人ID' }]}
+            value={generateElderId}
+            onChange={(event) => setGenerateElderId(event.target.value)}
+            fullWidth
+            sx={{ mt: 1 }}
+            placeholder="请输入老人ID"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            color="inherit"
+            onClick={() => {
+              setGenerateModalVisible(false);
+              setGenerateElderId('');
+            }}
           >
-            <InputNumber style={{ width: '100%' }} placeholder="请输入老人ID" />
-          </Form.Item>
-        </Form>
-      </Modal>
+            取消
+          </Button>
+          <Button variant="contained" onClick={handleGenerate} disabled={generateLoading}>
+            {generateLoading ? '生成中...' : '确定'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

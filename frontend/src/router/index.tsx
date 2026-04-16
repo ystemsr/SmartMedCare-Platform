@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from 'react';
+import { Box, CircularProgress } from '@mui/material';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Spin } from 'antd';
 import BasicLayout from '../layouts/BasicLayout';
 import BlankLayout from '../layouts/BlankLayout';
 import { useAuthStore, getHomeRoute } from '../store/auth';
@@ -11,11 +11,9 @@ const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const ElderListPage = lazy(() => import('../pages/elders/ElderListPage'));
 const ElderDetailPage = lazy(() => import('../pages/elders/ElderDetailPage'));
 const ElderArchivePage = lazy(() => import('../pages/elders/ElderArchivePage'));
-const ElderArchiveListPage = lazy(() => import('../pages/elders/ElderArchiveListPage'));
 const AlertListPage = lazy(() => import('../pages/alerts/AlertListPage'));
 const AlertDetailPage = lazy(() => import('../pages/alerts/AlertDetailPage'));
 const FollowupPlanPage = lazy(() => import('../pages/followups/FollowupPlanPage'));
-const FollowupRecordPage = lazy(() => import('../pages/followups/FollowupRecordPage'));
 const InterventionPage = lazy(() => import('../pages/interventions/InterventionPage'));
 const AssessmentPage = lazy(() => import('../pages/assessments/AssessmentPage'));
 const PersonalAccountPage = lazy(() => import('../pages/accounts/PersonalAccountPage'));
@@ -23,6 +21,7 @@ const DoctorPage = lazy(() => import('../pages/doctors/DoctorPage'));
 const FamilyMemberPage = lazy(() => import('../pages/family/FamilyMemberPage'));
 const ElderLayout = lazy(() => import('../layouts/ElderLayout'));
 const ElderHomePage = lazy(() => import('../pages/elder-portal/ElderHomePage'));
+const ElderHealthPage = lazy(() => import('../pages/elder-portal/ElderHealthPage'));
 const ElderInvitePage = lazy(() => import('../pages/elder-portal/ElderInvitePage'));
 const FamilyRegisterPage = lazy(() => import('../pages/family/FamilyRegisterPage'));
 const FamilyLayout = lazy(() => import('../layouts/FamilyLayout'));
@@ -31,9 +30,9 @@ const FamilyElderHealthPage = lazy(() => import('../pages/family-portal/FamilyEl
 
 /** Loading fallback for lazy-loaded pages */
 const PageLoading: React.FC = () => (
-  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-    <Spin size="large" />
-  </div>
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+    <CircularProgress size={42} />
+  </Box>
 );
 
 /** Protected route wrapper — redirects to login if no token */
@@ -75,13 +74,11 @@ const AppRouter: React.FC = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/elders" element={<ElderListPage />} />
-          <Route path="/elders/archive" element={<ElderArchiveListPage />} />
           <Route path="/elders/:id" element={<ElderDetailPage />} />
           <Route path="/elders/:id/archive" element={<ElderArchivePage />} />
           <Route path="/alerts" element={<AlertListPage />} />
           <Route path="/alerts/:id" element={<AlertDetailPage />} />
-          <Route path="/followups/plans" element={<FollowupPlanPage />} />
-          <Route path="/followups/records" element={<FollowupRecordPage />} />
+          <Route path="/followups" element={<FollowupPlanPage />} />
           <Route path="/interventions" element={<InterventionPage />} />
           <Route path="/assessments" element={<AssessmentPage />} />
           <Route path="/doctors" element={<DoctorPage />} />
@@ -98,6 +95,7 @@ const AppRouter: React.FC = () => {
           }
         >
           <Route path="/elder" element={<ElderHomePage />} />
+          <Route path="/elder/health" element={<ElderHealthPage />} />
           <Route path="/elder/invite" element={<ElderInvitePage />} />
           <Route path="/elder/personal" element={<PersonalAccountPage />} />
         </Route>

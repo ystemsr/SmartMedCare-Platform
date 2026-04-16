@@ -1,14 +1,19 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Descriptions, Timeline, Tag, Row, Col, Statistic, Spin, Button, message } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
 import {
-  getElderDetail,
-  getHealthRecords,
-  getMedicalRecords,
-  getCareRecords,
-} from '../../api/elders';
+  Box,
+  Button,
+  Card,
+  Chip,
+  CircularProgress,
+  Divider,
+  Stack,
+  Typography,
+} from '@mui/material';
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
+import { getElderDetail, getHealthRecords, getMedicalRecords, getCareRecords } from '../../api/elders';
 import { formatGender, formatDate, formatDateTime } from '../../utils/formatter';
+import { message } from '../../utils/message';
 import type { Elder, HealthRecord, MedicalRecord, CareRecord } from '../../types/elder';
 
 interface TimelineEntry {
@@ -16,6 +21,29 @@ interface TimelineEntry {
   type: 'health' | 'medical' | 'care';
   label: string;
   content: string;
+}
+
+function StatCard({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <Card variant="outlined" sx={{ flex: 1 }}>
+      <Box sx={{ p: 2.5 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+          {label}
+        </Typography>
+        <Typography variant="h4" sx={{ color, fontWeight: 700 }}>
+          {value}
+        </Typography>
+      </Box>
+    </Card>
+  );
 }
 
 const ElderArchivePage: React.FC = () => {
@@ -45,30 +73,29 @@ const ElderArchivePage: React.FC = () => {
         care: careRes.data.total,
       });
 
-      // Build unified timeline
       const entries: TimelineEntry[] = [];
-      healthRes.data.items.forEach((r: HealthRecord) => {
+      healthRes.data.items.forEach((record: HealthRecord) => {
         entries.push({
-          time: r.recorded_at,
+          time: record.recorded_at,
           type: 'health',
           label: '健康记录',
-          content: `血压 ${r.blood_pressure_systolic || '-'}/${r.blood_pressure_diastolic || '-'}，心率 ${r.heart_rate || '-'}，血糖 ${r.blood_glucose || '-'}`,
+          content: `血压 ${record.blood_pressure_systolic || '-'}/${record.blood_pressure_diastolic || '-'}，心率 ${record.heart_rate || '-'}，血糖 ${record.blood_glucose || '-'}`,
         });
       });
-      medicalRes.data.items.forEach((r: MedicalRecord) => {
+      medicalRes.data.items.forEach((record: MedicalRecord) => {
         entries.push({
-          time: r.visit_date,
+          time: record.visit_date,
           type: 'medical',
           label: '医疗记录',
-          content: `${r.hospital_name} ${r.department} - ${r.diagnosis}`,
+          content: `${record.hospital_name} ${record.department} - ${record.diagnosis}`,
         });
       });
-      careRes.data.items.forEach((r: CareRecord) => {
+      careRes.data.items.forEach((record: CareRecord) => {
         entries.push({
-          time: r.care_date,
+          time: record.care_date,
           type: 'care',
           label: '照护记录',
-          content: `${r.caregiver_name}: ${r.content}`,
+          content: `${record.caregiver_name}: ${record.content}`,
         });
       });
 
@@ -85,77 +112,164 @@ const ElderArchivePage: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  const typeColorMap: Record<string, string> = {
-    health: 'blue',
-    medical: 'green',
-    care: 'orange',
-  };
+  const typeColorMap = useMemo<Record<string, string>>(
+    () => ({
+      health: '#1f6feb',
+      medical: '#1f9d63',
+      care: '#d9822b',
+    }),
+    [],
+  );
 
   if (loading) {
-    return <div style={{ textAlign: 'center', padding: 100 }}><Spin size="large" /></div>;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+        <CircularProgress size={36} />
+      </Box>
+    );
   }
 
   return (
-    <div>
+    <Stack spacing={2.5}>
       <Button
-        icon={<ArrowLeftOutlined />}
+        variant="text"
+        startIcon={<ArrowBackRoundedIcon />}
         onClick={() => navigate(-1)}
-        style={{ marginBottom: 16 }}
+        sx={{ alignSelf: 'flex-start' }}
       >
         返回
       </Button>
 
-      <Card title={`${elder?.name || ''} - 健康档案`} style={{ marginBottom: 16 }}>
-        <Descriptions column={{ xs: 1, sm: 2, lg: 3 }}>
-          <Descriptions.Item label="姓名">{elder?.name}</Descriptions.Item>
-          <Descriptions.Item label="性别">{formatGender(elder?.gender)}</Descriptions.Item>
-          <Descriptions.Item label="出生日期">{formatDate(elder?.birth_date)}</Descriptions.Item>
-          <Descriptions.Item label="联系电话">{elder?.phone}</Descriptions.Item>
-          <Descriptions.Item label="地址">{elder?.address}</Descriptions.Item>
-          <Descriptions.Item label="标签">
-            {elder?.tags?.map((t) => <Tag key={t} color="blue">{t}</Tag>) || '-'}
-          </Descriptions.Item>
-        </Descriptions>
+      <Card>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+            {elder?.name || ''} - 健康档案
+          </Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 2,
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, minmax(0, 1fr))',
+                lg: 'repeat(3, minmax(0, 1fr))',
+              },
+            }}
+          >
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                姓名
+              </Typography>
+              <Typography variant="body2">{elder?.name || '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                性别
+              </Typography>
+              <Typography variant="body2">{formatGender(elder?.gender)}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                出生日期
+              </Typography>
+              <Typography variant="body2">{formatDate(elder?.birth_date)}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                联系电话
+              </Typography>
+              <Typography variant="body2">{elder?.phone || '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                地址
+              </Typography>
+              <Typography variant="body2">{elder?.address || '-'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                标签
+              </Typography>
+              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
+                {elder?.tags?.length ? (
+                  elder.tags.map((tag) => (
+                    <Chip key={tag} label={tag} color="primary" variant="outlined" size="small" />
+                  ))
+                ) : (
+                  <Typography variant="body2">-</Typography>
+                )}
+              </Stack>
+            </Box>
+          </Box>
+        </Box>
       </Card>
 
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={8}>
-          <Card>
-            <Statistic title="健康记录数" value={stats.health} valueStyle={{ color: '#1677ff' }} />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card>
-            <Statistic title="医疗记录数" value={stats.medical} valueStyle={{ color: '#52c41a' }} />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card>
-            <Statistic title="照护记录数" value={stats.care} valueStyle={{ color: '#faad14' }} />
-          </Card>
-        </Col>
-      </Row>
-
-      <Card title="时间线">
-        <Timeline
-          items={timeline.map((entry) => ({
-            color: typeColorMap[entry.type],
-            children: (
-              <div>
-                <div style={{ marginBottom: 4 }}>
-                  <Tag color={typeColorMap[entry.type]}>{entry.label}</Tag>
-                  <span style={{ color: '#8c8c8c', fontSize: 12 }}>
-                    {formatDateTime(entry.time)}
-                  </span>
-                </div>
-                <div>{entry.content}</div>
-              </div>
-            ),
-          }))}
-        />
-        {timeline.length === 0 && <div style={{ textAlign: 'center', color: '#8c8c8c' }}>暂无记录</div>}
+      <Card>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            统计概览
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <StatCard label="健康记录数" value={stats.health} color="#1f6feb" />
+            <StatCard label="医疗记录数" value={stats.medical} color="#1f9d63" />
+            <StatCard label="照护记录数" value={stats.care} color="#d9822b" />
+          </Stack>
+        </Box>
       </Card>
-    </div>
+
+      <Card>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            时间线
+          </Typography>
+          <Stack spacing={2}>
+            {timeline.length ? (
+              timeline.map((entry, index) => (
+                <Box key={`${entry.type}-${entry.time}-${index}`} sx={{ display: 'flex', gap: 2 }}>
+                  <Box
+                    sx={{
+                      width: 12,
+                      display: 'flex',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        mt: 0.8,
+                        backgroundColor: typeColorMap[entry.type],
+                        boxShadow: `0 0 0 6px ${typeColorMap[entry.type]}22`,
+                      }}
+                    />
+                  </Box>
+                  <Box sx={{ flex: 1, pb: 2 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                      <Chip
+                        label={entry.label}
+                        size="small"
+                        variant="outlined"
+                        sx={{ borderColor: typeColorMap[entry.type], color: typeColorMap[entry.type] }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDateTime(entry.time)}
+                      </Typography>
+                    </Stack>
+                    <Typography variant="body2">{entry.content}</Typography>
+                    {index < timeline.length - 1 && <Divider sx={{ mt: 2 }} />}
+                  </Box>
+                </Box>
+              ))
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                暂无记录
+              </Typography>
+            )}
+          </Stack>
+        </Box>
+      </Card>
+    </Stack>
   );
 };
 

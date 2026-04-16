@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis_client import redis_delete, redis_get
-from app.core.security import hash_password
+from app.core.security import create_access_token, hash_password
 from app.models.user import User, UserRole
 from app.repositories.elder import ElderRepository
 from app.repositories.family_member import FamilyMemberRepository
@@ -103,12 +103,19 @@ class FamilyMemberService:
 
         await db.commit()
 
+        # Generate access token so the frontend can auto-login after registration
+        access_token = create_access_token({"sub": str(user.id)})
+
         logger.info(
             "Family member registered: user_id=%s elder_id=%s",
             user.id,
             invite.elder_id,
         )
-        return {"username": username, "elder_name": elder.name}
+        return {
+            "username": username,
+            "elder_name": elder.name,
+            "access_token": access_token,
+        }
 
     @staticmethod
     async def get_my_info(

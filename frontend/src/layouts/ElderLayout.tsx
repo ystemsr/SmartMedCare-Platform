@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import GroupAddRoundedIcon from '@mui/icons-material/GroupAddRounded';
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
+import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import AppShell, { type AppShellMenuItem } from '../components/AppShell';
 
 const ElderLayout: React.FC = () => {
@@ -11,6 +12,11 @@ const ElderLayout: React.FC = () => {
         key: '/elder',
         icon: <HomeRoundedIcon />,
         label: '首页',
+      },
+      {
+        key: '/elder/health',
+        icon: <MonitorHeartRoundedIcon />,
+        label: '健康档案',
       },
       {
         key: '/elder/invite',

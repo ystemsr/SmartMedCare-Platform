@@ -23,6 +23,7 @@ const DoctorPage = lazy(() => import('../pages/doctors/DoctorPage'));
 const FamilyMemberPage = lazy(() => import('../pages/family/FamilyMemberPage'));
 const ElderLayout = lazy(() => import('../layouts/ElderLayout'));
 const ElderHomePage = lazy(() => import('../pages/elder-portal/ElderHomePage'));
+const ElderHealthPage = lazy(() => import('../pages/elder-portal/ElderHealthPage'));
 const ElderInvitePage = lazy(() => import('../pages/elder-portal/ElderInvitePage'));
 const FamilyRegisterPage = lazy(() => import('../pages/family/FamilyRegisterPage'));
 const FamilyLayout = lazy(() => import('../layouts/FamilyLayout'));
@@ -98,6 +99,7 @@ const AppRouter: React.FC = () => {
           }
         >
           <Route path="/elder" element={<ElderHomePage />} />
+          <Route path="/elder/health" element={<ElderHealthPage />} />
           <Route path="/elder/invite" element={<ElderInvitePage />} />
           <Route path="/elder/personal" element={<PersonalAccountPage />} />
         </Route>

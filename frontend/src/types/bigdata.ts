@@ -88,3 +88,14 @@ export interface Prediction {
   followup_needed: boolean;
   health_score: number;
 }
+
+/** Historical prediction record entry */
+export interface PredictionRecord {
+  id: number;
+  elder_id: number;
+  predicted_at: string;
+  high_risk: boolean;
+  followup_needed: boolean;
+  health_score: number;
+  features_json?: Record<string, unknown> | string | null;
+}

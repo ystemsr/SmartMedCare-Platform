@@ -14,13 +14,16 @@ import {
 } from '@mui/material';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import UploadFile from '../../components/UploadFile';
 import { importHealthRecords, getElderDetail, getHealthRecords, createHealthRecord, getMedicalRecords, createMedicalRecord, getCareRecords, createCareRecord } from '../../api/elders';
+import { getElderPredictions } from '../../api/bigdata';
 import { formatGender, formatDate, formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
 import type { Elder, HealthRecord, MedicalRecord, CareRecord } from '../../types/elder';
+import type { PredictionRecord } from '../../types/bigdata';
 
 const healthRecordFields: FormFieldConfig[] = [
   { name: 'height_cm', label: '身高(cm)', type: 'number' },
@@ -84,8 +87,9 @@ const ElderDetailPage: React.FC = () => {
   const [healthRecords, setHealthRecords] = useState<HealthRecord[]>([]);
   const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([]);
   const [careRecords, setCareRecords] = useState<CareRecord[]>([]);
+  const [predictions, setPredictions] = useState<PredictionRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'health' | 'medical' | 'care'>('health');
+  const [tab, setTab] = useState<'health' | 'medical' | 'care' | 'ai'>('health');
 
   const [healthFormVisible, setHealthFormVisible] = useState(false);
   const [medicalFormVisible, setMedicalFormVisible] = useState(false);
@@ -127,11 +131,32 @@ const ElderDetailPage: React.FC = () => {
     }
   }, [elderId]);
 
+  const fetchPredictions = useCallback(async () => {
+    try {
+      const res = await getElderPredictions(elderId);
+      const payload = res.data as unknown;
+      const list: PredictionRecord[] = Array.isArray(payload)
+        ? (payload as PredictionRecord[])
+        : payload
+          ? [payload as PredictionRecord]
+          : [];
+      list.sort((a, b) => (b.predicted_at || '').localeCompare(a.predicted_at || ''));
+      setPredictions(list);
+    } catch {
+      setPredictions([]);
+    }
+  }, [elderId]);
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchElder(), fetchHealthRecords(), fetchMedicalRecords(), fetchCareRecords()])
-      .finally(() => setLoading(false));
-  }, [fetchElder, fetchHealthRecords, fetchMedicalRecords, fetchCareRecords]);
+    Promise.all([
+      fetchElder(),
+      fetchHealthRecords(),
+      fetchMedicalRecords(),
+      fetchCareRecords(),
+      fetchPredictions(),
+    ]).finally(() => setLoading(false));
+  }, [fetchElder, fetchHealthRecords, fetchMedicalRecords, fetchCareRecords, fetchPredictions]);
 
   const healthColumns = useMemo<AppTableColumn<HealthRecord>[]>(
     () => [
@@ -188,6 +213,59 @@ const ElderDetailPage: React.FC = () => {
         },
       },
       { title: '备注', dataIndex: 'remarks', ellipsis: true },
+    ],
+    [],
+  );
+
+  const predictionColumns = useMemo<AppTableColumn<PredictionRecord>[]>(
+    () => [
+      {
+        title: '预测时间',
+        dataIndex: 'predicted_at',
+        render: (value: unknown) => formatDateTime(value as string | undefined | null),
+        width: 180,
+      },
+      {
+        title: '健康评分',
+        dataIndex: 'health_score',
+        width: 120,
+        render: (value: unknown) => {
+          const v = value as number | null | undefined;
+          return typeof v === 'number' ? v.toFixed(1) : '-';
+        },
+      },
+      {
+        title: '风险',
+        dataIndex: 'high_risk',
+        width: 110,
+        render: (value: unknown) => {
+          const v = value as boolean;
+          return v ? (
+            <Chip
+              icon={<WarningAmberIcon />}
+              label="高风险"
+              color="error"
+              size="small"
+              variant="outlined"
+            />
+          ) : (
+            <Chip label="正常" color="success" size="small" variant="outlined" />
+          );
+        },
+      },
+      {
+        title: '建议随访',
+        dataIndex: 'followup_needed',
+        width: 110,
+        render: (value: unknown) => {
+          const v = value as boolean;
+          return v ? (
+            <Chip label="建议" color="warning" size="small" variant="outlined" />
+          ) : (
+            <Chip label="无需" size="small" variant="outlined" />
+          );
+        },
+      },
     ],
     [],
   );
@@ -314,6 +392,55 @@ const ElderDetailPage: React.FC = () => {
                 </Typography>
               </Box>
             </Card>
+            <Card variant="outlined" sx={{ flex: 1 }}>
+              <Box sx={{ p: 2.5 }}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  sx={{ mb: 0.5 }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    AI 健康评估
+                  </Typography>
+                  {predictions.length > 0 && (
+                    <Button size="small" variant="text" onClick={() => setTab('ai')}>
+                      查看历史
+                    </Button>
+                  )}
+                </Stack>
+                {predictions.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    暂无评估
+                  </Typography>
+                ) : (
+                  <Stack spacing={1}>
+                    <Stack direction="row" spacing={1.5} alignItems="baseline">
+                      <Typography
+                        variant="h4"
+                        color={predictions[0].high_risk ? 'error.main' : 'success.main'}
+                      >
+                        {predictions[0].health_score.toFixed(1)}
+                      </Typography>
+                      {predictions[0].high_risk ? (
+                        <Chip
+                          icon={<WarningAmberIcon />}
+                          label="高风险"
+                          color="error"
+                          size="small"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Chip label="正常" color="success" size="small" variant="outlined" />
+                      )}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDateTime(predictions[0].predicted_at)}
+                    </Typography>
+                  </Stack>
+                )}
+              </Box>
+            </Card>
           </Stack>
         </Box>
       </Card>
@@ -322,11 +449,12 @@ const ElderDetailPage: React.FC = () => {
         <Box sx={{ px: 3, pt: 2 }}>
           <Tabs
             value={tab}
-            onChange={(_, nextTab: 'health' | 'medical' | 'care') => setTab(nextTab)}
+            onChange={(_, nextTab: 'health' | 'medical' | 'care' | 'ai') => setTab(nextTab)}
           >
             <Tab value="health" label="健康记录" />
             <Tab value="medical" label="医疗记录" />
             <Tab value="care" label="照护记录" />
+            <Tab value="ai" label="AI 预测历史" />
           </Tabs>
         </Box>
         <Divider />
@@ -395,6 +523,17 @@ const ElderDetailPage: React.FC = () => {
                   新增照护记录
                 </Button>
               }
+            />
+          )}
+
+          {tab === 'ai' && (
+            <AppTable<PredictionRecord>
+              columns={predictionColumns}
+              dataSource={predictions}
+              rowKey="id"
+              loading={false}
+              pagination={false}
+              emptyText="暂无 AI 预测记录"
             />
           )}
         </Box>

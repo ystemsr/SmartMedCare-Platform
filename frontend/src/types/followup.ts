@@ -12,6 +12,7 @@ export interface Followup {
   assigned_to: number;
   assigned_to_name?: string;
   notes?: string;
+  alert_source?: string | null;
   created_at?: string;
   updated_at?: string;
 }

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -21,6 +21,7 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import NoteAddRoundedIcon from '@mui/icons-material/NoteAddRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
@@ -60,6 +61,7 @@ const FollowupPlanPage: React.FC = () => {
   const [recordFollowupId, setRecordFollowupId] = useState<number | null>(null);
   const [recordResult, setRecordResult] = useState('');
   const [recordNextAction, setRecordNextAction] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'ai' | 'manual'>('all');
 
   // Records tab state
   const [recordsData, setRecordsData] = useState<Followup[]>([]);
@@ -142,6 +144,16 @@ const FollowupPlanPage: React.FC = () => {
   const { data, loading, pagination, handleTableChange, refresh, handleSearch, query, setQuery } =
     useTable<Followup, FollowupListQuery>(fetchFn);
 
+  const filteredData = useMemo(() => {
+    if (sourceFilter === 'all') {
+      return data;
+    }
+    return data.filter((item) => {
+      const isAi = item.plan_type === 'ai_suggested' || item.alert_source === 'ml';
+      return sourceFilter === 'ai' ? isAi : !isAi;
+    });
+  }, [data, sourceFilter]);
+
   const handleEdit = (record: Followup) => {
     setEditingFollowup(record);
     setFormVisible(true);
@@ -219,8 +231,28 @@ const FollowupPlanPage: React.FC = () => {
     {
       title: '随访方式',
       dataIndex: 'plan_type',
-      width: 100,
+      width: 110,
       render: (value) => formatPlanType(value as string | null | undefined),
+    },
+    {
+      title: 'AI 推荐',
+      key: 'ai_source',
+      width: 100,
+      render: (_, record) => {
+        const isAi = record.plan_type === 'ai_suggested' || record.alert_source === 'ml';
+        if (!isAi) {
+          return null;
+        }
+        return (
+          <Chip
+            size="small"
+            color="secondary"
+            icon={<AutoAwesomeIcon />}
+            label="AI"
+            variant="outlined"
+          />
+        );
+      },
     },
     {
       title: '状态',
@@ -312,7 +344,7 @@ const FollowupPlanPage: React.FC = () => {
         <>
           <AppTable<Followup>
             columns={columns}
-            dataSource={data}
+            dataSource={filteredData}
             loading={loading}
             pagination={pagination}
             onChange={handleTableChange}
@@ -352,6 +384,20 @@ const FollowupPlanPage: React.FC = () => {
                         {option.label}
                       </MenuItem>
                     ))}
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>来源</InputLabel>
+                  <Select
+                    label="来源"
+                    value={sourceFilter}
+                    onChange={(event) =>
+                      setSourceFilter(event.target.value as 'all' | 'ai' | 'manual')
+                    }
+                  >
+                    <MenuItem value="all">全部</MenuItem>
+                    <MenuItem value="ai">AI 推荐</MenuItem>
+                    <MenuItem value="manual">人工</MenuItem>
                   </Select>
                 </FormControl>
                 <TextField

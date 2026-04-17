@@ -31,6 +31,7 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import ToggleOnRoundedIcon from '@mui/icons-material/ToggleOnRounded';
 import VerifiedUserRoundedIcon from '@mui/icons-material/VerifiedUserRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useNavigate } from 'react-router-dom';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
@@ -210,6 +211,46 @@ const ElderListPage: React.FC = () => {
         render: (value: unknown) => {
           const val = value as number | undefined;
           return val ?? 0;
+        },
+      },
+      {
+        title: 'AI 风险',
+        key: 'ai_risk',
+        width: 130,
+        render: (_: unknown, record: Elder) => {
+          const score = record.latest_risk_score;
+          if (score === null || score === undefined) {
+            return <Chip label="未评估" size="small" variant="outlined" />;
+          }
+          if (record.latest_high_risk === true) {
+            return (
+              <Chip
+                icon={<WarningAmberIcon />}
+                label={`高风险 ${score.toFixed(0)}`}
+                color="error"
+                size="small"
+                variant="outlined"
+              />
+            );
+          }
+          if (record.latest_high_risk === false && score >= 70) {
+            return (
+              <Chip
+                label={`正常 ${score.toFixed(0)}`}
+                color="success"
+                size="small"
+                variant="outlined"
+              />
+            );
+          }
+          return (
+            <Chip
+              label={`关注 ${score.toFixed(0)}`}
+              color="warning"
+              size="small"
+              variant="outlined"
+            />
+          );
         },
       },
       {

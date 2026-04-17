@@ -15,6 +15,9 @@ export interface Elder {
   tags: string[];
   username?: string;
   family_count?: number;
+  latest_risk_score?: number | null;
+  latest_high_risk?: boolean | null;
+  latest_prediction_at?: string | null;
   created_at: string;
   updated_at?: string;
 }

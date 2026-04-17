@@ -12,6 +12,7 @@ import type {
   JobSubmitRequest,
   JobSubmitResponse,
   Prediction,
+  PredictionRecord,
 } from '../types/bigdata';
 
 /** Submit a new data job */
@@ -63,5 +64,12 @@ export function predictBatch(features: FeatureDict[]): Promise<ApiResponse<Predi
 
 /** Get the latest prediction for an elder */
 export function getLatestPrediction(elderId: number): Promise<ApiResponse<Prediction>> {
+  return http.get(`/bigdata/ml/predictions/${elderId}`);
+}
+
+/** Get the full prediction history for an elder */
+export function getElderPredictions(
+  elderId: number,
+): Promise<ApiResponse<PredictionRecord[]>> {
   return http.get(`/bigdata/ml/predictions/${elderId}`);
 }

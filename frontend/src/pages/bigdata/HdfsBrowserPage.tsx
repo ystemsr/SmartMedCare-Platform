@@ -1,20 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  Box,
-  Breadcrumbs,
-  Button,
-  Card,
-  Chip,
-  Drawer,
-  Link as MuiLink,
-  Stack,
-  Typography,
-} from '@mui/material';
-import FolderRoundedIcon from '@mui/icons-material/FolderRounded';
-import InsertDriveFileRoundedIcon from '@mui/icons-material/InsertDriveFileRounded';
-import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
+import { Folder, File as FileIcon, RefreshCw, ChevronRight } from 'lucide-react';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PageHeader from '../../components/bigdata/PageHeader';
+import { Button, Card, Chip, Drawer } from '@/components/ui';
 import { listHdfs, previewHdfs } from '../../api/bigdata';
 import { formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
@@ -38,6 +26,15 @@ function formatSize(bytes: number): string {
   const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** exp).toFixed(exp === 0 ? 0 : 1)} ${units[exp]}`;
 }
+
+const crumbLinkStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  color: 'var(--smc-primary)',
+  cursor: 'pointer',
+  fontSize: 'var(--smc-fs-md)',
+};
 
 const HdfsBrowserPage: React.FC = () => {
   const [path, setPath] = useState('/');
@@ -86,15 +83,22 @@ const HdfsBrowserPage: React.FC = () => {
       title: '名称',
       dataIndex: 'name',
       render: (_, record) => (
-        <Stack direction="row" spacing={1.5} alignItems="center">
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {record.type === 'directory' ? (
-            <FolderRoundedIcon fontSize="small" sx={{ color: '#d9822b' }} />
+            <Folder size={16} color="var(--smc-warning)" />
           ) : (
-            <InsertDriveFileRoundedIcon fontSize="small" color="action" />
+            <FileIcon size={16} color="var(--smc-text-2)" />
           )}
-          <MuiLink
-            component="button"
-            underline="hover"
+          <button
+            type="button"
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: 'var(--smc-primary)',
+              cursor: 'pointer',
+              fontSize: 'var(--smc-fs-md)',
+            }}
             onClick={() => {
               const next = joinPath(path, record.name);
               if (record.type === 'directory') {
@@ -105,8 +109,8 @@ const HdfsBrowserPage: React.FC = () => {
             }}
           >
             {record.name}
-          </MuiLink>
-        </Stack>
+          </button>
+        </div>
       ),
     },
     {
@@ -114,12 +118,9 @@ const HdfsBrowserPage: React.FC = () => {
       dataIndex: 'type',
       width: 110,
       render: (value) => (
-        <Chip
-          size="small"
-          variant="outlined"
-          label={value === 'directory' ? '目录' : '文件'}
-          color={value === 'directory' ? 'warning' : 'default'}
-        />
+        <Chip tone={value === 'directory' ? 'warning' : 'default'} outlined>
+          {value === 'directory' ? '目录' : '文件'}
+        </Chip>
       ),
     },
     {
@@ -139,53 +140,70 @@ const HdfsBrowserPage: React.FC = () => {
   const segments = path === '/' ? [] : path.split('/').filter(Boolean);
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="HDFS 浏览"
         description="浏览 HDFS 文件系统的目录结构与文件内容"
       />
 
-      <Card sx={{ p: 2, mb: 2 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
-          <Breadcrumbs>
-            <MuiLink component="button" underline="hover" onClick={() => setPath('/')}>
+      <Card style={{ padding: 16, marginBottom: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 12,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              flexWrap: 'wrap',
+              minWidth: 0,
+            }}
+          >
+            <button type="button" style={crumbLinkStyle} onClick={() => setPath('/')}>
               root
-            </MuiLink>
+            </button>
             {segments.map((segment, index) => {
               const next = '/' + segments.slice(0, index + 1).join('/');
               const isLast = index === segments.length - 1;
-              return isLast ? (
-                <Typography key={next} color="text.primary" fontWeight={600}>
-                  {segment}
-                </Typography>
-              ) : (
-                <MuiLink
+              return (
+                <span
                   key={next}
-                  component="button"
-                  underline="hover"
-                  onClick={() => setPath(next)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
-                  {segment}
-                </MuiLink>
+                  <ChevronRight size={14} color="var(--smc-text-3)" />
+                  {isLast ? (
+                    <span style={{ color: 'var(--smc-text)', fontWeight: 600 }}>{segment}</span>
+                  ) : (
+                    <button type="button" style={crumbLinkStyle} onClick={() => setPath(next)}>
+                      {segment}
+                    </button>
+                  )}
+                </span>
               );
             })}
-          </Breadcrumbs>
-          <Stack direction="row" spacing={1}>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
             {path !== '/' && (
-              <Button size="small" variant="outlined" onClick={() => setPath(parentPath(path))}>
+              <Button size="sm" variant="outlined" onClick={() => setPath(parentPath(path))}>
                 返回上级
               </Button>
             )}
             <Button
-              size="small"
+              size="sm"
               variant="outlined"
-              startIcon={<RefreshRoundedIcon />}
+              startIcon={<RefreshCw size={14} />}
               onClick={() => fetchEntries(path)}
             >
               刷新
             </Button>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
       </Card>
 
       <AppTable<HdfsEntry>
@@ -198,47 +216,47 @@ const HdfsBrowserPage: React.FC = () => {
       />
 
       <Drawer
-        anchor="right"
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        PaperProps={{ sx: { width: { xs: '100%', md: 720 } } }}
+        placement="right"
+        width={720}
+        title="文件预览"
       >
-        <Box sx={{ p: 3 }}>
-          <Typography variant="h6" fontWeight={700}>
-            文件预览
-          </Typography>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mb: 2, fontFamily: 'monospace', wordBreak: 'break-all' }}
-          >
-            {previewPath}
-          </Typography>
+        <div
+          style={{
+            fontSize: 'var(--smc-fs-sm)',
+            color: 'var(--smc-text-2)',
+            marginBottom: 16,
+            fontFamily: 'monospace',
+            wordBreak: 'break-all',
+          }}
+        >
+          {previewPath}
+        </div>
 
-          {previewLoading ? (
-            <Typography color="text.secondary">加载中...</Typography>
-          ) : (
-            <Box
-              component="pre"
-              sx={{
-                p: 2,
-                bgcolor: '#0f172a',
-                color: '#e2e8f0',
-                borderRadius: 2,
-                fontFamily: 'monospace',
-                fontSize: '0.8rem',
-                lineHeight: 1.6,
-                maxHeight: '70vh',
-                overflow: 'auto',
-                whiteSpace: 'pre-wrap',
-              }}
-            >
-              {previewContent || '文件为空或不可预览'}
-            </Box>
-          )}
-        </Box>
+        {previewLoading ? (
+          <div style={{ color: 'var(--smc-text-2)' }}>加载中...</div>
+        ) : (
+          <pre
+            style={{
+              margin: 0,
+              padding: 16,
+              background: '#0f172a',
+              color: '#e2e8f0',
+              borderRadius: 'var(--smc-r-md)',
+              fontFamily: 'monospace',
+              fontSize: 13,
+              lineHeight: 1.6,
+              maxHeight: '70vh',
+              overflow: 'auto',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {previewContent || '文件为空或不可预览'}
+          </pre>
+        )}
       </Drawer>
-    </Box>
+    </div>
   );
 };
 

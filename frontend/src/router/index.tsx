@@ -1,8 +1,8 @@
 import React, { lazy, Suspense } from 'react';
-import { Box, CircularProgress } from '@mui/material';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import BasicLayout from '../layouts/BasicLayout';
 import BlankLayout from '../layouts/BlankLayout';
+import Spinner from '../components/ui/Spinner';
 import { useAuthStore, getHomeRoute } from '../store/auth';
 
 // Lazy-loaded pages
@@ -27,15 +27,25 @@ const FamilyRegisterPage = lazy(() => import('../pages/family/FamilyRegisterPage
 const FamilyLayout = lazy(() => import('../layouts/FamilyLayout'));
 const FamilyHomePage = lazy(() => import('../pages/family-portal/FamilyHomePage'));
 const FamilyElderHealthPage = lazy(() => import('../pages/family-portal/FamilyElderHealthPage'));
+const BigDataDashboardPage = lazy(() => import('../pages/bigdata/BigDataDashboardPage'));
+const MLInferencePage = lazy(() => import('../pages/bigdata/MLInferencePage'));
+const JobManagerPage = lazy(() => import('../pages/bigdata/JobManagerPage'));
+const HdfsBrowserPage = lazy(() => import('../pages/bigdata/HdfsBrowserPage'));
+const HiveQueryPage = lazy(() => import('../pages/bigdata/HiveQueryPage'));
 
-/** Loading fallback for lazy-loaded pages */
 const PageLoading: React.FC = () => (
-  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-    <CircularProgress size={42} />
-  </Box>
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '50vh',
+    }}
+  >
+    <Spinner size="lg" />
+  </div>
 );
 
-/** Protected route wrapper — redirects to login if no token */
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = useAuthStore((state) => state.token);
   if (!token) {
@@ -44,7 +54,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-/** Fallback redirect based on user role */
 const RoleBasedRedirect: React.FC = () => {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
@@ -57,13 +66,11 @@ const AppRouter: React.FC = () => {
   return (
     <Suspense fallback={<PageLoading />}>
       <Routes>
-        {/* Public routes */}
         <Route element={<BlankLayout />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register/family" element={<FamilyRegisterPage />} />
         </Route>
 
-        {/* Protected routes */}
         <Route
           element={
             <ProtectedRoute>
@@ -84,9 +91,13 @@ const AppRouter: React.FC = () => {
           <Route path="/doctors" element={<DoctorPage />} />
           <Route path="/family-members" element={<FamilyMemberPage />} />
           <Route path="/accounts/personal" element={<PersonalAccountPage />} />
+          <Route path="/bigdata" element={<BigDataDashboardPage />} />
+          <Route path="/bigdata/inference" element={<MLInferencePage />} />
+          <Route path="/bigdata/jobs" element={<JobManagerPage />} />
+          <Route path="/bigdata/hdfs" element={<HdfsBrowserPage />} />
+          <Route path="/bigdata/hive" element={<HiveQueryPage />} />
         </Route>
 
-        {/* Elder portal routes */}
         <Route
           element={
             <ProtectedRoute>
@@ -100,7 +111,6 @@ const AppRouter: React.FC = () => {
           <Route path="/elder/personal" element={<PersonalAccountPage />} />
         </Route>
 
-        {/* Family portal routes */}
         <Route
           element={
             <ProtectedRoute>
@@ -113,7 +123,6 @@ const AppRouter: React.FC = () => {
           <Route path="/family/personal" element={<PersonalAccountPage />} />
         </Route>
 
-        {/* Fallback — redirect based on role */}
         <Route path="*" element={<RoleBasedRedirect />} />
       </Routes>
     </Suspense>

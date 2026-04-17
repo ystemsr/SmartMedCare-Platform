@@ -1,25 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Stack,
-  Typography,
-} from '@mui/material';
-import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
-import GroupAddRoundedIcon from '@mui/icons-material/GroupAddRounded';
+import { Copy, Plus, Trash2, UserPlus } from 'lucide-react';
+import { Alert, Button, Card, CardBody, Chip, Modal, Spinner } from '@/components/ui';
 import { useAuthStore } from '../../store/auth';
 import {
   getInviteCode,
@@ -136,130 +117,166 @@ const ElderInvitePage: React.FC = () => {
       });
   };
 
-  const familyColumns = useMemo<AppTableColumn<FamilyMember>[]>(() => [
-    {
-      title: '姓名',
-      dataIndex: 'real_name',
-      key: 'real_name',
-    },
-    {
-      title: '关系',
-      dataIndex: 'relationship',
-      key: 'relationship',
-    },
-    {
-      title: '绑定时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-      render: (value) => formatDateTime(value as string | undefined),
-    },
-  ], []);
+  const familyColumns = useMemo<AppTableColumn<FamilyMember>[]>(
+    () => [
+      {
+        title: '姓名',
+        dataIndex: 'real_name',
+        key: 'real_name',
+      },
+      {
+        title: '关系',
+        dataIndex: 'relationship',
+        key: 'relationship',
+      },
+      {
+        title: '绑定时间',
+        dataIndex: 'created_at',
+        key: 'created_at',
+        width: 180,
+        render: (value) => formatDateTime(value as string | undefined),
+      },
+    ],
+    [],
+  );
 
   if (!elderId) {
     return (
-      <Alert severity="warning" variant="filled" icon={<WarningAmberRoundedIcon />}>
+      <Alert severity="warning" variant="filled">
         未找到关联的老人信息，请联系管理员。
       </Alert>
     );
   }
 
   return (
-    <Stack spacing={3.5}>
-      <Card sx={{ borderRadius: 4 }}>
-        <CardContent sx={{ p: { xs: 2.5, sm: 3.5 } }}>
-          <Stack spacing={3}>
-            <Box>
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <GroupAddRoundedIcon sx={{ color: '#5c6bc0' }} />
-                <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.15rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+      <Card style={{ borderRadius: 18 }}>
+        <CardBody style={{ padding: 28 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <UserPlus size={22} style={{ color: '#5c6bc0' }} />
+                <div
+                  style={{ fontWeight: 700, fontSize: 18, color: 'var(--smc-text)' }}
+                >
                   邀请家属
-                </Typography>
-              </Stack>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 1.5, fontSize: '0.95rem', lineHeight: 1.8 }}>
-                您可以生成一个邀请码，将其分享给您的家属。家属使用邀请码注册后，即可在手机上查看您的健康信息。每位老人最多可绑定 <strong>{MAX_FAMILY_MEMBERS}</strong> 位家属。
-              </Typography>
-            </Box>
-
-            {codeLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : inviteCode ? (
-              <Box
-                sx={{
-                  p: { xs: 2.5, sm: 3 },
-                  borderRadius: 3,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  bgcolor: 'background.default',
+                </div>
+              </div>
+              <div
+                style={{
+                  marginTop: 12,
+                  fontSize: 15,
+                  color: 'var(--smc-text-2)',
+                  lineHeight: 1.8,
                 }}
               >
-                <Stack spacing={2}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
+                您可以生成一个邀请码，将其分享给您的家属。家属使用邀请码注册后，即可在手机上查看您的健康信息。每位老人最多可绑定{' '}
+                <strong>{MAX_FAMILY_MEMBERS}</strong> 位家属。
+              </div>
+            </div>
+
+            {codeLoading ? (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: '32px 0',
+                }}
+              >
+                <Spinner />
+              </div>
+            ) : inviteCode ? (
+              <div
+                style={{
+                  padding: 24,
+                  borderRadius: 12,
+                  border: '1px solid var(--smc-border)',
+                  background: 'var(--smc-surface-alt)',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 14, color: 'var(--smc-text-2)' }}>
                       当前邀请码
-                    </Typography>
-                    <Typography
-                      variant="h4"
-                      sx={{ mt: 1, fontWeight: 800, letterSpacing: 3, wordBreak: 'break-all' }}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontWeight: 800,
+                        fontSize: 32,
+                        letterSpacing: 3,
+                        wordBreak: 'break-all',
+                        color: 'var(--smc-text)',
+                      }}
                     >
                       {inviteCode.code}
-                    </Typography>
-                  </Box>
+                    </div>
+                  </div>
 
-                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                    <Chip variant="outlined" label={`过期时间：${inviteCode.expires_at}`} />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <Chip outlined>过期时间：{inviteCode.expires_at}</Chip>
                     <Chip
-                      color={inviteCode.used_count >= inviteCode.max_uses ? 'error' : 'primary'}
-                      label={`已使用 ${inviteCode.used_count}/${inviteCode.max_uses}`}
-                    />
-                  </Stack>
+                      tone={
+                        inviteCode.used_count >= inviteCode.max_uses
+                          ? 'error'
+                          : 'primary'
+                      }
+                    >
+                      已使用 {inviteCode.used_count}/{inviteCode.max_uses}
+                    </Chip>
+                  </div>
 
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                     <Button
                       variant="outlined"
-                      startIcon={<ContentCopyRoundedIcon />}
+                      startIcon={<Copy size={16} />}
                       onClick={handleCopyLink}
                     >
                       复制邀请链接
                     </Button>
                     <Button
-                      color="error"
-                      variant="contained"
-                      startIcon={<DeleteOutlineRoundedIcon />}
+                      variant="danger"
+                      startIcon={<Trash2 size={16} />}
                       disabled={actionLoading}
                       onClick={handleRevoke}
                     >
                       撤销邀请码
                     </Button>
-                  </Stack>
-                </Stack>
-              </Box>
+                  </div>
+                </div>
+              </div>
             ) : (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body2" color="text.secondary">
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <div style={{ fontSize: 14, color: 'var(--smc-text-2)' }}>
                   暂无有效邀请码
-                </Typography>
-                <Button
-                  sx={{ mt: 2 }}
-                  variant="contained"
-                  startIcon={<AddRoundedIcon />}
-                  disabled={actionLoading}
-                  onClick={handleGenerate}
-                >
-                  生成邀请码
-                </Button>
-              </Box>
+                </div>
+                <div style={{ marginTop: 16, display: 'inline-block' }}>
+                  <Button
+                    variant="primary"
+                    startIcon={<Plus size={16} />}
+                    disabled={actionLoading}
+                    onClick={handleGenerate}
+                  >
+                    生成邀请码
+                  </Button>
+                </div>
+              </div>
             )}
-          </Stack>
-        </CardContent>
+          </div>
+        </CardBody>
       </Card>
 
-      <Box>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontSize: '1.15rem' }}>
+      <div>
+        <div
+          style={{
+            fontWeight: 700,
+            fontSize: 18,
+            marginBottom: 16,
+            color: 'var(--smc-text)',
+          }}
+        >
           已绑定家属
-        </Typography>
+        </div>
         <AppTable<FamilyMember>
           columns={familyColumns}
           dataSource={familyMembers}
@@ -269,29 +286,37 @@ const ElderInvitePage: React.FC = () => {
           emptyText="暂无绑定家属"
         />
         {error && (
-          <Alert severity="error" variant="outlined" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
+          <div style={{ marginTop: 16 }}>
+            <Alert severity="error">{error}</Alert>
+          </div>
         )}
-      </Box>
+      </div>
 
-      <Dialog open={revokeOpen} onClose={() => setRevokeOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>确认撤销</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            撤销后，当前邀请码将立即失效，已绑定的家属不受影响。
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setRevokeOpen(false)} color="inherit">
-            取消
-          </Button>
-          <Button onClick={handleConfirmRevoke} color="error" variant="contained" disabled={actionLoading}>
-            确认撤销
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Stack>
+      <Modal
+        open={revokeOpen}
+        onClose={() => setRevokeOpen(false)}
+        title="确认撤销"
+        width={420}
+        footer={
+          <>
+            <Button variant="outlined" onClick={() => setRevokeOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmRevoke}
+              disabled={actionLoading}
+            >
+              确认撤销
+            </Button>
+          </>
+        }
+      >
+        <div style={{ color: 'var(--smc-text-2)', lineHeight: 1.6 }}>
+          撤销后，当前邀请码将立即失效，已绑定的家属不受影响。
+        </div>
+      </Modal>
+    </div>
   );
 };
 

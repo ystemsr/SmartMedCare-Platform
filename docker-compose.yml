@@ -67,14 +67,22 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: smartmedcare-backend
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      SPARK_LOG_DIR: /app/logs/spark
     ports:
       - "${APP_PORT:-8000}:8000"
+    volumes:
+      # Docker socket + CLI (installed in image) let the backend shell out to
+      # `docker exec spark-master spark-submit ...` for job submission.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Shared spark log dir so the backend can tail logs from submitted jobs.
+      - spark_logs:/app/logs/spark
     depends_on:
       mysql:
         condition: service_healthy
@@ -98,10 +106,259 @@ services:
     networks:
       - smartmedcare
 
+  hadoop-namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: smartmedcare-hadoop-namenode
+    restart: unless-stopped
+    environment:
+      CLUSTER_NAME: smartmedcare
+      CORE_CONF_fs_defaultFS: hdfs://hadoop-namenode:9000
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      HDFS_CONF_dfs_replication: "1"
+    ports:
+      - "9870:9870"
+      - "9010:9000"
+    volumes:
+      - hadoop_namenode_data:/hadoop/dfs/name
+      - ./deploy/hadoop/core-site.xml:/etc/hadoop/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/etc/hadoop/hdfs-site.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9870/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - smartmedcare
+
+  hadoop-datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: smartmedcare-hadoop-datanode
+    restart: unless-stopped
+    environment:
+      SERVICE_PRECONDITION: "hadoop-namenode:9870"
+      CORE_CONF_fs_defaultFS: hdfs://hadoop-namenode:9000
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      HDFS_CONF_dfs_replication: "1"
+    volumes:
+      - hadoop_datanode_data:/hadoop/dfs/data
+      - ./deploy/hadoop/core-site.xml:/etc/hadoop/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/etc/hadoop/hdfs-site.xml:ro
+    depends_on:
+      hadoop-namenode:
+        condition: service_healthy
+    networks:
+      - smartmedcare
+
+  hive-metastore-db:
+    image: postgres:15
+    container_name: smartmedcare-hive-metastore-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: metastore
+      POSTGRES_USER: ${HIVE_METASTORE_DB_USER:-hive}
+      POSTGRES_PASSWORD: ${HIVE_METASTORE_DB_PASSWORD:-hive123}
+      # bde2020/hive 2.3.2 bundles postgresql-9.4 JDBC which does not speak
+      # SCRAM-SHA-256; force md5 auth for both initdb and pg_hba.conf.
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    volumes:
+      - hive_metastore_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HIVE_METASTORE_DB_USER:-hive} -d metastore"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - smartmedcare
+
+  # One-shot schema bootstrap: runs schematool against the Postgres metastore
+  # on first boot. Idempotent — re-running after the schema exists exits non-
+  # zero which we ignore. This has to be a separate container because bash-c
+  # invocation of schematool via the image's shared entrypoint drops args.
+  metastore-schema-init:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: smartmedcare-metastore-schema-init
+    restart: "no"
+    entrypoint: ["/opt/hive/bin/schematool"]
+    command:
+      - "-dbType"
+      - "postgres"
+      - "-userName"
+      - "${HIVE_METASTORE_DB_USER:-hive}"
+      - "-passWord"
+      - "${HIVE_METASTORE_DB_PASSWORD:-hive123}"
+      - "-url"
+      - "jdbc:postgresql://hive-metastore-db:5432/metastore"
+      - "-initSchema"
+    depends_on:
+      hive-metastore-db:
+        condition: service_healthy
+    networks:
+      - smartmedcare
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: smartmedcare-hive-metastore
+    restart: unless-stopped
+    environment:
+      SERVICE_PRECONDITION: "hadoop-namenode:9870 hadoop-datanode:9864 hive-metastore-db:5432"
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://hive-metastore-db:5432/metastore
+    command: /opt/hive/bin/hive --service metastore
+    ports:
+      - "9083:9083"
+    volumes:
+      - ./deploy/hive/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./deploy/hadoop/core-site.xml:/opt/hadoop-2.7.4/etc/hadoop/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/opt/hadoop-2.7.4/etc/hadoop/hdfs-site.xml:ro
+    depends_on:
+      hive-metastore-db:
+        condition: service_healthy
+      hadoop-namenode:
+        condition: service_healthy
+    networks:
+      - smartmedcare
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: smartmedcare-hive-server
+    restart: unless-stopped
+    environment:
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://hive-metastore-db:5432/metastore
+    command: /opt/hive/bin/hive --service hiveserver2
+    ports:
+      - "10000:10000"
+      - "10002:10002"
+    volumes:
+      - ./deploy/hive/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./deploy/hadoop/core-site.xml:/opt/hadoop-2.7.4/etc/hadoop/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/opt/hadoop-2.7.4/etc/hadoop/hdfs-site.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "beeline -u jdbc:hive2://localhost:10000/default -e 'show databases' > /dev/null 2>&1"]
+      interval: 20s
+      timeout: 20s
+      retries: 40
+      start_period: 360s
+    depends_on:
+      - hive-metastore
+    networks:
+      - smartmedcare
+
+  # One-shot initializer: polls hive-server, then applies data-jobs/hive/*.sql
+  # via beeline. DDL is idempotent (DROP IF EXISTS + EXTERNAL tables), so
+  # re-running on every `docker compose up` is safe. The container polls for
+  # readiness itself so slow metastore init never blocks `docker compose up`.
+  hive-init:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: smartmedcare-hive-init
+    restart: on-failure:3
+    volumes:
+      - ./data-jobs:/opt/spark-apps:ro
+      - ./deploy/hive/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+    depends_on:
+      - hive-server
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        echo "[hive-init] waiting for hive-server:10000 to accept SQL"
+        ready=0
+        for i in $$(seq 1 120); do
+          # beeline can return 0 on connect failure, so also grep for expected output.
+          out=$$(beeline -u jdbc:hive2://hive-server:10000/default -e 'show databases' 2>&1 || true)
+          if echo "$$out" | grep -qE '\| (default|smartmedcare) +\|'; then
+            echo "[hive-init] hive-server ready after $$i attempts"
+            ready=1
+            break
+          fi
+          sleep 10
+        done
+        if [ "$$ready" != "1" ]; then
+          echo "[hive-init] ERROR: hive-server never became ready"
+          exit 1
+        fi
+        echo "[hive-init] applying DDL files"
+        for sql in /opt/spark-apps/hive/[0-9][0-9]_*.sql; do
+          echo ">>> $$(basename "$$sql")"
+          beeline -u jdbc:hive2://hive-server:10000/default -f "$$sql"
+        done
+        echo "[hive-init] done"
+    networks:
+      - smartmedcare
+
+  spark-master:
+    build:
+      context: ./deploy/spark
+      dockerfile: Dockerfile.spark-apps
+    image: smartmedcare-spark-apps:local
+    container_name: smartmedcare-spark-master
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      SPARK_USER: spark
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    volumes:
+      - ./deploy/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
+      - ./deploy/hadoop/core-site.xml:/opt/bitnami/spark/conf/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/opt/bitnami/spark/conf/hdfs-site.xml:ro
+      - ./deploy/hive/hive-site.xml:/opt/bitnami/spark/conf/hive-site.xml:ro
+      # Ship Spark job scripts + ML model into the master for `spark-submit`.
+      - ./data-jobs:/opt/spark-apps:ro
+      - spark_logs:/var/log/spark-jobs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - smartmedcare
+
+  spark-worker:
+    build:
+      context: ./deploy/spark
+      dockerfile: Dockerfile.spark-apps
+    image: smartmedcare-spark-apps:local
+    container_name: smartmedcare-spark-worker
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      SPARK_USER: spark
+    volumes:
+      - ./deploy/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
+      - ./deploy/hadoop/core-site.xml:/opt/bitnami/spark/conf/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/opt/bitnami/spark/conf/hdfs-site.xml:ro
+      - ./deploy/hive/hive-site.xml:/opt/bitnami/spark/conf/hive-site.xml:ro
+      - ./data-jobs:/opt/spark-apps:ro
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - smartmedcare
+
 volumes:
   mysql_data:
   redis_data:
   minio_data:
+  hadoop_namenode_data:
+  hadoop_datanode_data:
+  hive_metastore_db_data:
+  spark_logs:
 
 networks:
   smartmedcare:

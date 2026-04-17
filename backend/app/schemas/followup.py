@@ -64,6 +64,7 @@ class FollowupResponse(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
     records: Optional[list[FollowupRecordResponse]] = None
+    alert_source: Optional[str] = None
 
 
 class FollowupStatusUpdate(BaseModel):

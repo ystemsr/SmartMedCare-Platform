@@ -73,6 +73,7 @@ export function formatPlanType(type: string | undefined | null): string {
     phone: '电话随访',
     home_visit: '上门随访',
     video: '视频随访',
+    ai_suggested: 'AI 建议随访',
   };
   return type ? (map[type] || type) : '-';
 }

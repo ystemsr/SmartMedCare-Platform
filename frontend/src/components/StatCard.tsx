@@ -1,6 +1,5 @@
-import React from 'react';
-import { Avatar, Card, Skeleton, Stack, Typography } from '@mui/material';
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
+import { Card } from './ui';
 
 interface StatCardProps {
   title: string;
@@ -11,9 +10,7 @@ interface StatCardProps {
   loading?: boolean;
 }
 
-/**
- * Dashboard statistic card with icon and optional coloring.
- */
+/** Dashboard statistic card with icon and optional coloring — MUI-free. */
 const StatCard: React.FC<StatCardProps> = ({
   title,
   value,
@@ -22,39 +19,35 @@ const StatCard: React.FC<StatCardProps> = ({
   suffix,
   loading,
 }) => {
+  const tone = color || 'var(--smc-primary)';
   return (
-    <Card sx={{ height: '100%', p: 2.5 }}>
-      <Stack direction="row" spacing={2.5} alignItems="center">
-        {icon && (
-          <Avatar
-            sx={{
-              width: 56,
-              height: 56,
-              bgcolor: `${color || '#1677ff'}18`,
-              color: color || '#1677ff',
-            }}
-          >
-            {icon}
-          </Avatar>
-        )}
-        <div>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            {title}
-          </Typography>
-          {loading ? (
-            <Skeleton variant="text" width={96} height={42} />
-          ) : (
-            <Typography variant="h4">
-              {value}
-              {suffix ? (
-                <Typography component="span" variant="h6" color="text.secondary" sx={{ ml: 0.5 }}>
-                  {suffix}
-                </Typography>
-              ) : null}
-            </Typography>
+    <Card style={{ height: '100%' }}>
+      <div style={{ padding: 20 }}>
+        <div className="smc-stat">
+          {icon && (
+            <span
+              className="smc-stat__icon"
+              style={{
+                background: `color-mix(in oklab, ${tone} 12%, transparent)`,
+                color: tone,
+              }}
+            >
+              {icon}
+            </span>
           )}
+          <div style={{ minWidth: 0 }}>
+            <div className="smc-stat__title">{title}</div>
+            {loading ? (
+              <div className="smc-skel" style={{ width: 110, height: 28 }} />
+            ) : (
+              <div className="smc-stat__value">
+                {value}
+                {suffix ? <span className="smc-stat__suffix">{suffix}</span> : null}
+              </div>
+            )}
+          </div>
         </div>
-      </Stack>
+      </div>
     </Card>
   );
 };

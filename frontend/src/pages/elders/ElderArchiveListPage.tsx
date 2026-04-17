@@ -1,17 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  Box,
-  Card,
-  CardActionArea,
-  Chip,
-  CircularProgress,
-  InputAdornment,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import { Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Card, Chip, Input, Spinner } from '../../components/ui';
 import { useTable } from '../../hooks/useTable';
 import { getElders } from '../../api/elders';
 import { formatGender } from '../../utils/formatter';
@@ -35,111 +25,89 @@ const ElderArchiveListPage: React.FC = () => {
   const items = useMemo(
     () =>
       data.map((elder) => (
-        <Box key={elder.id} sx={{ width: { xs: '100%', sm: '50%', md: '33.333%', lg: '25%' } }}>
+        <div key={elder.id} style={{ flex: '1 1 240px', minWidth: 240, maxWidth: 320 }}>
           <Card
-            variant="outlined"
-            sx={{
-              height: '100%',
-              borderRadius: 4,
-              overflow: 'hidden',
-            }}
+            hoverable
+            style={{ height: '100%', cursor: 'pointer' }}
+            onClick={() => navigate(`/elders/${elder.id}/archive`)}
           >
-            <CardActionArea
-              onClick={() => navigate(`/elders/${elder.id}/archive`)}
-              sx={{ height: '100%', alignItems: 'stretch' }}
-            >
-              <Box sx={{ p: 2.5, height: '100%' }}>
-                <Stack spacing={1.5} sx={{ height: '100%' }}>
-                  <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-                      {elder.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {formatGender(elder.gender)} · {elder.phone || '-'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                      标签
-                    </Typography>
-                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                      {elder.tags?.length ? (
-                        elder.tags.map((tag) => (
-                          <Chip key={tag} label={tag} color="primary" variant="outlined" size="small" />
-                        ))
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          暂无标签
-                        </Typography>
-                      )}
-                    </Stack>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    点击查看健康档案
-                  </Typography>
-                </Stack>
-              </Box>
-            </CardActionArea>
+            <div style={{ padding: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{elder.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 12 }}>
+                {formatGender(elder.gender)} · {elder.phone || '-'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--smc-text-2)', marginBottom: 6 }}>标签</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {elder.tags?.length ? (
+                  elder.tags.map((tag) => (
+                    <Chip key={tag} tone="primary" outlined>
+                      {tag}
+                    </Chip>
+                  ))
+                ) : (
+                  <span style={{ fontSize: 13, color: 'var(--smc-text-3)' }}>暂无标签</span>
+                )}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>点击查看健康档案</div>
+            </div>
           </Card>
-        </Box>
+        </div>
       )),
     [data, navigate],
   );
 
   return (
-    <Stack spacing={2.5}>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ xs: 'stretch', sm: 'center' }}
-        spacing={2}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 16,
+          flexWrap: 'wrap',
+        }}
       >
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-            老人健康档案
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>老人健康档案</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--smc-text-2)' }}>
             查看并进入单个老人的健康档案详情
-          </Typography>
-        </Box>
+          </p>
+        </div>
 
-        <TextField
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              handleSearch();
-            }
-          }}
-          placeholder="搜索姓名/手机号/身份证"
-          size="small"
-          sx={{ width: { xs: '100%', sm: 340 } }}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <SearchRoundedIcon fontSize="small" />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Stack>
+        <div style={{ width: 340, maxWidth: '100%' }}>
+          <Input
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') handleSearch();
+            }}
+            placeholder="搜索姓名/手机号/身份证"
+            endAdornment={<Search size={14} />}
+          />
+        </div>
+      </div>
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 320 }}>
-          <CircularProgress size={36} />
-        </Box>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: 320,
+          }}
+        >
+          <Spinner />
+        </div>
       ) : data.length === 0 ? (
-        <Card variant="outlined" sx={{ p: 4 }}>
-          <Typography variant="body2" color="text.secondary" align="center">
+        <Card>
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--smc-text-2)' }}>
             暂无老人档案
-          </Typography>
+          </div>
         </Card>
       ) : (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-          {items}
-        </Box>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>{items}</div>
       )}
-    </Stack>
+    </div>
   );
 };
 

@@ -1,0 +1,215 @@
+:root {
+  /* Brand & functional palette (flat, calm, Anthropic-leaning) */
+  --smc-primary: #1f6feb;
+  --smc-primary-600: #1f6feb;
+  --smc-primary-700: #174fb6;
+  --smc-primary-50: #eef4ff;
+  --smc-primary-100: #dbe7ff;
+
+  --smc-secondary: #0f9d8f;
+  --smc-secondary-700: #0b6f65;
+  --smc-secondary-50: #e6f6f4;
+
+  --smc-success: #1f9d63;
+  --smc-success-50: #e7f6ed;
+  --smc-warning: #d9822b;
+  --smc-warning-50: #fdf1e2;
+  --smc-error: #d14343;
+  --smc-error-50: #fdecec;
+  --smc-info: #1f6feb;
+  --smc-info-50: #eef4ff;
+
+  /* Surface */
+  --smc-bg: #f3f7fb;
+  --smc-surface: #ffffff;
+  --smc-surface-alt: #f8fafc;
+  --smc-overlay: rgba(15, 23, 42, 0.42);
+
+  /* Text */
+  --smc-text: #0f172a;
+  --smc-text-2: #475569;
+  --smc-text-3: #94a3b8;
+  --smc-text-inverse: #ffffff;
+
+  /* Border */
+  --smc-border: #e2e8f0;
+  --smc-border-strong: #cbd5e1;
+  --smc-divider: #eef2f7;
+
+  /* Radius (flat card) */
+  --smc-r-sm: 6px;
+  --smc-r-md: 10px;
+  --smc-r-lg: 14px;
+  --smc-r-xl: 18px;
+  --smc-r-full: 999px;
+
+  /* Shadow (subtle, flat) */
+  --smc-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --smc-shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.05);
+  --smc-shadow-md: 0 6px 20px rgba(15, 23, 42, 0.08);
+  --smc-shadow-lg: 0 18px 52px rgba(15, 23, 42, 0.18);
+
+  /* Spacing scale */
+  --smc-s-1: 4px;
+  --smc-s-2: 8px;
+  --smc-s-3: 12px;
+  --smc-s-4: 16px;
+  --smc-s-5: 20px;
+  --smc-s-6: 24px;
+  --smc-s-8: 32px;
+
+  /* Typography */
+  --smc-font:
+    "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue",
+    system-ui, sans-serif;
+  --smc-fs-xs: 12px;
+  --smc-fs-sm: 13px;
+  --smc-fs-md: 14px;
+  --smc-fs-lg: 16px;
+  --smc-fs-xl: 18px;
+  --smc-fs-2xl: 22px;
+  --smc-fs-3xl: 28px;
+
+  /* Motion */
+  --smc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --smc-dur-fast: 120ms;
+  --smc-dur-md: 180ms;
+  --smc-dur-slow: 260ms;
+
+  /* Layout */
+  --smc-header-h: 72px;
+  --smc-sidebar-w: 264px;
+  --smc-sidebar-w-mini: 88px;
+
+  /* Z */
+  --smc-z-drawer: 1200;
+  --smc-z-modal: 1300;
+  --smc-z-toast: 1400;
+  --smc-z-tooltip: 1500;
+}
+
+/* Global reset-ish for app */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--smc-font);
+  font-size: var(--smc-fs-md);
+  color: var(--smc-text);
+  background: var(--smc-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--smc-primary);
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Global keyframes used by UI components */
+@keyframes smc-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes smc-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes smc-slide-down-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes smc-slide-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes smc-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes smc-drawer-right-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes smc-drawer-left-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes smc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes smc-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-6px);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+  75% {
+    transform: translateX(-3px);
+  }
+}

@@ -1,0 +1,21 @@
+FROM bitnamilegacy/spark:3.5
+
+USER root
+
+RUN install_packages libgomp1 || true
+
+RUN pip install --no-cache-dir \
+    torch==2.2.* \
+    numpy \
+    pandas \
+    "pyhive[hive_pure_sasl]" \
+    thrift \
+    thrift-sasl \
+    pure-sasl \
+    hdfs \
+    sqlalchemy \
+    pymysql
+
+COPY spark-defaults.conf /opt/bitnami/spark/conf/spark-defaults.conf
+
+USER 1001

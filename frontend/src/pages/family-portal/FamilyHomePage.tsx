@@ -1,29 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Skeleton,
-  Stack,
-  Typography,
-} from '@mui/material';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import PhoneRoundedIcon from '@mui/icons-material/PhoneRounded';
-import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
-import WcRoundedIcon from '@mui/icons-material/WcRounded';
-import CakeRoundedIcon from '@mui/icons-material/CakeRounded';
-import ContactEmergencyRoundedIcon from '@mui/icons-material/ContactEmergencyRounded';
-import LocalPhoneRoundedIcon from '@mui/icons-material/LocalPhoneRounded';
-import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import EventNoteRoundedIcon from '@mui/icons-material/EventNoteRounded';
-import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
-import CircleIcon from '@mui/icons-material/Circle';
+  User,
+  Phone,
+  Home,
+  Users,
+  Cake,
+  Contact,
+  PhoneCall,
+  ArrowRight,
+  HeartPulse,
+  AlertTriangle,
+  ClipboardList,
+  CalendarDays,
+  BellRing,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Button, Card, CardBody, Chip } from '@/components/ui';
 import { getFamilySelf, getFamilyElder, getElderAlerts, getElderHealthRecords } from '../../api/family';
 import type { FamilyMemberInfo, FamilyElderInfo } from '../../types/family';
 import StatCard from '../../components/StatCard';
@@ -66,38 +58,42 @@ function InfoField({
   value: React.ReactNode;
 }) {
   return (
-    <Box sx={{ p: 2, borderRadius: 2.5, bgcolor: 'background.default' }}>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
-        <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>{icon}</Box>
-        <Typography variant="body2" color="text.secondary">
-          {label}
-        </Typography>
-      </Stack>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600, pl: 0.25 }}>
-        {value || '-'}
-      </Typography>
-    </Box>
+    <div
+      style={{
+        padding: 16,
+        borderRadius: 20,
+        background: 'var(--smc-bg-2, #f8fafc)',
+      }}
+    >
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+        <span style={{ color: 'var(--smc-text-2)', display: 'inline-flex', alignItems: 'center' }}>
+          {icon}
+        </span>
+        <span style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>{label}</span>
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 600, paddingLeft: 2 }}>{value || '-'}</div>
+    </div>
   );
 }
 
 function SkeletonPage() {
   return (
-    <Stack spacing={3}>
-      <Skeleton variant="rounded" height={120} sx={{ borderRadius: 3 }} />
-      <Box
-        sx={{
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="smc-skel" style={{ height: 120, borderRadius: 24 }} />
+      <div
+        style={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-          gap: 2,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 16,
         }}
       >
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} variant="rounded" height={100} sx={{ borderRadius: 3 }} />
+          <div key={i} className="smc-skel" style={{ height: 100, borderRadius: 24 }} />
         ))}
-      </Box>
-      <Skeleton variant="rounded" height={280} sx={{ borderRadius: 3 }} />
-      <Skeleton variant="rounded" height={200} sx={{ borderRadius: 3 }} />
-    </Stack>
+      </div>
+      <div className="smc-skel" style={{ height: 280, borderRadius: 24 }} />
+      <div className="smc-skel" style={{ height: 200, borderRadius: 24 }} />
+    </div>
   );
 }
 
@@ -158,19 +154,20 @@ const FamilyHomePage: React.FC = () => {
   const pendingAlerts = recentAlerts.filter((a) => a.status === 'pending').length;
 
   return (
-    <Stack spacing={3}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Welcome banner */}
       <Card
-        sx={{
+        style={{
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           color: '#fff',
           overflow: 'hidden',
           position: 'relative',
+          border: 'none',
         }}
       >
-        <CardContent sx={{ py: 3.5, px: 3.5 }}>
-          <Box
-            sx={{
+        <div style={{ padding: '28px 28px' }}>
+          <div
+            style={{
               position: 'absolute',
               top: -30,
               right: -20,
@@ -180,8 +177,8 @@ const FamilyHomePage: React.FC = () => {
               background: 'rgba(255,255,255,0.08)',
             }}
           />
-          <Box
-            sx={{
+          <div
+            style={{
               position: 'absolute',
               bottom: -40,
               right: 60,
@@ -191,27 +188,27 @@ const FamilyHomePage: React.FC = () => {
               background: 'rgba(255,255,255,0.05)',
             }}
           />
-          <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.75 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, marginBottom: 6 }}>
             您好，{familyInfo?.real_name}
-          </Typography>
-          <Typography variant="body1" sx={{ opacity: 0.9 }}>
+          </h2>
+          <p style={{ fontSize: 15, opacity: 0.9, margin: 0 }}>
             您是 <strong>{familyInfo?.elder_name}</strong> 的{familyInfo?.relationship}，感谢您的关爱与陪伴
-          </Typography>
-        </CardContent>
+          </p>
+        </div>
       </Card>
 
       {/* Stat cards */}
-      <Box
-        sx={{
+      <div
+        style={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-          gap: 2,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 16,
         }}
       >
         <StatCard
           title="健康状态"
           value={pendingAlerts > 0 ? '需关注' : '良好'}
-          icon={<FavoriteRoundedIcon />}
+          icon={<HeartPulse size={20} />}
           color={pendingAlerts > 0 ? '#f59e0b' : '#10b981'}
           loading={statsLoading}
         />
@@ -219,7 +216,7 @@ const FamilyHomePage: React.FC = () => {
           title="风险预警"
           value={alertsTotal}
           suffix="条"
-          icon={<WarningAmberRoundedIcon />}
+          icon={<AlertTriangle size={20} />}
           color="#ef4444"
           loading={statsLoading}
         />
@@ -227,169 +224,146 @@ const FamilyHomePage: React.FC = () => {
           title="健康记录"
           value={healthTotal}
           suffix="条"
-          icon={<AssignmentRoundedIcon />}
+          icon={<ClipboardList size={20} />}
           color="#3b82f6"
           loading={statsLoading}
         />
         <StatCard
           title="最近体检"
           value={latestRecordDate || '暂无'}
-          icon={<EventNoteRoundedIcon />}
+          icon={<CalendarDays size={20} />}
           color="#8b5cf6"
           loading={statsLoading}
         />
-      </Box>
+      </div>
 
       {/* Elder basic info */}
       {elderInfo && (
         <Card>
-          <CardContent>
-            <Stack spacing={2.5}>
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <FavoriteRoundedIcon color="error" />
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  老人基本信息
-                </Typography>
-              </Stack>
+          <CardBody>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <HeartPulse size={20} color="var(--smc-error)" />
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>老人基本信息</h3>
+              </div>
 
-              <Box
-                sx={{
+              <div
+                style={{
                   display: 'grid',
-                  gridTemplateColumns: {
-                    xs: '1fr',
-                    sm: 'repeat(2, minmax(0, 1fr))',
-                    md: 'repeat(3, minmax(0, 1fr))',
-                  },
-                  gap: 2,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 16,
                 }}
               >
-                <InfoField
-                  icon={<PersonRoundedIcon fontSize="small" />}
-                  label="姓名"
-                  value={elderInfo.name}
-                />
-                <InfoField
-                  icon={<WcRoundedIcon fontSize="small" />}
-                  label="性别"
-                  value={elderInfo.gender}
-                />
+                <InfoField icon={<User size={16} />} label="姓名" value={elderInfo.name} />
+                <InfoField icon={<Users size={16} />} label="性别" value={elderInfo.gender} />
                 {elderInfo.birth_date && (
                   <InfoField
-                    icon={<CakeRoundedIcon fontSize="small" />}
+                    icon={<Cake size={16} />}
                     label="出生日期"
                     value={elderInfo.birth_date}
                   />
                 )}
+                <InfoField icon={<Phone size={16} />} label="联系电话" value={elderInfo.phone} />
+                <InfoField icon={<Home size={16} />} label="住址" value={elderInfo.address} />
                 <InfoField
-                  icon={<PhoneRoundedIcon fontSize="small" />}
-                  label="联系电话"
-                  value={elderInfo.phone}
-                />
-                <InfoField
-                  icon={<HomeRoundedIcon fontSize="small" />}
-                  label="住址"
-                  value={elderInfo.address}
-                />
-                <InfoField
-                  icon={<ContactEmergencyRoundedIcon fontSize="small" />}
+                  icon={<Contact size={16} />}
                   label="紧急联系人"
                   value={elderInfo.emergency_contact_name}
                 />
                 <InfoField
-                  icon={<LocalPhoneRoundedIcon fontSize="small" />}
+                  icon={<PhoneCall size={16} />}
                   label="紧急联系电话"
                   value={elderInfo.emergency_contact_phone}
                 />
-              </Box>
+              </div>
 
               {elderInfo.tags.length > 0 && (
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {elderInfo.tags.map((tag) => (
-                    <Chip
-                      key={tag}
-                      label={tag}
-                      size="small"
-                      sx={{
-                        fontWeight: 600,
-                        bgcolor: 'primary.main',
-                        color: '#fff',
-                        '&:hover': { bgcolor: 'primary.dark' },
-                      }}
-                    />
+                    <Chip key={tag} tone="primary" style={{ fontWeight: 600 }}>
+                      {tag}
+                    </Chip>
                   ))}
-                </Stack>
+                </div>
               )}
-            </Stack>
-          </CardContent>
+            </div>
+          </CardBody>
         </Card>
       )}
 
       {/* Recent alerts preview */}
       <Card>
-        <CardContent>
-          <Stack spacing={2}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <NotificationsActiveRoundedIcon sx={{ color: '#f59e0b' }} />
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  最近预警
-                </Typography>
-              </Stack>
+        <CardBody>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <BellRing size={20} color="#f59e0b" />
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>最近预警</h3>
+              </div>
               {alertsTotal > 0 && (
                 <Button
-                  size="small"
+                  size="sm"
+                  variant="text"
                   onClick={() => navigate('/family/elder')}
-                  endIcon={<ArrowForwardRoundedIcon />}
+                  endIcon={<ArrowRight size={14} />}
                 >
                   查看全部
                 </Button>
               )}
-            </Stack>
+            </div>
 
             {statsLoading ? (
-              <Stack spacing={1.5}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} variant="rounded" height={52} sx={{ borderRadius: 2 }} />
+                  <div key={i} className="smc-skel" style={{ height: 52, borderRadius: 16 }} />
                 ))}
-              </Stack>
+              </div>
             ) : recentAlerts.length === 0 ? (
-              <Box
-                sx={{
-                  py: 4,
+              <div
+                style={{
+                  padding: '32px 0',
                   textAlign: 'center',
-                  borderRadius: 2,
-                  bgcolor: 'background.default',
+                  borderRadius: 16,
+                  background: 'var(--smc-bg-2, #f8fafc)',
+                  color: 'var(--smc-text-2)',
                 }}
               >
-                <Typography color="text.secondary">暂无预警信息，老人状态良好</Typography>
-              </Box>
+                暂无预警信息，老人状态良好
+              </div>
             ) : (
-              <Stack spacing={1}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {recentAlerts.slice(0, 5).map((alert) => (
-                  <Box
+                  <div
                     key={alert.id}
-                    sx={{
+                    style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 1.5,
-                      p: 1.5,
-                      borderRadius: 2,
-                      bgcolor: 'background.default',
+                      gap: 12,
+                      padding: 12,
+                      borderRadius: 16,
+                      background: 'var(--smc-bg-2, #f8fafc)',
                       transition: 'background-color 0.15s',
-                      '&:hover': { bgcolor: 'action.hover' },
                     }}
                   >
-                    <CircleIcon
-                      sx={{
-                        fontSize: 10,
-                        color: alertLevelColorMap[alert.level] || '#3b82f6',
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: '50%',
+                        background: alertLevelColorMap[alert.level] || '#3b82f6',
                         flexShrink: 0,
                       }}
                     />
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography
-                        variant="body2"
-                        sx={{
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 14,
                           fontWeight: 500,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -397,74 +371,80 @@ const FamilyHomePage: React.FC = () => {
                         }}
                       >
                         {alert.message}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {alert.alert_type} &middot; {formatDateTime(alert.created_at)}
-                      </Typography>
-                    </Box>
-                    <Chip
-                      size="small"
-                      label={alertLevelLabelMap[alert.level] || alert.level}
-                      sx={{
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>
+                        {alert.alert_type} · {formatDateTime(alert.created_at)}
+                      </div>
+                    </div>
+                    <span
+                      style={{
                         fontWeight: 600,
-                        fontSize: '0.7rem',
+                        fontSize: 11,
                         height: 22,
-                        bgcolor: `${alertLevelColorMap[alert.level] || '#3b82f6'}18`,
+                        lineHeight: '22px',
+                        padding: '0 8px',
+                        borderRadius: 999,
+                        background: `${alertLevelColorMap[alert.level] || '#3b82f6'}18`,
                         color: alertLevelColorMap[alert.level] || '#3b82f6',
                         flexShrink: 0,
                       }}
-                    />
-                  </Box>
+                    >
+                      {alertLevelLabelMap[alert.level] || alert.level}
+                    </span>
+                  </div>
                 ))}
-              </Stack>
+              </div>
             )}
-          </Stack>
-        </CardContent>
+          </div>
+        </CardBody>
       </Card>
 
       {/* Health records CTA */}
       <Card
-        sx={{
+        hoverable
+        onClick={() => navigate('/family/elder')}
+        style={{
           background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
           color: '#fff',
           cursor: 'pointer',
-          transition: 'transform 0.2s, box-shadow 0.2s',
-          '&:hover': {
-            transform: 'translateY(-2px)',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)',
-          },
+          border: 'none',
         }}
-        onClick={() => navigate('/family/elder')}
       >
-        <CardContent>
-          <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} spacing={2}>
-            <Box
-              sx={{
+        <CardBody>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 16,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div
+              style={{
                 width: 56,
                 height: 56,
-                borderRadius: 3,
-                bgcolor: 'rgba(255,255,255,0.2)',
+                borderRadius: 20,
+                background: 'rgba(255,255,255,0.2)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
               }}
             >
-              <AssignmentRoundedIcon sx={{ fontSize: 32 }} />
-            </Box>
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                查看老人健康记录
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
+              <ClipboardList size={28} />
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 17, fontWeight: 700 }}>查看老人健康记录</div>
+              <div style={{ fontSize: 14, marginTop: 4, opacity: 0.9 }}>
                 查看最近的体征数据、血压心率变化和风险预警信息
-              </Typography>
-            </Box>
-            <ArrowForwardRoundedIcon sx={{ fontSize: 28, opacity: 0.8 }} />
-          </Stack>
-        </CardContent>
+              </div>
+            </div>
+            <ArrowRight size={24} style={{ opacity: 0.8 }} />
+          </div>
+        </CardBody>
       </Card>
-    </Stack>
+    </div>
   );
 };
 

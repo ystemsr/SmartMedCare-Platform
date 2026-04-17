@@ -3,7 +3,9 @@
 import io
 import logging
 from datetime import datetime
+from typing import Optional
 
+from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.health_archive import HealthRecord
@@ -33,13 +35,36 @@ class HealthArchiveService:
 
     @staticmethod
     async def create_health_record(
-        db: AsyncSession, elder_id: int, data: HealthRecordCreate
+        db: AsyncSession,
+        elder_id: int,
+        data: HealthRecordCreate,
+        background_tasks: Optional[BackgroundTasks] = None,
     ) -> HealthRecordResponse:
-        """Create a new health record for an elder."""
+        """Create a new health record for an elder.
+
+        If `background_tasks` is provided, an ML prediction is scheduled
+        after the response is sent; high-risk / followup-needed outcomes
+        automatically create an Alert and Followup.
+        """
         record = await HealthRecordRepository.create(db, elder_id, data)
         await db.commit()
         await db.refresh(record)
         logger.info("Health record created: id=%s elder_id=%s", record.id, elder_id)
+
+        if background_tasks is not None:
+            from app.services.ml_orchestrator import run_for_health_record
+
+            snapshot = {
+                "height_cm": record.height_cm,
+                "weight_kg": record.weight_kg,
+                "blood_pressure_systolic": record.blood_pressure_systolic,
+                "blood_pressure_diastolic": record.blood_pressure_diastolic,
+                "blood_glucose": record.blood_glucose,
+                "heart_rate": record.heart_rate,
+                "temperature": record.temperature,
+            }
+            background_tasks.add_task(run_for_health_record, elder_id, snapshot)
+
         return HealthRecordResponse.model_validate(record)
 
     @staticmethod

@@ -1,25 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Box,
-  Card,
-  CardContent,
-  Chip,
-  Skeleton,
-  Stack,
-  Tab,
-  Tabs,
-  Typography,
-} from '@mui/material';
-import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import PhoneRoundedIcon from '@mui/icons-material/PhoneRounded';
-import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
-import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
-import BloodtypeRoundedIcon from '@mui/icons-material/BloodtypeRounded';
-import DeviceThermostatRoundedIcon from '@mui/icons-material/DeviceThermostatRounded';
-import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
-import SentimentDissatisfiedRoundedIcon from '@mui/icons-material/SentimentDissatisfiedRounded';
+  HeartPulse,
+  AlertTriangle,
+  User,
+  Phone,
+  Home,
+  Activity,
+  Droplet,
+  Thermometer,
+  Gauge,
+  Frown,
+} from 'lucide-react';
+import { Card, CardBody, Chip, Tabs } from '@/components/ui';
+import type { ChipTone } from '@/components/ui';
 import { getFamilySelf, getFamilyElder, getElderHealthRecords, getElderAlerts } from '../../api/family';
 import type { FamilyMemberInfo, FamilyElderInfo } from '../../types/family';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
@@ -48,7 +41,7 @@ interface AlertRecord {
   created_at: string;
 }
 
-const alertLevelColorMap: Record<string, 'error' | 'warning' | 'primary'> = {
+const alertLevelToneMap: Record<string, ChipTone> = {
   high: 'error',
   medium: 'warning',
   low: 'primary',
@@ -67,7 +60,7 @@ const alertStatusLabelMap: Record<string, string> = {
   closed: '已关闭',
 };
 
-const alertStatusColorMap: Record<string, 'error' | 'warning' | 'success' | 'default'> = {
+const alertStatusToneMap: Record<string, ChipTone> = {
   pending: 'error',
   processing: 'warning',
   resolved: 'success',
@@ -127,47 +120,51 @@ function VitalCard({
 }) {
   const isAlert = color === '#ef4444';
   const isBorderline = color === '#f59e0b';
+  const borderColor = isAlert ? '#fecaca' : isBorderline ? '#fde68a' : 'var(--smc-divider)';
+  const bgColor = isAlert ? '#fef2f2' : isBorderline ? '#fffbeb' : 'var(--smc-surface)';
 
   return (
     <Card
-      sx={{
+      style={{
         height: '100%',
-        border: '1px solid',
-        borderColor: isAlert ? '#fecaca' : isBorderline ? '#fde68a' : 'divider',
-        bgcolor: isAlert ? '#fef2f2' : isBorderline ? '#fffbeb' : 'background.paper',
+        border: `1px solid ${borderColor}`,
+        background: bgColor,
       }}
     >
-      <CardContent sx={{ py: 2, px: 2.5 }}>
+      <div style={{ padding: '16px 20px' }}>
         {loading ? (
           <>
-            <Skeleton width={80} height={20} />
-            <Skeleton width={60} height={36} sx={{ mt: 0.5 }} />
+            <div className="smc-skel" style={{ width: 80, height: 20 }} />
+            <div className="smc-skel" style={{ width: 60, height: 36, marginTop: 4 }} />
           </>
         ) : (
           <>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-              <Box sx={{ color: color === 'inherit' ? 'text.secondary' : color, display: 'flex' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span
+                style={{
+                  color: color === 'inherit' ? 'var(--smc-text-2)' : color,
+                  display: 'inline-flex',
+                }}
+              >
                 {icon}
-              </Box>
-              <Typography variant="body2" color="text.secondary">
-                {label}
-              </Typography>
-            </Stack>
-            <Typography
-              variant="h5"
-              sx={{
+              </span>
+              <span style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>{label}</span>
+            </div>
+            <div
+              style={{
+                fontSize: 24,
                 fontWeight: 700,
-                color: color === 'inherit' ? 'text.primary' : color,
+                color: color === 'inherit' ? 'var(--smc-text-1)' : color,
               }}
             >
               {value}
-              <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
+              <span style={{ fontSize: 13, color: 'var(--smc-text-2)', marginLeft: 4, fontWeight: 400 }}>
                 {unit}
-              </Typography>
-            </Typography>
+              </span>
+            </div>
           </>
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 }
@@ -189,7 +186,9 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     render: (value, record) => {
       if (typeof value !== 'number') return '-';
       const color = bpColor(value, record.diastolic_bp);
-      return <Typography variant="body2" sx={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</Typography>;
+      return (
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+      );
     },
   },
   {
@@ -200,7 +199,9 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     render: (value, record) => {
       if (typeof value !== 'number') return '-';
       const color = bpColor(record.systolic_bp, value);
-      return <Typography variant="body2" sx={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</Typography>;
+      return (
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+      );
     },
   },
   {
@@ -211,7 +212,9 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     render: (value) => {
       if (typeof value !== 'number') return '-';
       const color = glucoseColor(value);
-      return <Typography variant="body2" sx={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</Typography>;
+      return (
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+      );
     },
   },
   {
@@ -222,7 +225,9 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     render: (value) => {
       if (typeof value !== 'number') return '-';
       const color = heartRateColor(value);
-      return <Typography variant="body2" sx={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</Typography>;
+      return (
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+      );
     },
   },
   {
@@ -233,7 +238,9 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     render: (value) => {
       if (typeof value !== 'number') return '-';
       const color = temperatureColor(value);
-      return <Typography variant="body2" sx={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</Typography>;
+      return (
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+      );
     },
   },
   {
@@ -260,13 +267,9 @@ const alertColumns: AppTableColumn<AlertRecord>[] = [
     render: (value) => {
       const level = typeof value === 'string' ? value : '';
       return (
-        <Chip
-          size="small"
-          color={alertLevelColorMap[level] || 'primary'}
-          variant="filled"
-          label={alertLevelLabelMap[level] || level || '-'}
-          sx={{ fontWeight: 600 }}
-        />
+        <Chip tone={alertLevelToneMap[level] || 'primary'} style={{ fontWeight: 600 }}>
+          {alertLevelLabelMap[level] || level || '-'}
+        </Chip>
       );
     },
   },
@@ -285,12 +288,12 @@ const alertColumns: AppTableColumn<AlertRecord>[] = [
       const status = typeof value === 'string' ? value : '';
       return (
         <Chip
-          size="small"
-          variant="outlined"
-          color={alertStatusColorMap[status] || 'default'}
-          label={alertStatusLabelMap[status] || status || '-'}
-          sx={{ fontWeight: 500 }}
-        />
+          tone={alertStatusToneMap[status] || 'default'}
+          outlined
+          style={{ fontWeight: 500 }}
+        >
+          {alertStatusLabelMap[status] || status || '-'}
+        </Chip>
       );
     },
   },
@@ -396,101 +399,161 @@ const FamilyElderHealthPage: React.FC = () => {
 
   if (loading) {
     return (
-      <Stack spacing={3}>
-        <Skeleton variant="rounded" height={100} sx={{ borderRadius: 3 }} />
-        <Box
-          sx={{
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div className="smc-skel" style={{ height: 100, borderRadius: 24 }} />
+        <div
+          style={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
-            gap: 2,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 16,
           }}
         >
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} variant="rounded" height={90} sx={{ borderRadius: 3 }} />
+            <div key={i} className="smc-skel" style={{ height: 90, borderRadius: 24 }} />
           ))}
-        </Box>
-        <Skeleton variant="rounded" height={400} sx={{ borderRadius: 3 }} />
-      </Stack>
+        </div>
+        <div className="smc-skel" style={{ height: 400, borderRadius: 24 }} />
+      </div>
     );
   }
 
+  const healthTable = (
+    <AppTable<HealthRecord>
+      columns={healthColumns}
+      dataSource={healthRecords}
+      loading={healthLoading}
+      rowKey="id"
+      pagination={{
+        current: healthPage,
+        pageSize,
+        total: healthTotal,
+        showTotal: (total) => `共 ${total} 条`,
+      }}
+      onChange={({ current }) => {
+        if (current) setHealthPage(current);
+      }}
+      emptyText="暂无健康记录"
+    />
+  );
+
+  const alertsContent =
+    !alertsLoading && alerts.length === 0 ? (
+      <div
+        style={{
+          padding: '64px 0',
+          textAlign: 'center',
+          borderRadius: 24,
+          background: 'var(--smc-bg-2, #f8fafc)',
+        }}
+      >
+        <Frown size={48} color="var(--smc-text-3)" style={{ marginBottom: 12 }} />
+        <div style={{ color: 'var(--smc-text-2)', fontSize: 15 }}>暂无风险预警</div>
+        <div style={{ color: 'var(--smc-text-3)', fontSize: 13, marginTop: 4 }}>
+          当老人健康指标异常时，系统会自动生成预警
+        </div>
+      </div>
+    ) : (
+      <AppTable<AlertRecord>
+        columns={alertColumns}
+        dataSource={alerts}
+        loading={alertsLoading}
+        rowKey="id"
+        pagination={{
+          current: alertsPage,
+          pageSize,
+          total: alertsTotal,
+          showTotal: (total) => `共 ${total} 条`,
+        }}
+        onChange={({ current }) => {
+          if (current) setAlertsPage(current);
+        }}
+        emptyText="暂无风险预警"
+      />
+    );
+
   return (
-    <Stack spacing={3}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Elder info header */}
       {elderInfo && (
         <Card
-          sx={{
+          style={{
             background: 'linear-gradient(135deg, #667eea08 0%, #764ba208 100%)',
           }}
         >
-          <CardContent sx={{ py: 2.5 }}>
-            <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              spacing={3}
-              alignItems={{ md: 'center' }}
+          <div style={{ padding: '20px 24px' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'row',
+                gap: 24,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
             >
-              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
-                <FavoriteRoundedIcon color="error" />
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <HeartPulse size={20} color="var(--smc-error)" />
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>
                   {elderInfo.name} 的健康信息
-                </Typography>
-              </Stack>
+                </h3>
+              </div>
 
-              <Stack
-                direction="row"
-                spacing={3}
-                useFlexGap
-                flexWrap="wrap"
-                sx={{ flex: 1 }}
-                divider={<Box sx={{ width: '1px', bgcolor: 'divider', alignSelf: 'stretch' }} />}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  gap: 24,
+                  flexWrap: 'wrap',
+                  flex: 1,
+                }}
               >
-                <Stack direction="row" spacing={0.75} alignItems="center">
-                  <PersonRoundedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                  <Typography variant="body2">{elderInfo.gender}</Typography>
-                </Stack>
-                <Stack direction="row" spacing={0.75} alignItems="center">
-                  <PhoneRoundedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                  <Typography variant="body2">{elderInfo.phone}</Typography>
-                </Stack>
-                <Stack direction="row" spacing={0.75} alignItems="center">
-                  <HomeRoundedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                  <Typography variant="body2" sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <User size={16} color="var(--smc-text-2)" />
+                  <span style={{ fontSize: 14 }}>{elderInfo.gender}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Phone size={16} color="var(--smc-text-2)" />
+                  <span style={{ fontSize: 14 }}>{elderInfo.phone}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Home size={16} color="var(--smc-text-2)" />
+                  <span
+                    style={{
+                      fontSize: 14,
+                      maxWidth: 240,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {elderInfo.address}
-                  </Typography>
-                </Stack>
-              </Stack>
+                  </span>
+                </div>
+              </div>
 
               {elderInfo.tags.length > 0 && (
-                <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {elderInfo.tags.map((tag) => (
-                    <Chip
-                      key={tag}
-                      label={tag}
-                      size="small"
-                      sx={{
-                        fontWeight: 600,
-                        bgcolor: 'primary.main',
-                        color: '#fff',
-                      }}
-                    />
+                    <Chip key={tag} tone="primary" style={{ fontWeight: 600 }}>
+                      {tag}
+                    </Chip>
                   ))}
-                </Stack>
+                </div>
               )}
-            </Stack>
-          </CardContent>
+            </div>
+          </div>
         </Card>
       )}
 
       {/* Vital sign summary cards */}
-      <Box
-        sx={{
+      <div
+        style={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
-          gap: 2,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: 16,
         }}
       >
         <VitalCard
-          icon={<SpeedRoundedIcon fontSize="small" />}
+          icon={<Gauge size={16} />}
           label="血压"
           value={
             latestRecord?.systolic_bp !== undefined && latestRecord?.diastolic_bp !== undefined
@@ -502,7 +565,7 @@ const FamilyElderHealthPage: React.FC = () => {
           loading={healthLoading && healthRecords.length === 0}
         />
         <VitalCard
-          icon={<MonitorHeartRoundedIcon fontSize="small" />}
+          icon={<Activity size={16} />}
           label="心率"
           value={latestRecord?.heart_rate !== undefined ? String(latestRecord.heart_rate) : '-'}
           unit="bpm"
@@ -510,7 +573,7 @@ const FamilyElderHealthPage: React.FC = () => {
           loading={healthLoading && healthRecords.length === 0}
         />
         <VitalCard
-          icon={<BloodtypeRoundedIcon fontSize="small" />}
+          icon={<Droplet size={16} />}
           label="血糖"
           value={latestRecord?.blood_glucose !== undefined ? String(latestRecord.blood_glucose) : '-'}
           unit="mmol/L"
@@ -518,116 +581,49 @@ const FamilyElderHealthPage: React.FC = () => {
           loading={healthLoading && healthRecords.length === 0}
         />
         <VitalCard
-          icon={<DeviceThermostatRoundedIcon fontSize="small" />}
+          icon={<Thermometer size={16} />}
           label="体温"
           value={latestRecord?.temperature !== undefined ? String(latestRecord.temperature) : '-'}
           unit="°C"
           color={vitalIndicatorColor(latestRecord?.temperature, temperatureColor)}
           loading={healthLoading && healthRecords.length === 0}
         />
-      </Box>
+      </div>
 
       {/* Tabs section */}
       <Card>
-        <CardContent>
+        <CardBody>
           <Tabs
-            value={tab}
-            onChange={(_, nextValue) => setTab(nextValue)}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{
-              borderBottom: 1,
-              borderColor: 'divider',
-              mb: 2,
-              '& .MuiTab-root': {
-                fontWeight: 600,
-                minHeight: 48,
+            activeKey={tab}
+            onChange={(key) => setTab(key as 'health' | 'alerts')}
+            items={[
+              {
+                key: 'health',
+                label: (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <HeartPulse size={16} />
+                    {`健康记录${healthTotal > 0 ? ` (${healthTotal})` : ''}`}
+                  </span>
+                ),
+                children: (
+                  <div style={{ paddingTop: 16 }}>{healthTable}</div>
+                ),
               },
-            }}
-          >
-            <Tab
-              value="health"
-              icon={<FavoriteRoundedIcon fontSize="small" />}
-              iconPosition="start"
-              label={`健康记录${healthTotal > 0 ? ` (${healthTotal})` : ''}`}
-            />
-            <Tab
-              value="alerts"
-              icon={<WarningAmberRoundedIcon fontSize="small" />}
-              iconPosition="start"
-              label={`风险预警${alertsTotal > 0 ? ` (${alertsTotal})` : ''}`}
-            />
-          </Tabs>
-
-          <Box
-            sx={{
-              borderRadius: 2,
-              bgcolor: tab === 'alerts' ? '#fef2f208' : '#f0fdf408',
-              p: { xs: 0, sm: 0.5 },
-            }}
-          >
-            {tab === 'health' ? (
-              <AppTable<HealthRecord>
-                columns={healthColumns}
-                dataSource={healthRecords}
-                loading={healthLoading}
-                rowKey="id"
-                pagination={{
-                  current: healthPage,
-                  pageSize,
-                  total: healthTotal,
-                  showTotal: (total) => `共 ${total} 条`,
-                }}
-                onChange={({ current }) => {
-                  if (current) setHealthPage(current);
-                }}
-                emptyText="暂无健康记录"
-              />
-            ) : (
-              <>
-                {!alertsLoading && alerts.length === 0 ? (
-                  <Box
-                    sx={{
-                      py: 8,
-                      textAlign: 'center',
-                      borderRadius: 3,
-                      bgcolor: 'background.default',
-                    }}
-                  >
-                    <SentimentDissatisfiedRoundedIcon
-                      sx={{ fontSize: 48, color: 'text.disabled', mb: 1.5 }}
-                    />
-                    <Typography color="text.secondary" variant="body1">
-                      暂无风险预警
-                    </Typography>
-                    <Typography color="text.disabled" variant="body2" sx={{ mt: 0.5 }}>
-                      当老人健康指标异常时，系统会自动生成预警
-                    </Typography>
-                  </Box>
-                ) : (
-                  <AppTable<AlertRecord>
-                    columns={alertColumns}
-                    dataSource={alerts}
-                    loading={alertsLoading}
-                    rowKey="id"
-                    pagination={{
-                      current: alertsPage,
-                      pageSize,
-                      total: alertsTotal,
-                      showTotal: (total) => `共 ${total} 条`,
-                    }}
-                    onChange={({ current }) => {
-                      if (current) setAlertsPage(current);
-                    }}
-                    emptyText="暂无风险预警"
-                  />
-                )}
-              </>
-            )}
-          </Box>
-        </CardContent>
+              {
+                key: 'alerts',
+                label: (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <AlertTriangle size={16} />
+                    {`风险预警${alertsTotal > 0 ? ` (${alertsTotal})` : ''}`}
+                  </span>
+                ),
+                children: <div style={{ paddingTop: 16 }}>{alertsContent}</div>,
+              },
+            ]}
+          />
+        </CardBody>
       </Card>
-    </Stack>
+    </div>
   );
 };
 

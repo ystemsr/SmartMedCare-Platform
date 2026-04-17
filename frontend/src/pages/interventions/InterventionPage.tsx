@@ -1,24 +1,13 @@
 import React, { useState, useCallback } from 'react';
+import { Plus, Pencil, Play, CheckCircle2, Square, Trash2 } from 'lucide-react';
 import {
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
+  Modal,
   Select,
-  Stack,
-  TextField,
-} from '@mui/material';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
-import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
-import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
-import StopRoundedIcon from '@mui/icons-material/StopRounded';
-import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+  Textarea,
+  confirm,
+} from '../../components/ui';
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
@@ -78,9 +67,13 @@ const InterventionPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('确定删除该干预记录？')) {
-      return;
-    }
+    const ok = await confirm({
+      title: '删除干预记录',
+      content: '确定删除该干预记录？',
+      intent: 'danger',
+      okText: '删除',
+    });
+    if (!ok) return;
 
     try {
       await deleteIntervention(id);
@@ -102,9 +95,12 @@ const InterventionPage: React.FC = () => {
       return;
     }
 
-    if (!window.confirm(`确认将该干预标记为${formatInterventionStatus(statusTarget.status)}？`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '更新干预状态',
+      content: `确认将该干预标记为${formatInterventionStatus(statusTarget.status)}？`,
+      intent: 'info',
+    });
+    if (!ok) return;
 
     try {
       await updateInterventionStatus(statusTarget.id, {
@@ -133,15 +129,15 @@ const InterventionPage: React.FC = () => {
         const interventionStatus = String(status ?? '');
         return (
           <Chip
-            size="small"
-            label={formatInterventionStatus(interventionStatus)}
-            sx={{
-              color: INTERVENTION_STATUS_COLORS[interventionStatus] || 'text.primary',
-              borderColor: INTERVENTION_STATUS_COLORS[interventionStatus] || 'divider',
-              bgcolor: 'transparent',
+            outlined
+            style={{
+              color: INTERVENTION_STATUS_COLORS[interventionStatus] || 'var(--smc-text)',
+              borderColor:
+                INTERVENTION_STATUS_COLORS[interventionStatus] || 'var(--smc-divider)',
             }}
-            variant="outlined"
-          />
+          >
+            {formatInterventionStatus(interventionStatus)}
+          </Chip>
         );
       },
     },
@@ -158,20 +154,21 @@ const InterventionPage: React.FC = () => {
       width: 320,
       fixed: 'right',
       render: (_, record) => (
-        <Stack direction="row" spacing={0.5} flexWrap="wrap">
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <PermissionGuard permission="intervention:create">
             <Button
-              size="small"
-              startIcon={<EditRoundedIcon />}
+              size="sm"
+              variant="text"
+              startIcon={<Pencil size={14} />}
               onClick={() => handleEdit(record)}
             >
               编辑
             </Button>
             {record.status === 'planned' && (
               <Button
-                size="small"
-                color="primary"
-                startIcon={<PlayArrowRoundedIcon />}
+                size="sm"
+                variant="text"
+                startIcon={<Play size={14} />}
                 onClick={() => openStatusModal(record.id, 'ongoing')}
               >
                 开始执行
@@ -179,9 +176,9 @@ const InterventionPage: React.FC = () => {
             )}
             {record.status === 'ongoing' && (
               <Button
-                size="small"
-                color="success"
-                startIcon={<TaskAltRoundedIcon />}
+                size="sm"
+                variant="text"
+                startIcon={<CheckCircle2 size={14} />}
                 onClick={() => openStatusModal(record.id, 'completed')}
               >
                 完成
@@ -189,24 +186,25 @@ const InterventionPage: React.FC = () => {
             )}
             {(record.status === 'planned' || record.status === 'ongoing') && (
               <Button
-                size="small"
-                color="inherit"
-                startIcon={<StopRoundedIcon />}
+                size="sm"
+                variant="text"
+                startIcon={<Square size={14} />}
                 onClick={() => openStatusModal(record.id, 'stopped')}
               >
                 停止
               </Button>
             )}
             <Button
-              size="small"
-              color="inherit"
-              startIcon={<DeleteRoundedIcon />}
+              size="sm"
+              variant="text"
+              danger
+              startIcon={<Trash2 size={14} />}
               onClick={() => handleDelete(record.id)}
             >
               删除
             </Button>
           </PermissionGuard>
-        </Stack>
+        </div>
       ),
     },
   ];
@@ -222,47 +220,33 @@ const InterventionPage: React.FC = () => {
         onSearch={handleSearch}
         searchPlaceholder="搜索干预记录"
         toolbar={
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} flexWrap="wrap">
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>状态</InputLabel>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ minWidth: 120 }}>
               <Select
                 label="状态"
                 value={query.status || ''}
-                onChange={(event) =>
-                  setQuery((prev) => ({ ...prev, status: event.target.value || undefined }))
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, status: v ? String(v) : undefined }))
                 }
-              >
-                <MenuItem value="">全部</MenuItem>
-                {INTERVENTION_STATUS_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>干预类型</InputLabel>
+                options={[{ label: '全部', value: '' }, ...INTERVENTION_STATUS_OPTIONS]}
+              />
+            </div>
+            <div style={{ minWidth: 120 }}>
               <Select
                 label="干预类型"
                 value={query.type || ''}
-                onChange={(event) =>
-                  setQuery((prev) => ({ ...prev, type: event.target.value || undefined }))
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, type: v ? String(v) : undefined }))
                 }
-              >
-                <MenuItem value="">全部</MenuItem>
-                {INTERVENTION_TYPE_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                options={[{ label: '全部', value: '' }, ...INTERVENTION_TYPE_OPTIONS]}
+              />
+            </div>
             <PermissionGuard permission="intervention:create">
-              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={handleCreate}>
+              <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
                 新建干预
               </Button>
             </PermissionGuard>
-          </Stack>
+          </div>
         }
       />
 
@@ -284,43 +268,36 @@ const InterventionPage: React.FC = () => {
         onCancel={() => setFormVisible(false)}
       />
 
-      <Dialog
+      <Modal
         open={statusModalVisible}
         onClose={() => {
           setStatusModalVisible(false);
           setStatusTarget(null);
         }}
-        fullWidth
-        maxWidth="sm"
+        title="更新干预状态"
+        width={520}
+        footer={
+          <>
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setStatusModalVisible(false);
+                setStatusTarget(null);
+              }}
+            >
+              取消
+            </Button>
+            <Button onClick={handleStatusSubmit}>保存</Button>
+          </>
+        }
       >
-        <DialogTitle>更新干预状态</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <TextField
-              label="执行结果"
-              value={statusResult}
-              onChange={(event) => setStatusResult(event.target.value)}
-              multiline
-              minRows={3}
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            color="inherit"
-            onClick={() => {
-              setStatusModalVisible(false);
-              setStatusTarget(null);
-            }}
-          >
-            取消
-          </Button>
-          <Button variant="contained" onClick={handleStatusSubmit}>
-            保存
-          </Button>
-        </DialogActions>
-      </Dialog>
+        <Textarea
+          label="执行结果"
+          value={statusResult}
+          onChange={(event) => setStatusResult(event.target.value)}
+          rows={4}
+        />
+      </Modal>
     </>
   );
 };

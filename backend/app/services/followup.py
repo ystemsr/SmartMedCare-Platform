@@ -43,11 +43,33 @@ class FollowupService:
         date_start: Optional[str] = None,
         date_end: Optional[str] = None,
     ):
-        """Get paginated list of followups."""
-        return await FollowupRepository.get_list(
+        """Get paginated list of followups, enriched with alert.source.
+
+        Looks up Alert.source for rows with a non-null alert_id so the UI
+        can badge AI-originated followups without an extra request.
+        """
+        page = await FollowupRepository.get_list(
             db, pagination, elder_id, assigned_to, status,
             plan_type, date_start, date_end,
         )
+
+        alert_ids = [
+            item.alert_id for item in page.items if item.alert_id is not None
+        ]
+        if alert_ids:
+            from sqlalchemy import select as sa_select
+
+            from app.models.alert import Alert
+
+            stmt = sa_select(Alert.id, Alert.source).where(Alert.id.in_(alert_ids))
+            rows = await db.execute(stmt)
+            source_map = {r[0]: r[1] for r in rows.all()}
+
+            for item in page.items:
+                if item.alert_id is not None:
+                    item.alert_source = source_map.get(item.alert_id)
+
+        return page
 
     @staticmethod
     async def update(

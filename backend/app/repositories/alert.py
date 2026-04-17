@@ -45,6 +45,7 @@ class AlertRepository:
         risk_level: Optional[str] = None,
         date_start: Optional[str] = None,
         date_end: Optional[str] = None,
+        source: Optional[str] = None,
     ):
         """Get paginated list of alerts with filters."""
         query = select(Alert).where(Alert.deleted_at.is_(None))
@@ -57,6 +58,8 @@ class AlertRepository:
             query = query.where(Alert.status == status)
         if risk_level is not None:
             query = query.where(Alert.risk_level == risk_level)
+        if source is not None:
+            query = query.where(Alert.source == source)
         if date_start is not None:
             query = query.where(Alert.created_at >= date_start)
         if date_end is not None:

@@ -27,6 +27,23 @@ class AlertService:
         return AlertResponse.model_validate(alert)
 
     @staticmethod
+    async def create_with_source(
+        db: AsyncSession, data: dict, source: str
+    ) -> AlertResponse:
+        """Create an alert with an explicit source (e.g. 'ml', 'rule').
+
+        The existing `create()` defaults source to 'manual' for API callers;
+        this method is for internal producers (rule engine, ML orchestrator)
+        that need to tag their origin.
+        """
+        data = dict(data)
+        data["source"] = source
+        data.setdefault("triggered_at", datetime.now(timezone.utc))
+        alert = await AlertRepository.create(db, data)
+        await db.commit()
+        return AlertResponse.model_validate(alert)
+
+    @staticmethod
     async def get_by_id(db: AsyncSession, alert_id: int) -> Optional[AlertResponse]:
         """Get an alert by ID."""
         alert = await AlertRepository.get_by_id(db, alert_id)
@@ -44,11 +61,12 @@ class AlertService:
         risk_level: Optional[str] = None,
         date_start: Optional[str] = None,
         date_end: Optional[str] = None,
+        source: Optional[str] = None,
     ):
         """Get paginated list of alerts."""
         return await AlertRepository.get_list(
             db, pagination, elder_id, type_, status, risk_level,
-            date_start, date_end,
+            date_start, date_end, source=source,
         )
 
     @staticmethod

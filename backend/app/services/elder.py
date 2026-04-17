@@ -28,11 +28,20 @@ class ElderService:
 
     @staticmethod
     async def get_elder(db: AsyncSession, elder_id: int) -> ElderResponse | None:
-        """Get elder details by ID."""
+        """Get elder details by ID, with latest prediction attached."""
         elder = await ElderRepository.get_by_id(db, elder_id)
         if elder is None:
             return None
-        return ElderResponse.model_validate(elder)
+        response = ElderResponse.model_validate(elder)
+
+        from app.repositories.bigdata import PredictionResultRepository
+
+        latest = await PredictionResultRepository.get_latest_for_elder(db, elder_id)
+        if latest is not None:
+            response.latest_risk_score = float(latest.health_score)
+            response.latest_high_risk = bool(latest.high_risk)
+            response.latest_prediction_at = latest.predicted_at
+        return response
 
     @staticmethod
     async def list_elders(
@@ -68,9 +77,21 @@ class ElderService:
             rows = await db.execute(stmt)
             username_map = {r[0]: r[1] for r in rows.all()}
 
+            # Batch fetch latest predictions per elder (no N+1)
+            from app.repositories.bigdata import PredictionResultRepository
+
+            latest_preds = await PredictionResultRepository.get_latest_for_elders(
+                db, elder_ids
+            )
+
             for item in result.items:
                 item.username = username_map.get(item.id)
                 item.family_count = family_counts.get(item.id, 0)
+                pred = latest_preds.get(item.id)
+                if pred is not None:
+                    item.latest_risk_score = float(pred.health_score)
+                    item.latest_high_risk = bool(pred.high_risk)
+                    item.latest_prediction_at = pred.predicted_at
 
         return result
 

@@ -28,6 +28,7 @@ async def list_alerts(
     type: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     risk_level: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
     date_start: Optional[str] = Query(None),
     date_end: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -36,7 +37,7 @@ async def list_alerts(
     """Get paginated list of alerts."""
     result = await AlertService.get_list(
         db, pagination, elder_id, type, status, risk_level,
-        date_start, date_end,
+        date_start, date_end, source=source,
     )
     return success_response(data=result.model_dump())
 

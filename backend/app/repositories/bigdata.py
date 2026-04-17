@@ -75,5 +75,41 @@ class PredictionResultRepository:
         return (await db.execute(stmt)).scalar_one_or_none()
 
     @staticmethod
+    async def get_latest_for_elders(
+        db: AsyncSession, elder_ids: list[int]
+    ) -> dict[int, PredictionResult]:
+        """Batch-fetch the latest prediction per elder for the given ids.
+
+        Uses a correlated subquery selecting max(predicted_at) per elder so
+        list endpoints avoid an N+1 query.
+        """
+        if not elder_ids:
+            return {}
+
+        from sqlalchemy import and_, func
+
+        subq = (
+            select(
+                PredictionResult.elder_id.label("eid"),
+                func.max(PredictionResult.predicted_at).label("max_at"),
+            )
+            .where(
+                PredictionResult.elder_id.in_(elder_ids),
+                PredictionResult.deleted_at.is_(None),
+            )
+            .group_by(PredictionResult.elder_id)
+            .subquery()
+        )
+        stmt = select(PredictionResult).join(
+            subq,
+            and_(
+                PredictionResult.elder_id == subq.c.eid,
+                PredictionResult.predicted_at == subq.c.max_at,
+            ),
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        return {row.elder_id: row for row in rows}
+
+    @staticmethod
     def to_response(row: PredictionResult) -> PredictionResultResponse:
         return PredictionResultResponse.model_validate(row)

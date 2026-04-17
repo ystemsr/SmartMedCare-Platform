@@ -58,6 +58,9 @@ class ElderResponse(BaseModel):
     family_count: int = 0
     tags: list[str] = []
     created_at: Optional[datetime] = None
+    latest_risk_score: Optional[float] = None
+    latest_high_risk: Optional[bool] = None
+    latest_prediction_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

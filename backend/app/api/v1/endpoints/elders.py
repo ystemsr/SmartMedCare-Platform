@@ -6,7 +6,7 @@ Includes nested routes for health records, medical records, and care records.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, UploadFile, File, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db, require_permission
@@ -311,11 +311,18 @@ async def revoke_invite_code(
 async def create_health_record(
     elder_id: int,
     body: HealthRecordCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     _user=Depends(require_permission("health_record:create")),
 ):
-    """Create a health record for an elder."""
-    result = await HealthArchiveService.create_health_record(db, elder_id, body)
+    """Create a health record for an elder.
+
+    Schedules an ML prediction + auto-dispatch in the background so the
+    response isn't blocked on model inference.
+    """
+    result = await HealthArchiveService.create_health_record(
+        db, elder_id, body, background_tasks=background_tasks
+    )
     return success_response(data=result.model_dump(mode="json"))
 
 

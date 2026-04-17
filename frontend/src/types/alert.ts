@@ -45,6 +45,7 @@ export interface AlertListQuery extends PaginationParams {
   type?: string;
   status?: string;
   risk_level?: string;
+  source?: string;
   date_start?: string;
   date_end?: string;
 }

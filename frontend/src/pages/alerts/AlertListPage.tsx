@@ -101,9 +101,40 @@ const AlertListPage: React.FC = () => {
     }
   };
 
+  const SOURCE_COLORS: Record<string, string> = {
+    manual: '#8c8c8c',
+    ml: '#722ed1',
+    rule: '#1677ff',
+  };
+  const SOURCE_LABELS: Record<string, string> = {
+    manual: '人工',
+    ml: 'AI',
+    rule: '规则',
+  };
+
   const columns: AppTableColumn<Alert>[] = [
     { title: '预警标题', dataIndex: 'title', width: 220 },
     { title: '类型', dataIndex: 'type', width: 150 },
+    {
+      title: '来源',
+      dataIndex: 'source',
+      width: 100,
+      render: (value: unknown) => {
+        const source = String(value ?? '');
+        return (
+          <Chip
+            size="small"
+            label={SOURCE_LABELS[source] || source || '-'}
+            sx={{
+              color: SOURCE_COLORS[source] || 'text.primary',
+              borderColor: SOURCE_COLORS[source] || 'divider',
+              bgcolor: 'transparent',
+            }}
+            variant="outlined"
+          />
+        );
+      },
+    },
     {
       title: '风险等级',
       dataIndex: 'risk_level',
@@ -249,6 +280,21 @@ const AlertListPage: React.FC = () => {
                     {option.label}
                   </MenuItem>
                 ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel>来源</InputLabel>
+              <Select
+                label="来源"
+                value={query.source || ''}
+                onChange={(event) =>
+                  setQuery((prev) => ({ ...prev, source: event.target.value || undefined }))
+                }
+              >
+                <MenuItem value="">全部</MenuItem>
+                <MenuItem value="manual">人工</MenuItem>
+                <MenuItem value="ml">AI</MenuItem>
+                <MenuItem value="rule">规则</MenuItem>
               </Select>
             </FormControl>
             <TextField

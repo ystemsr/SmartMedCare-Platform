@@ -27,6 +27,11 @@ const FamilyRegisterPage = lazy(() => import('../pages/family/FamilyRegisterPage
 const FamilyLayout = lazy(() => import('../layouts/FamilyLayout'));
 const FamilyHomePage = lazy(() => import('../pages/family-portal/FamilyHomePage'));
 const FamilyElderHealthPage = lazy(() => import('../pages/family-portal/FamilyElderHealthPage'));
+const BigDataDashboardPage = lazy(() => import('../pages/bigdata/BigDataDashboardPage'));
+const MLInferencePage = lazy(() => import('../pages/bigdata/MLInferencePage'));
+const JobManagerPage = lazy(() => import('../pages/bigdata/JobManagerPage'));
+const HdfsBrowserPage = lazy(() => import('../pages/bigdata/HdfsBrowserPage'));
+const HiveQueryPage = lazy(() => import('../pages/bigdata/HiveQueryPage'));
 
 /** Loading fallback for lazy-loaded pages */
 const PageLoading: React.FC = () => (
@@ -84,6 +89,11 @@ const AppRouter: React.FC = () => {
           <Route path="/doctors" element={<DoctorPage />} />
           <Route path="/family-members" element={<FamilyMemberPage />} />
           <Route path="/accounts/personal" element={<PersonalAccountPage />} />
+          <Route path="/bigdata" element={<BigDataDashboardPage />} />
+          <Route path="/bigdata/inference" element={<MLInferencePage />} />
+          <Route path="/bigdata/jobs" element={<JobManagerPage />} />
+          <Route path="/bigdata/hdfs" element={<HdfsBrowserPage />} />
+          <Route path="/bigdata/hive" element={<HiveQueryPage />} />
         </Route>
 
         {/* Elder portal routes */}

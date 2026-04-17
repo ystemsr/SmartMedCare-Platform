@@ -1,8 +1,5 @@
 import React, { useMemo } from 'react';
-import GroupAddRoundedIcon from '@mui/icons-material/GroupAddRounded';
-import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
+import { Home, User, HeartPulse, UserPlus } from 'lucide-react';
 import AppShell, { type AppShellMenuItem } from '../components/AppShell';
 
 const ElderLayout: React.FC = () => {
@@ -10,22 +7,22 @@ const ElderLayout: React.FC = () => {
     return [
       {
         key: '/elder',
-        icon: <HomeRoundedIcon />,
+        icon: <Home size={20} />,
         label: '首页',
       },
       {
         key: '/elder/health',
-        icon: <MonitorHeartRoundedIcon />,
+        icon: <HeartPulse size={20} />,
         label: '健康档案',
       },
       {
         key: '/elder/invite',
-        icon: <GroupAddRoundedIcon />,
+        icon: <UserPlus size={20} />,
         label: '邀请家属',
       },
       {
         key: '/elder/personal',
-        icon: <PersonRoundedIcon />,
+        icon: <User size={20} />,
         label: '个人账户',
       },
     ];

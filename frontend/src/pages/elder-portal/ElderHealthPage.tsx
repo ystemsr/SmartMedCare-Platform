@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Card,
-  CardContent,
-  Stack,
-  Typography,
-} from '@mui/material';
-import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
+import { Activity } from 'lucide-react';
+import { Alert, Card, CardBody } from '@/components/ui';
 import { useAuthStore } from '../../store/auth';
 import { getElderHealthRecords } from '../../api/elderPortal';
-import AppTable, { type AppTableColumn, type AppTablePagination } from '../../components/AppTable';
+import AppTable, {
+  type AppTableColumn,
+  type AppTablePagination,
+} from '../../components/AppTable';
 import { formatDate, formatDateTime } from '../../utils/formatter';
 
 interface HealthRecord {
@@ -59,60 +56,63 @@ const ElderHealthPage: React.FC = () => {
     void fetchRecords();
   }, [elderId, pagination.current, pagination.pageSize]);
 
-  const columns = useMemo<AppTableColumn<HealthRecord>[]>(() => [
-    {
-      title: '记录日期',
-      dataIndex: 'record_date',
-      key: 'record_date',
-      width: 120,
-      render: (value) => formatDate(value as string | undefined),
-    },
-    {
-      title: '类型',
-      dataIndex: 'record_type',
-      key: 'record_type',
-      width: 120,
-    },
-    {
-      title: '血压',
-      dataIndex: 'blood_pressure_systolic',
-      key: 'blood_pressure',
-      width: 120,
-      render: (_value, record) => {
-        if (record.blood_pressure_systolic && record.blood_pressure_diastolic) {
-          return `${record.blood_pressure_systolic}/${record.blood_pressure_diastolic} mmHg`;
-        }
-        return '-';
+  const columns = useMemo<AppTableColumn<HealthRecord>[]>(
+    () => [
+      {
+        title: '记录日期',
+        dataIndex: 'record_date',
+        key: 'record_date',
+        width: 120,
+        render: (value) => formatDate(value as string | undefined),
       },
-    },
-    {
-      title: '心率',
-      dataIndex: 'heart_rate',
-      key: 'heart_rate',
-      width: 100,
-      render: (value) => (value != null ? `${value} bpm` : '-'),
-    },
-    {
-      title: '血糖',
-      dataIndex: 'blood_glucose',
-      key: 'blood_glucose',
-      width: 120,
-      render: (value) => (value != null ? `${value} mmol/L` : '-'),
-    },
-    {
-      title: '摘要',
-      dataIndex: 'summary',
-      key: 'summary',
-      ellipsis: true,
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-      render: (value) => formatDateTime(value as string | undefined),
-    },
-  ], []);
+      {
+        title: '类型',
+        dataIndex: 'record_type',
+        key: 'record_type',
+        width: 120,
+      },
+      {
+        title: '血压',
+        dataIndex: 'blood_pressure_systolic',
+        key: 'blood_pressure',
+        width: 120,
+        render: (_value, record) => {
+          if (record.blood_pressure_systolic && record.blood_pressure_diastolic) {
+            return `${record.blood_pressure_systolic}/${record.blood_pressure_diastolic} mmHg`;
+          }
+          return '-';
+        },
+      },
+      {
+        title: '心率',
+        dataIndex: 'heart_rate',
+        key: 'heart_rate',
+        width: 100,
+        render: (value) => (value != null ? `${value} bpm` : '-'),
+      },
+      {
+        title: '血糖',
+        dataIndex: 'blood_glucose',
+        key: 'blood_glucose',
+        width: 120,
+        render: (value) => (value != null ? `${value} mmol/L` : '-'),
+      },
+      {
+        title: '摘要',
+        dataIndex: 'summary',
+        key: 'summary',
+        ellipsis: true,
+      },
+      {
+        title: '创建时间',
+        dataIndex: 'created_at',
+        key: 'created_at',
+        width: 180,
+        render: (value) => formatDateTime(value as string | undefined),
+      },
+    ],
+    [],
+  );
 
   const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
     setPagination((prev) => ({
@@ -139,19 +139,19 @@ const ElderHealthPage: React.FC = () => {
   }
 
   return (
-    <Stack spacing={3}>
-      <Card sx={{ borderRadius: 4 }}>
-        <CardContent sx={{ p: { xs: 2.5, sm: 3.5 } }}>
-          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
-            <MonitorHeartRoundedIcon sx={{ color: '#ec407a' }} />
-            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.15rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <Card style={{ borderRadius: 18 }}>
+        <CardBody style={{ padding: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <Activity size={22} style={{ color: '#ec407a' }} />
+            <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--smc-text)' }}>
               我的健康档案
-            </Typography>
-          </Stack>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>
+            </div>
+          </div>
+          <div style={{ fontSize: 15, color: 'var(--smc-text-2)', lineHeight: 1.7 }}>
             以下是您的所有健康记录，由医护人员定期录入。如有疑问请咨询您的主治医生。
-          </Typography>
-        </CardContent>
+          </div>
+        </CardBody>
       </Card>
 
       <AppTable<HealthRecord>
@@ -163,7 +163,7 @@ const ElderHealthPage: React.FC = () => {
         onChange={handleTableChange}
         emptyText="暂无健康记录，请等待医护人员录入"
       />
-    </Stack>
+    </div>
   );
 };
 

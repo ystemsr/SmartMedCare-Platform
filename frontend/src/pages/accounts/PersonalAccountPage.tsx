@@ -1,14 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Divider,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Button, Card, Divider, Input } from '../../components/ui';
 import { useAuthStore } from '../../store/auth';
 import { changePassword } from '../../api/auth';
 import { message } from '../../utils/message';
@@ -87,99 +78,95 @@ const PersonalAccountPage: React.FC = () => {
     }
   };
 
+  const infoItems: [string, string][] = [
+    ['用户名', user?.username || '-'],
+    ['姓名', user?.real_name || '-'],
+    ['手机号', user?.phone || '-'],
+    ['邮箱', user?.email || '-'],
+    ['角色', user?.roles?.join(', ') || '-'],
+  ];
+
   return (
-    <Stack spacing={3}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-            个人信息
-          </Typography>
-          <Box
-            sx={{
+        <div style={{ padding: 24 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700 }}>个人信息</h3>
+          <div
+            style={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
-              gap: 2,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 16,
             }}
           >
-            {[
-              ['用户名', user?.username || '-'],
-              ['姓名', user?.real_name || '-'],
-              ['手机号', user?.phone || '-'],
-              ['邮箱', user?.email || '-'],
-              ['角色', user?.roles?.join(', ') || '-'],
-            ].map(([label, value]) => (
-              <Box key={label as string} sx={{ p: 2, borderRadius: 2, bgcolor: 'background.default' }}>
-                <Typography variant="body2" color="text.secondary">
-                  {label}
-                </Typography>
-                <Typography variant="subtitle1" sx={{ mt: 0.5, fontWeight: 600 }}>
-                  {value}
-                </Typography>
-              </Box>
+            {infoItems.map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  background: 'var(--smc-bg)',
+                }}
+              >
+                <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>{label}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>{value}</div>
+              </div>
             ))}
-          </Box>
-        </CardContent>
+          </div>
+        </div>
       </Card>
 
       <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-            修改密码
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <div style={{ padding: 24 }}>
+          <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>修改密码</h3>
+          <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--smc-text-2)' }}>
             密码至少 6 个字符，确认新密码需保持一致。
-          </Typography>
+          </p>
 
-          <Box
-            component="form"
+          <form
             onSubmit={(event) => {
               event.preventDefault();
               void handleChangePassword(values);
             }}
             noValidate
-            sx={{ maxWidth: 440 }}
+            style={{ maxWidth: 440 }}
           >
-            <Stack spacing={2.25}>
-              <TextField
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <Input
                 label="当前密码"
                 type="password"
                 value={values.old_password}
                 onChange={(event) => updateField('old_password', event.target.value)}
-                error={Boolean(errors.old_password)}
-                helperText={errors.old_password || ' '}
-                fullWidth
+                error={errors.old_password}
               />
 
               <Divider />
 
-              <TextField
+              <Input
                 label="新密码"
                 type="password"
                 value={values.new_password}
                 onChange={(event) => updateField('new_password', event.target.value)}
-                error={Boolean(errors.new_password)}
-                helperText={errors.new_password || ' '}
-                fullWidth
+                error={errors.new_password}
               />
 
-              <TextField
+              <Input
                 label="确认新密码"
                 type="password"
                 value={values.confirm_password}
                 onChange={(event) => updateField('confirm_password', event.target.value)}
-                error={Boolean(errors.confirm_password)}
-                helperText={errors.confirm_password || ' '}
-                fullWidth
+                error={errors.confirm_password}
               />
 
-              <Button type="submit" variant="contained" disabled={loading}>
-                {loading ? '修改中...' : '修改密码'}
-              </Button>
-            </Stack>
-          </Box>
-        </CardContent>
+              <div>
+                <Button type="submit" loading={loading} disabled={loading}>
+                  {loading ? '修改中...' : '修改密码'}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </div>
       </Card>
-    </Stack>
+    </div>
   );
 };
 

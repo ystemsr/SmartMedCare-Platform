@@ -1,26 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Chip,
-  FormControl,
-  InputLabel,
-  List,
-  ListItem,
-  ListItemText,
-  MenuItem,
-  Select,
-  Stack,
-  Typography,
-} from '@mui/material';
-import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
-import PendingActionsRoundedIcon from '@mui/icons-material/PendingActionsRounded';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import LocalHospitalRoundedIcon from '@mui/icons-material/LocalHospitalRounded';
-import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
+import { Users, AlertTriangle, Clock, CheckCircle2, Stethoscope, LineChart } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import { Card, Chip, Select, type ChipTone } from '../../components/ui';
 import StatCard from '../../components/StatCard';
 import { getOverview, getTodos, getTrends } from '../../api/dashboard';
 import type { DashboardOverview, TodoItem, TrendData } from '../../api/dashboard';
@@ -74,7 +55,7 @@ const DashboardPage: React.FC = () => {
     [trends],
   );
 
-  const todoPriorityColor: Record<string, 'default' | 'primary' | 'warning' | 'error'> = {
+  const todoPriorityTone: Record<string, ChipTone> = {
     low: 'default',
     medium: 'primary',
     high: 'warning',
@@ -82,118 +63,118 @@ const DashboardPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'grid', gap: 3 }}>
-      <Box
-        sx={{
+    <div style={{ display: 'grid', gap: 24 }}>
+      <div
+        style={{
           display: 'grid',
-          gap: 2.5,
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: 'repeat(2, minmax(0, 1fr))',
-            lg: 'repeat(3, minmax(0, 1fr))',
-          },
+          gap: 20,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
         }}
       >
-        <StatCard title="老人总数" value={overview?.elder_total ?? '-'} icon={<GroupsRoundedIcon />} color="#1f6feb" loading={loading} />
-        <StatCard title="高风险人数" value={overview?.high_risk_total ?? '-'} icon={<WarningAmberRoundedIcon />} color="#d14343" loading={loading} />
-        <StatCard title="待处理预警" value={overview?.pending_alert_total ?? '-'} icon={<PendingActionsRoundedIcon />} color="#d9822b" loading={loading} />
-        <StatCard title="待随访任务" value={overview?.todo_followup_total ?? '-'} icon={<LocalHospitalRoundedIcon />} color="#0f9d8f" loading={loading} />
-        <StatCard title="今日已完成随访" value={overview?.completed_followup_today ?? '-'} icon={<CheckCircleRoundedIcon />} color="#1f9d63" loading={loading} />
-        <StatCard title="今日评估数" value={overview?.assessment_total_today ?? '-'} icon={<InsightsRoundedIcon />} color="#13c2c2" loading={loading} />
-      </Box>
+        <StatCard title="老人总数" value={overview?.elder_total ?? '-'} icon={<Users size={20} />} color="#1f6feb" loading={loading} />
+        <StatCard title="高风险人数" value={overview?.high_risk_total ?? '-'} icon={<AlertTriangle size={20} />} color="#d14343" loading={loading} />
+        <StatCard title="待处理预警" value={overview?.pending_alert_total ?? '-'} icon={<Clock size={20} />} color="#d9822b" loading={loading} />
+        <StatCard title="待随访任务" value={overview?.todo_followup_total ?? '-'} icon={<Stethoscope size={20} />} color="#0f9d8f" loading={loading} />
+        <StatCard title="今日已完成随访" value={overview?.completed_followup_today ?? '-'} icon={<CheckCircle2 size={20} />} color="#1f9d63" loading={loading} />
+        <StatCard title="今日评估数" value={overview?.assessment_total_today ?? '-'} icon={<LineChart size={20} />} color="#13c2c2" loading={loading} />
+      </div>
 
-      <Box
-        sx={{
+      <div
+        style={{
           display: 'grid',
-          gap: 2.5,
-          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(320px, 1fr)' },
+          gap: 20,
+          gridTemplateColumns: 'minmax(0, 2fr) minmax(320px, 1fr)',
         }}
+        className="smc-dashboard-grid"
       >
-        <Card sx={{ height: '100%' }}>
-          <CardContent>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              justifyContent="space-between"
-              spacing={2}
-              sx={{ mb: 2 }}
+        <Card style={{ height: '100%' }}>
+          <div style={{ padding: 20 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 16,
+                marginBottom: 16,
+                flexWrap: 'wrap',
+              }}
             >
-              <Box>
-                <Typography variant="h6">趋势数据</Typography>
-                <Typography variant="body2" color="text.secondary">
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>趋势数据</h3>
+                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--smc-text-2)' }}>
                   近7天、30天或90天的变化趋势
-                </Typography>
-              </Box>
-              <FormControl size="small" sx={{ minWidth: 140 }}>
-                <InputLabel>时间范围</InputLabel>
+                </p>
+              </div>
+              <div style={{ width: 160 }}>
                 <Select
-                  label="时间范围"
                   value={trendRange}
-                  onChange={(event) => setTrendRange(event.target.value as string)}
-                >
-                  <MenuItem value="7d">近7天</MenuItem>
-                  <MenuItem value="30d">近30天</MenuItem>
-                  <MenuItem value="90d">近90天</MenuItem>
-                </Select>
-              </FormControl>
-            </Stack>
+                  onChange={(v) => setTrendRange(String(v))}
+                  options={[
+                    { label: '近7天', value: '7d' },
+                    { label: '近30天', value: '30d' },
+                    { label: '近90天', value: '90d' },
+                  ]}
+                />
+              </div>
+            </div>
             {trends ? (
               <ReactECharts option={chartOption} style={{ height: 350 }} />
             ) : (
-              <Typography color="text.secondary" sx={{ py: 6, textAlign: 'center' }}>
+              <div
+                style={{
+                  color: 'var(--smc-text-2)',
+                  padding: '48px 0',
+                  textAlign: 'center',
+                }}
+              >
                 暂无趋势数据
-              </Typography>
+              </div>
             )}
-          </CardContent>
+          </div>
         </Card>
 
-        <Card sx={{ height: '100%' }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              近期待办
-            </Typography>
-            <List disablePadding>
-              {todos.map((item) => (
-                <ListItem
+        <Card style={{ height: '100%' }}>
+          <div style={{ padding: 20 }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 600 }}>近期待办</h3>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {todos.map((item, idx) => (
+                <div
                   key={item.id}
-                  divider
-                  disableGutters
-                  sx={{ py: 1.25, alignItems: 'flex-start' }}
+                  style={{
+                    padding: '10px 0',
+                    borderBottom:
+                      idx === todos.length - 1 ? 'none' : '1px solid var(--smc-divider)',
+                  }}
                 >
-                  <ListItemText
-                    primary={
-                      <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 0.75 }}>
-                        <Chip label={item.type} size="small" variant="outlined" />
-                        <Chip
-                          label={item.priority}
-                          size="small"
-                          color={todoPriorityColor[item.priority] || 'default'}
-                          variant="outlined"
-                        />
-                      </Stack>
-                    }
-                    secondary={
-                      <>
-                        <Typography component="span" variant="body2" color="text.primary">
-                          {item.title}
-                        </Typography>
-                        <Typography component="span" variant="body2" display="block">
-                          {item.description}
-                        </Typography>
-                      </>
-                    }
-                  />
-                </ListItem>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                    <Chip tone="default" outlined>
+                      {item.type}
+                    </Chip>
+                    <Chip tone={todoPriorityTone[item.priority] || 'default'} outlined>
+                      {item.priority}
+                    </Chip>
+                  </div>
+                  <div style={{ fontSize: 14, color: 'var(--smc-text)' }}>{item.title}</div>
+                  <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginTop: 2 }}>
+                    {item.description}
+                  </div>
+                </div>
               ))}
               {!loading && todos.length === 0 && (
-                <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+                <div
+                  style={{
+                    color: 'var(--smc-text-2)',
+                    padding: '32px 0',
+                    textAlign: 'center',
+                  }}
+                >
                   暂无待办事项
-                </Typography>
+                </div>
               )}
-            </List>
-          </CardContent>
+            </div>
+          </div>
         </Card>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 };
 

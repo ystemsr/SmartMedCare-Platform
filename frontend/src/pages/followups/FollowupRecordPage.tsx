@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Chip } from '@mui/material';
+import { Chip } from '../../components/ui';
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import { getFollowups } from '../../api/followups';
@@ -51,15 +51,14 @@ const FollowupRecordPage: React.FC = () => {
         const followupStatus = String(status ?? '');
         return (
           <Chip
-            size="small"
-            label={formatFollowupStatus(followupStatus)}
-            sx={{
-              color: FOLLOWUP_STATUS_COLORS[followupStatus] || 'text.primary',
-              borderColor: FOLLOWUP_STATUS_COLORS[followupStatus] || 'divider',
-              bgcolor: 'transparent',
+            outlined
+            style={{
+              color: FOLLOWUP_STATUS_COLORS[followupStatus] || 'var(--smc-text)',
+              borderColor: FOLLOWUP_STATUS_COLORS[followupStatus] || 'var(--smc-divider)',
             }}
-            variant="outlined"
-          />
+          >
+            {formatFollowupStatus(followupStatus)}
+          </Chip>
         );
       },
     },

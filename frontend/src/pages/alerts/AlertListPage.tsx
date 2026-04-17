@@ -1,20 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import {
-  Button,
-  Chip,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-} from '@mui/material';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
-import ManageSearchRoundedIcon from '@mui/icons-material/ManageSearchRounded';
-import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
-import BlockRoundedIcon from '@mui/icons-material/BlockRounded';
+import { Plus, Eye, Search, CheckCircle2, Ban } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Button, Chip, DatePicker, Select, confirm } from '../../components/ui';
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
@@ -50,6 +37,17 @@ const createFields: FormFieldConfig[] = [
   },
 ];
 
+const SOURCE_COLORS: Record<string, string> = {
+  manual: '#8c8c8c',
+  ml: '#722ed1',
+  rule: '#1677ff',
+};
+const SOURCE_LABELS: Record<string, string> = {
+  manual: '人工',
+  ml: 'AI',
+  rule: '规则',
+};
+
 const AlertListPage: React.FC = () => {
   const navigate = useNavigate();
   const [formVisible, setFormVisible] = useState(false);
@@ -64,9 +62,12 @@ const AlertListPage: React.FC = () => {
     useTable<Alert, AlertListQuery>(fetchFn);
 
   const handleStatusUpdate = async (id: number, status: Alert['status']) => {
-    if (!window.confirm(`确认将该预警标记为${formatAlertStatus(status)}？`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '更新预警状态',
+      content: `确认将该预警标记为${formatAlertStatus(status)}？`,
+      intent: status === 'ignored' ? 'warning' : 'info',
+    });
+    if (!ok) return;
 
     try {
       await updateAlertStatus(id, { status });
@@ -83,9 +84,12 @@ const AlertListPage: React.FC = () => {
       return;
     }
 
-    if (!window.confirm(`确认将选中的预警批量标记为${formatAlertStatus(status)}？`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '批量处理',
+      content: `确认将选中的预警批量标记为${formatAlertStatus(status)}？`,
+      intent: status === 'ignored' ? 'warning' : 'info',
+    });
+    if (!ok) return;
 
     try {
       await batchUpdateAlertStatus({
@@ -101,17 +105,6 @@ const AlertListPage: React.FC = () => {
     }
   };
 
-  const SOURCE_COLORS: Record<string, string> = {
-    manual: '#8c8c8c',
-    ml: '#722ed1',
-    rule: '#1677ff',
-  };
-  const SOURCE_LABELS: Record<string, string> = {
-    manual: '人工',
-    ml: 'AI',
-    rule: '规则',
-  };
-
   const columns: AppTableColumn<Alert>[] = [
     { title: '预警标题', dataIndex: 'title', width: 220 },
     { title: '类型', dataIndex: 'type', width: 150 },
@@ -123,15 +116,14 @@ const AlertListPage: React.FC = () => {
         const source = String(value ?? '');
         return (
           <Chip
-            size="small"
-            label={SOURCE_LABELS[source] || source || '-'}
-            sx={{
-              color: SOURCE_COLORS[source] || 'text.primary',
-              borderColor: SOURCE_COLORS[source] || 'divider',
-              bgcolor: 'transparent',
+            outlined
+            style={{
+              color: SOURCE_COLORS[source] || 'var(--smc-text)',
+              borderColor: SOURCE_COLORS[source] || 'var(--smc-divider)',
             }}
-            variant="outlined"
-          />
+          >
+            {SOURCE_LABELS[source] || source || '-'}
+          </Chip>
         );
       },
     },
@@ -143,15 +135,14 @@ const AlertListPage: React.FC = () => {
         const riskLevel = String(level ?? '');
         return (
           <Chip
-            size="small"
-            label={formatRiskLevel(riskLevel)}
-            sx={{
-              color: RISK_LEVEL_COLORS[riskLevel] || 'text.primary',
-              borderColor: RISK_LEVEL_COLORS[riskLevel] || 'divider',
-              bgcolor: 'transparent',
+            outlined
+            style={{
+              color: RISK_LEVEL_COLORS[riskLevel] || 'var(--smc-text)',
+              borderColor: RISK_LEVEL_COLORS[riskLevel] || 'var(--smc-divider)',
             }}
-            variant="outlined"
-          />
+          >
+            {formatRiskLevel(riskLevel)}
+          </Chip>
         );
       },
     },
@@ -163,15 +154,14 @@ const AlertListPage: React.FC = () => {
         const alertStatus = String(status ?? '');
         return (
           <Chip
-            size="small"
-            label={formatAlertStatus(alertStatus)}
-            sx={{
-              color: ALERT_STATUS_COLORS[alertStatus] || 'text.primary',
-              borderColor: ALERT_STATUS_COLORS[alertStatus] || 'divider',
-              bgcolor: 'transparent',
+            outlined
+            style={{
+              color: ALERT_STATUS_COLORS[alertStatus] || 'var(--smc-text)',
+              borderColor: ALERT_STATUS_COLORS[alertStatus] || 'var(--smc-divider)',
             }}
-            variant="outlined"
-          />
+          >
+            {formatAlertStatus(alertStatus)}
+          </Chip>
         );
       },
     },
@@ -187,10 +177,11 @@ const AlertListPage: React.FC = () => {
       width: 280,
       fixed: 'right',
       render: (_, record) => (
-        <Stack direction="row" spacing={0.5} flexWrap="wrap">
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <Button
-            size="small"
-            startIcon={<VisibilityRoundedIcon />}
+            size="sm"
+            variant="text"
+            startIcon={<Eye size={14} />}
             onClick={() => navigate(`/alerts/${record.id}`)}
           >
             详情
@@ -198,9 +189,9 @@ const AlertListPage: React.FC = () => {
           <PermissionGuard permission="alert:update">
             {record.status === 'pending' && (
               <Button
-                size="small"
-                color="primary"
-                startIcon={<ManageSearchRoundedIcon />}
+                size="sm"
+                variant="text"
+                startIcon={<Search size={14} />}
                 onClick={() => handleStatusUpdate(record.id, 'processing')}
               >
                 处理
@@ -208,9 +199,9 @@ const AlertListPage: React.FC = () => {
             )}
             {record.status === 'processing' && (
               <Button
-                size="small"
-                color="success"
-                startIcon={<TaskAltRoundedIcon />}
+                size="sm"
+                variant="text"
+                startIcon={<CheckCircle2 size={14} />}
                 onClick={() => handleStatusUpdate(record.id, 'resolved')}
               >
                 解决
@@ -218,16 +209,16 @@ const AlertListPage: React.FC = () => {
             )}
             {(record.status === 'pending' || record.status === 'processing') && (
               <Button
-                size="small"
-                color="inherit"
-                startIcon={<BlockRoundedIcon />}
+                size="sm"
+                variant="text"
+                startIcon={<Ban size={14} />}
                 onClick={() => handleStatusUpdate(record.id, 'ignored')}
               >
                 忽略
               </Button>
             )}
           </PermissionGuard>
-        </Stack>
+        </div>
       ),
     },
   ];
@@ -247,76 +238,60 @@ const AlertListPage: React.FC = () => {
           onChange: setSelectedRowKeys,
         }}
         toolbar={
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} flexWrap="wrap">
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>状态</InputLabel>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ minWidth: 120 }}>
               <Select
                 label="状态"
                 value={query.status || ''}
-                onChange={(event) =>
-                  setQuery((prev) => ({ ...prev, status: event.target.value || undefined }))
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, status: v ? String(v) : undefined }))
                 }
-              >
-                <MenuItem value="">全部</MenuItem>
-                {ALERT_STATUS_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>风险等级</InputLabel>
+                options={[{ label: '全部', value: '' }, ...ALERT_STATUS_OPTIONS]}
+              />
+            </div>
+            <div style={{ minWidth: 120 }}>
               <Select
                 label="风险等级"
                 value={query.risk_level || ''}
-                onChange={(event) =>
-                  setQuery((prev) => ({ ...prev, risk_level: event.target.value || undefined }))
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, risk_level: v ? String(v) : undefined }))
                 }
-              >
-                <MenuItem value="">全部</MenuItem>
-                {RISK_LEVEL_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>来源</InputLabel>
+                options={[{ label: '全部', value: '' }, ...RISK_LEVEL_OPTIONS]}
+              />
+            </div>
+            <div style={{ minWidth: 120 }}>
               <Select
                 label="来源"
                 value={query.source || ''}
-                onChange={(event) =>
-                  setQuery((prev) => ({ ...prev, source: event.target.value || undefined }))
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, source: v ? String(v) : undefined }))
                 }
-              >
-                <MenuItem value="">全部</MenuItem>
-                <MenuItem value="manual">人工</MenuItem>
-                <MenuItem value="ml">AI</MenuItem>
-                <MenuItem value="rule">规则</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField
-              label="开始日期"
-              type="date"
-              size="small"
-              value={query.date_start || ''}
-              onChange={(event) =>
-                setQuery((prev) => ({ ...prev, date_start: event.target.value || undefined }))
-              }
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              label="结束日期"
-              type="date"
-              size="small"
-              value={query.date_end || ''}
-              onChange={(event) =>
-                setQuery((prev) => ({ ...prev, date_end: event.target.value || undefined }))
-              }
-              InputLabelProps={{ shrink: true }}
-            />
+                options={[
+                  { label: '全部', value: '' },
+                  { label: '人工', value: 'manual' },
+                  { label: 'AI', value: 'ml' },
+                  { label: '规则', value: 'rule' },
+                ]}
+              />
+            </div>
+            <div style={{ minWidth: 160 }}>
+              <DatePicker
+                label="开始日期"
+                value={query.date_start || null}
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, date_start: v || undefined }))
+                }
+              />
+            </div>
+            <div style={{ minWidth: 160 }}>
+              <DatePicker
+                label="结束日期"
+                value={query.date_end || null}
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, date_end: v || undefined }))
+                }
+              />
+            </div>
             <Button
               variant="outlined"
               onClick={() => handleBatchStatus('resolved')}
@@ -332,15 +307,11 @@ const AlertListPage: React.FC = () => {
               批量忽略
             </Button>
             <PermissionGuard permission="alert:update">
-              <Button
-                variant="contained"
-                startIcon={<AddRoundedIcon />}
-                onClick={() => setFormVisible(true)}
-              >
+              <Button startIcon={<Plus size={14} />} onClick={() => setFormVisible(true)}>
                 手动创建
               </Button>
             </PermissionGuard>
-          </Stack>
+          </div>
         }
       />
 

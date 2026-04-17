@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Chip } from '@mui/material';
+import { Chip } from '../../components/ui';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import { useTable } from '../../hooks/useTable';
 import { getFamilyMembers } from '../../api/family';
@@ -27,7 +27,7 @@ const FamilyMemberPage: React.FC = () => {
       width: 100,
       render: (value) => {
         const relationship = String(value ?? '');
-        return <Chip size="small" label={relationship || '-'} variant="outlined" />;
+        return <Chip outlined>{relationship || '-'}</Chip>;
       },
     },
     {

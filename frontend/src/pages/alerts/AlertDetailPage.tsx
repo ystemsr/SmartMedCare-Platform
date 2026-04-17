@@ -1,22 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Stack,
-  Step,
-  StepLabel,
-  Stepper,
-  Typography,
-} from '@mui/material';
-import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
-import ManageSearchRoundedIcon from '@mui/icons-material/ManageSearchRounded';
-import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
-import BlockRoundedIcon from '@mui/icons-material/BlockRounded';
+import { ArrowLeft, Search, CheckCircle2, Ban, Check } from 'lucide-react';
+import { Button, Card, Chip, Spinner, confirm } from '../../components/ui';
 import { getAlertDetail, updateAlertStatus } from '../../api/alerts';
 import { formatDateTime, formatRiskLevel, formatAlertStatus } from '../../utils/formatter';
 import { RISK_LEVEL_COLORS, ALERT_STATUS_COLORS } from '../../utils/constants';
@@ -35,16 +20,61 @@ function DetailItem({
   fullWidth?: boolean;
 }) {
   return (
-    <Box sx={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
-      <Stack spacing={0.5}>
-        <Typography variant="caption" color="text.secondary">
-          {label}
-        </Typography>
-        <Typography variant="body1" sx={{ wordBreak: 'break-word' }}>
-          {value ?? '-'}
-        </Typography>
-      </Stack>
-    </Box>
+    <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
+      <div style={{ fontSize: 12, color: 'var(--smc-text-2)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 14, wordBreak: 'break-word' }}>{value ?? '-'}</div>
+    </div>
+  );
+}
+
+interface StepperItemProps {
+  label: string;
+  subLabel?: string;
+  done: boolean;
+  active: boolean;
+}
+
+function StepperItem({ label, subLabel, done, active }: StepperItemProps) {
+  const color = done
+    ? 'var(--smc-success)'
+    : active
+      ? 'var(--smc-primary)'
+      : 'var(--smc-text-3)';
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        minWidth: 96,
+      }}
+    >
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          border: `2px solid ${color}`,
+          color,
+          background: done ? color : 'transparent',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 13,
+          fontWeight: 600,
+          marginBottom: 6,
+        }}
+      >
+        {done ? <Check size={14} color="#fff" /> : null}
+      </div>
+      <div style={{ fontSize: 14, color: active ? 'var(--smc-text)' : 'var(--smc-text-2)' }}>
+        {label}
+      </div>
+      {subLabel && (
+        <div style={{ fontSize: 12, color: 'var(--smc-text-3)', marginTop: 2 }}>{subLabel}</div>
+      )}
+    </div>
   );
 }
 
@@ -73,9 +103,12 @@ const AlertDetailPage: React.FC = () => {
   }, [fetchAlert]);
 
   const handleStatusUpdate = async (status: Alert['status']) => {
-    if (!window.confirm(`确认将该预警标记为${formatAlertStatus(status)}？`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '更新预警状态',
+      content: `确认将该预警标记为${formatAlertStatus(status)}？`,
+      intent: status === 'ignored' ? 'warning' : 'info',
+    });
+    if (!ok) return;
 
     try {
       await updateAlertStatus(alertId, { status });
@@ -91,63 +124,64 @@ const AlertDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
-        <CircularProgress size={40} />
-      </Box>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '96px 0' }}>
+        <Spinner />
+      </div>
     );
   }
 
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
-      <Button
-        startIcon={<ArrowBackRoundedIcon />}
-        onClick={() => navigate('/alerts')}
-        sx={{ alignSelf: 'flex-start' }}
-      >
-        返回列表
-      </Button>
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div>
+        <Button variant="text" startIcon={<ArrowLeft size={14} />} onClick={() => navigate('/alerts')}>
+          返回列表
+        </Button>
+      </div>
 
       <Card>
-        <CardContent>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2}>
-            <Box>
-              <Typography variant="h5" sx={{ mb: 0.5 }}>
-                预警详情
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
+        <div style={{ padding: 24 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 16,
+              flexWrap: 'wrap',
+              marginBottom: 16,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>预警详情</h2>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--smc-text-2)' }}>
                 查看预警基础信息、处理进度和后续操作
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={1} flexWrap="wrap">
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Chip
-                size="small"
-                label={formatRiskLevel(alert?.risk_level)}
-                sx={{
-                  color: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'text.primary',
-                  borderColor: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'divider',
-                  bgcolor: 'transparent',
+                outlined
+                style={{
+                  color: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'var(--smc-text)',
+                  borderColor: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'var(--smc-divider)',
                 }}
-                variant="outlined"
-              />
+              >
+                {formatRiskLevel(alert?.risk_level)}
+              </Chip>
               <Chip
-                size="small"
-                label={formatAlertStatus(alert?.status)}
-                sx={{
-                  color: ALERT_STATUS_COLORS[alert?.status || ''] || 'text.primary',
-                  borderColor: ALERT_STATUS_COLORS[alert?.status || ''] || 'divider',
-                  bgcolor: 'transparent',
+                outlined
+                style={{
+                  color: ALERT_STATUS_COLORS[alert?.status || ''] || 'var(--smc-text)',
+                  borderColor: ALERT_STATUS_COLORS[alert?.status || ''] || 'var(--smc-divider)',
                 }}
-                variant="outlined"
-              />
-            </Stack>
-          </Stack>
+              >
+                {formatAlertStatus(alert?.status)}
+              </Chip>
+            </div>
+          </div>
 
-          <Box
-            sx={{
-              mt: 2,
+          <div
+            style={{
               display: 'grid',
-              gap: 2,
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+              gap: 16,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
             }}
           >
             <DetailItem label="预警标题" value={alert?.title} />
@@ -156,30 +190,30 @@ const AlertDetailPage: React.FC = () => {
               label="风险等级"
               value={
                 <Chip
-                  size="small"
-                  label={formatRiskLevel(alert?.risk_level)}
-                  sx={{
-                    color: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'text.primary',
-                    borderColor: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'divider',
-                    bgcolor: 'transparent',
+                  outlined
+                  style={{
+                    color: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'var(--smc-text)',
+                    borderColor:
+                      RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'var(--smc-divider)',
                   }}
-                  variant="outlined"
-                />
+                >
+                  {formatRiskLevel(alert?.risk_level)}
+                </Chip>
               }
             />
             <DetailItem
               label="状态"
               value={
                 <Chip
-                  size="small"
-                  label={formatAlertStatus(alert?.status)}
-                  sx={{
-                    color: ALERT_STATUS_COLORS[alert?.status || ''] || 'text.primary',
-                    borderColor: ALERT_STATUS_COLORS[alert?.status || ''] || 'divider',
-                    bgcolor: 'transparent',
+                  outlined
+                  style={{
+                    color: ALERT_STATUS_COLORS[alert?.status || ''] || 'var(--smc-text)',
+                    borderColor:
+                      ALERT_STATUS_COLORS[alert?.status || ''] || 'var(--smc-divider)',
                   }}
-                  variant="outlined"
-                />
+                >
+                  {formatAlertStatus(alert?.status)}
+                </Chip>
               }
             />
             <DetailItem label="来源" value={alert?.source || '-'} />
@@ -187,60 +221,46 @@ const AlertDetailPage: React.FC = () => {
             <DetailItem label="触发时间" value={formatDateTime(alert?.triggered_at)} fullWidth />
             <DetailItem label="描述" value={alert?.description} fullWidth />
             {alert?.remark && <DetailItem label="备注" value={alert.remark} fullWidth />}
-          </Box>
-        </CardContent>
+          </div>
+        </div>
       </Card>
 
       <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            处理进度
-          </Typography>
+        <div style={{ padding: 24 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>处理进度</h3>
           {alert?.status === 'ignored' && (
-            <Chip
-              color="default"
-              variant="outlined"
-              label="该预警已忽略，未进入标准处理流程"
-              sx={{ mb: 2 }}
-            />
+            <div style={{ marginBottom: 16 }}>
+              <Chip outlined>该预警已忽略，未进入标准处理流程</Chip>
+            </div>
           )}
-          <Stepper activeStep={Math.max(currentStep, 0)} alternativeLabel>
-            <Step>
-              <StepLabel>
-                <Stack spacing={0.5} alignItems="center">
-                  <Typography variant="body2">待处理</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDateTime(alert?.triggered_at)}
-                  </Typography>
-                </Stack>
-              </StepLabel>
-            </Step>
-            <Step>
-              <StepLabel>
-                <Typography variant="body2">处理中</Typography>
-              </StepLabel>
-            </Step>
-            <Step>
-              <StepLabel>
-                <Stack spacing={0.5} alignItems="center">
-                  <Typography variant="body2">已解决</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {alert?.resolved_at ? formatDateTime(alert.resolved_at) : '-'}
-                  </Typography>
-                </Stack>
-              </StepLabel>
-            </Step>
-          </Stepper>
-        </CardContent>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+            <StepperItem
+              label="待处理"
+              subLabel={formatDateTime(alert?.triggered_at) || undefined}
+              done={currentStep > 0}
+              active={currentStep === 0}
+            />
+            <StepperItem
+              label="处理中"
+              done={currentStep > 1}
+              active={currentStep === 1}
+            />
+            <StepperItem
+              label="已解决"
+              subLabel={alert?.resolved_at ? formatDateTime(alert.resolved_at) : undefined}
+              done={currentStep >= 2}
+              active={currentStep === 2}
+            />
+          </div>
+        </div>
       </Card>
 
       <Card>
-        <CardContent>
-          <Stack direction="row" spacing={1} flexWrap="wrap">
+        <div style={{ padding: 24 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {alert?.status === 'pending' && (
               <Button
-                variant="contained"
-                startIcon={<ManageSearchRoundedIcon />}
+                startIcon={<Search size={14} />}
                 onClick={() => handleStatusUpdate('processing')}
               >
                 开始处理
@@ -248,9 +268,7 @@ const AlertDetailPage: React.FC = () => {
             )}
             {alert?.status === 'processing' && (
               <Button
-                variant="contained"
-                color="success"
-                startIcon={<TaskAltRoundedIcon />}
+                startIcon={<CheckCircle2 size={14} />}
                 onClick={() => handleStatusUpdate('resolved')}
               >
                 标记解决
@@ -259,8 +277,7 @@ const AlertDetailPage: React.FC = () => {
             {(alert?.status === 'pending' || alert?.status === 'processing') && (
               <Button
                 variant="outlined"
-                color="inherit"
-                startIcon={<BlockRoundedIcon />}
+                startIcon={<Ban size={14} />}
                 onClick={() => handleStatusUpdate('ignored')}
               >
                 忽略
@@ -269,10 +286,10 @@ const AlertDetailPage: React.FC = () => {
             <Button variant="outlined" onClick={() => navigate(`/elders/${alert?.elder_id}`)}>
               查看老人信息
             </Button>
-          </Stack>
-        </CardContent>
+          </div>
+        </div>
       </Card>
-    </Box>
+    </div>
   );
 };
 

@@ -1,25 +1,19 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  Box,
+  Plus,
+  Pencil,
+  Trash2,
+  Users,
+  CheckCircle2,
+  Ban,
+} from 'lucide-react';
+import {
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Grid,
   IconButton,
-  Stack,
   Tooltip,
-  Typography,
-} from '@mui/material';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
-import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
-import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import BlockRoundedIcon from '@mui/icons-material/BlockRounded';
+  confirm,
+} from '../../components/ui';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -58,7 +52,6 @@ const DoctorPage: React.FC = () => {
   const [formVisible, setFormVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   const fetchFn = useCallback(
     (params: PaginationParams & { page: number; page_size: number }) =>
@@ -86,16 +79,20 @@ const DoctorPage: React.FC = () => {
     setFormVisible(true);
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget) return;
+  const handleDelete = async (record: User) => {
+    const ok = await confirm({
+      title: '确认删除',
+      content: `确定要删除医生「${record.real_name || record.username}」吗？此操作不可撤销。`,
+      intent: 'danger',
+      okText: '删除',
+    });
+    if (!ok) return;
     try {
-      await deleteUser(deleteTarget.id);
+      await deleteUser(record.id);
       message.success('删除成功');
       refresh();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败');
-    } finally {
-      setDeleteTarget(null);
     }
   };
 
@@ -112,22 +109,17 @@ const DoctorPage: React.FC = () => {
         const status = String(value);
         return (
           <Chip
-            size="small"
+            tone={status === 'active' ? 'success' : 'error'}
             icon={
               status === 'active' ? (
-                <CheckCircleRoundedIcon fontSize="small" />
+                <CheckCircle2 size={12} />
               ) : (
-                <BlockRoundedIcon fontSize="small" />
+                <Ban size={12} />
               )
             }
-            color={status === 'active' ? 'success' : 'error'}
-            variant="filled"
-            label={status === 'active' ? '正常' : '禁用'}
-            sx={{
-              fontWeight: 600,
-              '& .MuiChip-icon': { fontSize: 16 },
-            }}
-          />
+          >
+            {status === 'active' ? '正常' : '禁用'}
+          </Chip>
         );
       },
     },
@@ -143,79 +135,67 @@ const DoctorPage: React.FC = () => {
       width: 120,
       fixed: 'right',
       render: (_, record) => (
-        <Stack direction="row" spacing={0.5}>
+        <div style={{ display: 'flex', gap: 4 }}>
           <PermissionGuard permission="user:manage">
-            <Tooltip title="编辑" arrow>
-              <IconButton
-                size="small"
-                color="primary"
-                onClick={() => handleEdit(record)}
-              >
-                <EditRoundedIcon fontSize="small" />
+            <Tooltip title="编辑">
+              <IconButton size="sm" onClick={() => handleEdit(record)}>
+                <Pencil size={14} />
               </IconButton>
             </Tooltip>
-            <Tooltip title="删除" arrow>
-              <IconButton
-                size="small"
-                color="error"
-                onClick={() => setDeleteTarget(record)}
-              >
-                <DeleteRoundedIcon fontSize="small" />
+            <Tooltip title="删除">
+              <IconButton size="sm" onClick={() => handleDelete(record)}>
+                <Trash2 size={14} color="var(--smc-error)" />
               </IconButton>
             </Tooltip>
           </PermissionGuard>
-        </Stack>
+        </div>
       ),
     },
   ];
 
   return (
-    <Box>
-      {/* Page header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={700} gutterBottom>
-          医生管理
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 700 }}>医生管理</h2>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--smc-text-2)' }}>
           管理平台中的医生账号，包括创建、编辑、停用等操作
-        </Typography>
-      </Box>
+        </p>
+      </div>
 
-      {/* Stat cards */}
-      <Grid container spacing={2.5} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <StatCard
-            title="医生总数"
-            value={stats.total}
-            suffix="人"
-            icon={<GroupRoundedIcon />}
-            color="#1677ff"
-            loading={loading}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <StatCard
-            title="正常状态"
-            value={stats.active}
-            suffix="人"
-            icon={<CheckCircleRoundedIcon />}
-            color="#52c41a"
-            loading={loading}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <StatCard
-            title="已禁用"
-            value={stats.disabled}
-            suffix="人"
-            icon={<BlockRoundedIcon />}
-            color="#ff4d4f"
-            loading={loading}
-          />
-        </Grid>
-      </Grid>
+      <div
+        style={{
+          display: 'grid',
+          gap: 20,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          marginBottom: 24,
+        }}
+      >
+        <StatCard
+          title="医生总数"
+          value={stats.total}
+          suffix="人"
+          icon={<Users size={20} />}
+          color="#1677ff"
+          loading={loading}
+        />
+        <StatCard
+          title="正常状态"
+          value={stats.active}
+          suffix="人"
+          icon={<CheckCircle2 size={20} />}
+          color="#52c41a"
+          loading={loading}
+        />
+        <StatCard
+          title="已禁用"
+          value={stats.disabled}
+          suffix="人"
+          icon={<Ban size={20} />}
+          color="#ff4d4f"
+          loading={loading}
+        />
+      </div>
 
-      {/* Table */}
       <AppTable<User>
         columns={columns}
         dataSource={data}
@@ -226,25 +206,13 @@ const DoctorPage: React.FC = () => {
         searchPlaceholder="搜索用户名/姓名/手机号"
         toolbar={
           <PermissionGuard permission="user:manage">
-            <Button
-              variant="contained"
-              startIcon={<AddRoundedIcon />}
-              onClick={handleCreate}
-              sx={{
-                px: 2.5,
-                fontWeight: 600,
-                textTransform: 'none',
-                boxShadow: 2,
-                '&:hover': { boxShadow: 4 },
-              }}
-            >
+            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
               新增医生
             </Button>
           </PermissionGuard>
         }
       />
 
-      {/* Create / Edit form dialog */}
       <AppForm
         title={editingUser ? '编辑医生' : '新增医生'}
         visible={formVisible}
@@ -270,30 +238,7 @@ const DoctorPage: React.FC = () => {
         }}
         onCancel={() => setFormVisible(false)}
       />
-
-      {/* Delete confirmation dialog */}
-      <Dialog
-        open={Boolean(deleteTarget)}
-        onClose={() => setDeleteTarget(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>确认删除</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            确定要删除医生「{deleteTarget?.real_name || deleteTarget?.username}」吗？此操作不可撤销。
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setDeleteTarget(null)} color="inherit">
-            取消
-          </Button>
-          <Button onClick={handleDeleteConfirm} variant="contained" color="error">
-            删除
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+    </div>
   );
 };
 

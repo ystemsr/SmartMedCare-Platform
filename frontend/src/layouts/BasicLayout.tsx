@@ -1,19 +1,21 @@
 import React, { useMemo } from 'react';
-import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
-import ElderlyRoundedIcon from '@mui/icons-material/ElderlyRounded';
-import FamilyRestroomRoundedIcon from '@mui/icons-material/FamilyRestroomRounded';
-import MedicalInformationRoundedIcon from '@mui/icons-material/MedicalInformationRounded';
-import MedicationRoundedIcon from '@mui/icons-material/MedicationRounded';
-import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import MedicalServicesRoundedIcon from '@mui/icons-material/MedicalServicesRounded';
-import TimelineRoundedIcon from '@mui/icons-material/TimelineRounded';
-import StorageRoundedIcon from '@mui/icons-material/StorageRounded';
-import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
-import WorkRoundedIcon from '@mui/icons-material/WorkRounded';
-import FolderOpenRoundedIcon from '@mui/icons-material/FolderOpenRounded';
-import QueryStatsRoundedIcon from '@mui/icons-material/QueryStatsRounded';
-import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
+import {
+  LayoutDashboard,
+  Users,
+  Users2,
+  ClipboardPlus,
+  Pill,
+  BellRing,
+  User,
+  Stethoscope,
+  Activity,
+  Database,
+  BrainCircuit,
+  Briefcase,
+  FolderOpen,
+  BarChart3,
+  LineChart,
+} from 'lucide-react';
 import AppShell, { type AppShellMenuItem } from '../components/AppShell';
 import { usePermission } from '../hooks/usePermission';
 
@@ -24,7 +26,7 @@ const BasicLayout: React.FC = () => {
     const items: AppShellMenuItem[] = [
       {
         key: '/dashboard',
-        icon: <DashboardRoundedIcon />,
+        icon: <LayoutDashboard size={18} />,
         label: '工作台',
       },
     ];
@@ -32,7 +34,7 @@ const BasicLayout: React.FC = () => {
     if (hasAnyPermission(['elder:read', 'elder:create'])) {
       items.push({
         key: '/elders',
-        icon: <ElderlyRoundedIcon />,
+        icon: <Users size={18} />,
         label: '老人管理',
       });
     }
@@ -40,7 +42,7 @@ const BasicLayout: React.FC = () => {
     if (hasAnyPermission(['alert:read', 'alert:update'])) {
       items.push({
         key: '/alerts',
-        icon: <NotificationsActiveRoundedIcon />,
+        icon: <BellRing size={18} />,
         label: '风险预警',
       });
     }
@@ -48,7 +50,7 @@ const BasicLayout: React.FC = () => {
     if (hasAnyPermission(['followup:create', 'followup:update'])) {
       items.push({
         key: '/followups',
-        icon: <TimelineRoundedIcon />,
+        icon: <Activity size={18} />,
         label: '随访管理',
       });
     }
@@ -56,7 +58,7 @@ const BasicLayout: React.FC = () => {
     if (hasAnyPermission(['intervention:create'])) {
       items.push({
         key: '/interventions',
-        icon: <MedicationRoundedIcon />,
+        icon: <Pill size={18} />,
         label: '干预记录',
       });
     }
@@ -64,7 +66,7 @@ const BasicLayout: React.FC = () => {
     if (hasAnyPermission(['assessment:read', 'assessment:create'])) {
       items.push({
         key: '/assessments',
-        icon: <MedicalInformationRoundedIcon />,
+        icon: <ClipboardPlus size={18} />,
         label: '健康评估',
       });
     }
@@ -72,12 +74,12 @@ const BasicLayout: React.FC = () => {
     if (hasAnyPermission(['user:manage'])) {
       items.push({
         key: '/doctors',
-        icon: <MedicalServicesRoundedIcon />,
+        icon: <Stethoscope size={18} />,
         label: '医生管理',
       });
       items.push({
         key: '/family-members',
-        icon: <FamilyRestroomRoundedIcon />,
+        icon: <Users2 size={18} />,
         label: '家属管理',
       });
     }
@@ -85,32 +87,32 @@ const BasicLayout: React.FC = () => {
     if (hasAnyPermission(['bigdata:read'])) {
       items.push({
         key: '/bigdata',
-        icon: <StorageRoundedIcon />,
+        icon: <Database size={18} />,
         label: '大数据',
         children: [
           {
             key: '/bigdata',
-            icon: <InsightsRoundedIcon fontSize="small" />,
+            icon: <LineChart size={16} />,
             label: '总览',
           },
           {
             key: '/bigdata/inference',
-            icon: <PsychologyRoundedIcon fontSize="small" />,
+            icon: <BrainCircuit size={16} />,
             label: 'AI 推理',
           },
           {
             key: '/bigdata/jobs',
-            icon: <WorkRoundedIcon fontSize="small" />,
+            icon: <Briefcase size={16} />,
             label: '作业管理',
           },
           {
             key: '/bigdata/hdfs',
-            icon: <FolderOpenRoundedIcon fontSize="small" />,
+            icon: <FolderOpen size={16} />,
             label: 'HDFS 浏览',
           },
           {
             key: '/bigdata/hive',
-            icon: <QueryStatsRoundedIcon fontSize="small" />,
+            icon: <BarChart3 size={16} />,
             label: 'Hive 查询',
           },
         ],
@@ -119,7 +121,7 @@ const BasicLayout: React.FC = () => {
 
     items.push({
       key: '/accounts/personal',
-      icon: <PersonRoundedIcon />,
+      icon: <User size={18} />,
       label: '个人账户',
     });
 

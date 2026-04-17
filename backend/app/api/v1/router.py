@@ -29,3 +29,7 @@ api_router.include_router(analytics.router, prefix="/analytics", tags=["数据�
 # ===== Family Role routes (feat/family-role-backend) =====
 from app.api.v1.endpoints import family
 api_router.include_router(family.router, prefix="/family", tags=["家属管理"])
+
+# ===== Big Data routes (feat/bigdata-backend) =====
+from app.api.v1.endpoints import bigdata
+api_router.include_router(bigdata.router, prefix="/bigdata", tags=["大数据"])

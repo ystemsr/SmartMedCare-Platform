@@ -15,3 +15,11 @@ httpx>=0.27.0
 openpyxl>=3.1.0
 pandas>=2.2.0
 Pillow>=10.0.0
+# ML inference
+torch>=2.2,<2.5
+numpy>=1.26,<3.0
+# Hive JDBC over Thrift
+pyhive[hive]>=0.7.0
+thrift>=0.16
+sasl>=0.3.1
+thrift-sasl>=0.4.3

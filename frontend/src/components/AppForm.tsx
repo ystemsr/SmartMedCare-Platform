@@ -1,19 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-} from '@mui/material';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import dayjs from 'dayjs';
+import { Button, DatePicker, Input, Modal, Select, Textarea } from './ui';
 import { message } from '../utils/message';
 
 export interface FormFieldRule {
@@ -34,7 +20,6 @@ export interface FormFieldConfig {
   rules?: FormFieldRule[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface AppFormProps<T = any> {
   title: string;
   visible: boolean;
@@ -79,14 +64,8 @@ const AppForm: React.FC<AppFormProps> = ({
   }, [defaultValues, initialValues, visible]);
 
   const updateValue = (name: string, value: unknown) => {
-    setValues((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-    setErrors((previous) => ({
-      ...previous,
-      [name]: '',
-    }));
+    setValues((previous) => ({ ...previous, [name]: value }));
+    setErrors((previous) => ({ ...previous, [name]: '' }));
   };
 
   const validate = () => {
@@ -96,7 +75,6 @@ const AppForm: React.FC<AppFormProps> = ({
         result[field.name] = `请输入${field.label}`;
         return result;
       }
-
       if (field.rules && value !== '' && value !== null && value !== undefined) {
         const strValue = String(value);
         for (const rule of field.rules) {
@@ -114,10 +92,8 @@ const AppForm: React.FC<AppFormProps> = ({
           }
         }
       }
-
       return result;
     }, {});
-
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       const firstError = Object.values(nextErrors)[0];
@@ -128,102 +104,90 @@ const AppForm: React.FC<AppFormProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!validate()) {
-      return;
-    }
-
+    if (!validate()) return;
     await onSubmit(values);
   };
 
   return (
-    <Dialog
+    <Modal
       open={visible}
       onClose={onCancel}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{ sx: { width } }}
+      title={title}
+      width={width}
+      footer={
+        <>
+          <Button variant="outlined" onClick={onCancel}>取消</Button>
+          <Button onClick={handleSubmit} loading={confirmLoading}>
+            {confirmLoading ? '提交中...' : '确定'}
+          </Button>
+        </>
+      }
     >
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          {fields.map((field) => {
-            const value = values[field.name];
-
-            if (field.type === 'select') {
-              return (
-                <FormControl key={field.name} fullWidth error={Boolean(errors[field.name])} required={field.required}>
-                  <InputLabel required={field.required}>{field.label}</InputLabel>
-                  <Select
-                    label={field.label}
-                    value={(value as string | number | '') ?? ''}
-                    onChange={(event) => updateValue(field.name, event.target.value)}
-                  >
-                    {field.options?.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              );
-            }
-
-            if (field.type === 'date') {
-              return (
-                <DatePicker
-                  key={field.name}
-                  label={field.label}
-                  value={value ? dayjs(String(value)) : null}
-                  onChange={(nextValue) =>
-                    updateValue(field.name, nextValue ? nextValue.format('YYYY-MM-DD') : '')
-                  }
-                  slotProps={{
-                    textField: {
-                      fullWidth: true,
-                      required: field.required,
-                      error: Boolean(errors[field.name]),
-                      helperText: errors[field.name] || ' ',
-                    },
-                  }}
-                />
-              );
-            }
-
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4 }}>
+        {fields.map((field) => {
+          const value = values[field.name];
+          if (field.type === 'select') {
             return (
-              <TextField
+              <Select
                 key={field.name}
-                fullWidth
-                required={field.required}
                 label={field.label}
-                type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}
-                multiline={field.type === 'textarea'}
-                minRows={field.type === 'textarea' ? 3 : undefined}
+                required={field.required}
                 value={(value as string | number | '') ?? ''}
-                onChange={(event) =>
-                  updateValue(
-                    field.name,
-                    field.type === 'number' && event.target.value !== ''
-                      ? Number(event.target.value)
-                      : event.target.value,
-                  )
-                }
+                onChange={(v) => updateValue(field.name, v)}
+                options={field.options ?? []}
+                error={errors[field.name]}
                 placeholder={field.placeholder}
-                error={Boolean(errors[field.name])}
-                helperText={errors[field.name] || ' '}
               />
             );
-          })}
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button onClick={onCancel} color="inherit">
-          取消
-        </Button>
-        <Button onClick={handleSubmit} variant="contained" disabled={confirmLoading}>
-          {confirmLoading ? '提交中...' : '确定'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+          }
+          if (field.type === 'date') {
+            return (
+              <DatePicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as string) || null}
+                onChange={(v) => updateValue(field.name, v ?? '')}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'textarea') {
+            return (
+              <Textarea
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as string) ?? ''}
+                placeholder={field.placeholder}
+                onChange={(e) => updateValue(field.name, e.target.value)}
+                error={errors[field.name]}
+                rows={3}
+              />
+            );
+          }
+          return (
+            <Input
+              key={field.name}
+              label={field.label}
+              required={field.required}
+              type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}
+              value={(value as string | number | '') ?? ''}
+              placeholder={field.placeholder}
+              onChange={(e) =>
+                updateValue(
+                  field.name,
+                  field.type === 'number' && e.target.value !== ''
+                    ? Number(e.target.value)
+                    : e.target.value,
+                )
+              }
+              error={errors[field.name]}
+            />
+          );
+        })}
+      </div>
+    </Modal>
   );
 };
 

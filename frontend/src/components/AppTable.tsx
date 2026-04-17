@@ -1,23 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Box,
-  Button,
-  Card,
-  Checkbox,
-  CircularProgress,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
+import { Button, Card, Checkbox, Input, Select, Spinner } from './ui';
 
 export interface AppTableColumn<T> {
   title?: React.ReactNode | ((props: any) => React.ReactNode);
@@ -60,10 +43,7 @@ interface AppTableProps<T> {
 }
 
 function getValue(record: unknown, dataIndex?: string | number | symbol) {
-  if (!dataIndex || typeof dataIndex !== 'string') {
-    return undefined;
-  }
-
+  if (!dataIndex || typeof dataIndex !== 'string') return undefined;
   return dataIndex.split('.').reduce<unknown>((result, key) => {
     if (result && typeof result === 'object' && key in result) {
       return (result as Record<string, unknown>)[key];
@@ -79,17 +59,108 @@ function getRowIdentifier<T>(record: T, rowKey: string | ((record: T) => string 
 }
 
 function renderFallbackValue(value: unknown) {
-  if (value === null || value === undefined || value === '') {
-    return '-';
-  }
+  if (value === null || value === undefined || value === '') return '-';
   return String(value);
 }
 
 function resolveTitle(title: AppTableColumn<object>['title']) {
-  if (typeof title === 'function') {
-    return title({});
-  }
+  if (typeof title === 'function') return title({});
   return title ?? '';
+}
+
+function Pagination({
+  current,
+  pageSize,
+  total,
+  onChange,
+  showSizeChanger,
+}: {
+  current: number;
+  pageSize: number;
+  total: number;
+  onChange: (p: { current?: number; pageSize?: number }) => void;
+  showSizeChanger?: boolean;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const go = (page: number) => {
+    if (page < 1 || page > totalPages || page === current) return;
+    onChange({ current: page, pageSize });
+  };
+  const pages: (number | '...')[] = useMemo(() => {
+    const list: (number | '...')[] = [];
+    const push = (n: number | '...') => list.push(n);
+    const range = (from: number, to: number) => {
+      for (let i = from; i <= to; i += 1) push(i);
+    };
+    if (totalPages <= 7) {
+      range(1, totalPages);
+    } else {
+      push(1);
+      if (current > 4) push('...');
+      const s = Math.max(2, current - 2);
+      const e = Math.min(totalPages - 1, current + 2);
+      range(s, e);
+      if (current < totalPages - 3) push('...');
+      push(totalPages);
+    }
+    return list;
+  }, [current, totalPages]);
+
+  return (
+    <div className="smc-pag">
+      <button className="smc-pag__btn" onClick={() => go(1)} disabled={current === 1} aria-label="第一页">
+        <ChevronsLeft size={14} />
+      </button>
+      <button
+        className="smc-pag__btn"
+        onClick={() => go(current - 1)}
+        disabled={current === 1}
+        aria-label="上一页"
+      >
+        <ChevronLeft size={14} />
+      </button>
+      {pages.map((p, i) =>
+        p === '...' ? (
+          <span key={`e-${i}`} style={{ padding: '0 4px', color: 'var(--smc-text-3)' }}>
+            …
+          </span>
+        ) : (
+          <button
+            key={p}
+            className={`smc-pag__btn ${p === current ? 'smc-pag__btn--active' : ''}`}
+            onClick={() => go(p)}
+          >
+            {p}
+          </button>
+        ),
+      )}
+      <button
+        className="smc-pag__btn"
+        onClick={() => go(current + 1)}
+        disabled={current >= totalPages}
+        aria-label="下一页"
+      >
+        <ChevronRight size={14} />
+      </button>
+      <button
+        className="smc-pag__btn"
+        onClick={() => go(totalPages)}
+        disabled={current >= totalPages}
+        aria-label="最后一页"
+      >
+        <ChevronsRight size={14} />
+      </button>
+      {showSizeChanger && (
+        <div style={{ marginLeft: 8, width: 100 }}>
+          <Select
+            value={pageSize}
+            onChange={(v) => onChange({ current: 1, pageSize: Number(v) })}
+            options={[10, 20, 50, 100].map((v) => ({ label: `${v} / 页`, value: v }))}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function AppTable<T extends object>({
@@ -121,18 +192,12 @@ function AppTable<T extends object>({
   const partiallySelected = rowIds.some((id) => selectedSet.has(id)) && !allSelected;
 
   const handleSelectAll = (checked: boolean) => {
-    if (!rowSelection) {
-      return;
-    }
-
+    if (!rowSelection) return;
     rowSelection.onChange(checked ? rowIds : [], checked ? dataSource : []);
   };
 
   const handleToggleRow = (record: T, checked: boolean) => {
-    if (!rowSelection) {
-      return;
-    }
-
+    if (!rowSelection) return;
     const id = getRowIdentifier(record, rowKey);
     const nextKeys = checked
       ? [...selectedSet, id]
@@ -140,202 +205,149 @@ function AppTable<T extends object>({
     const selectedRows = dataSource.filter((item) =>
       nextKeys.includes(getRowIdentifier(item, rowKey)),
     );
-
-    rowSelection.onChange(nextKeys, selectedRows);
+    rowSelection.onChange(nextKeys as React.Key[], selectedRows);
   };
 
   return (
-    <Card sx={{ overflow: 'hidden', p: 2.5 }}>
-      <Stack
-        direction={{ xs: 'column', lg: 'row' }}
-        justifyContent="space-between"
-        spacing={2}
-        sx={{ mb: 2.5 }}
-      >
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-          {onSearch && (
-            <TextField
-              value={keyword}
-              size="small"
-              placeholder={searchPlaceholder}
-              onChange={(event) => setKeyword(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  onSearch(keyword.trim());
-                }
-              }}
-              sx={{ minWidth: { xs: '100%', sm: 280 } }}
-              InputProps={{
-                endAdornment: (
-                  <Button
-                    size="small"
-                    startIcon={<SearchRoundedIcon />}
-                    onClick={() => onSearch(keyword.trim())}
-                  >
-                    搜索
-                  </Button>
-                ),
-              }}
-            />
+    <Card>
+      <div style={{ padding: 20 }}>
+        <div className="smc-table__toolbar">
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {onSearch && (
+              <div className="smc-table__search">
+                <Input
+                  value={keyword}
+                  placeholder={searchPlaceholder}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') onSearch(keyword.trim());
+                  }}
+                  containerClassName=""
+                  fullWidth={false}
+                  style={{ width: 240 }}
+                />
+                <Button
+                  variant="primary"
+                  startIcon={<Search size={14} />}
+                  onClick={() => onSearch(keyword.trim())}
+                >
+                  搜索
+                </Button>
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{toolbar}</div>
+        </div>
+
+        <div className="smc-table-wrap">
+          {loading && (
+            <div className="smc-table__overlay">
+              <Spinner />
+            </div>
           )}
-        </Stack>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} flexWrap="wrap">
-          {toolbar}
-        </Stack>
-      </Stack>
-
-      <Box sx={{ position: 'relative' }}>
-        {loading && (
-          <Box
-            sx={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 2,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.72)',
-            }}
-          >
-            <CircularProgress size={36} />
-          </Box>
-        )}
-
-        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-          <Table stickyHeader sx={{ minWidth: 720 }}>
-            <TableHead>
-              <TableRow>
-                {rowSelection && (
-                  <TableCell padding="checkbox" sx={{ width: 56 }}>
-                    <Checkbox
-                      checked={allSelected}
-                      indeterminate={partiallySelected}
-                      onChange={(event) => handleSelectAll(event.target.checked)}
-                    />
-                  </TableCell>
-                )}
-                {columns.map((column) => (
-                  <TableCell
-                    key={String(column.key ?? column.dataIndex ?? column.title)}
-                    align={column.align}
-                    sx={{
-                      width: column.width,
-                      minWidth: column.width,
-                      whiteSpace: 'nowrap',
-                      position: column.fixed ? 'sticky' : 'static',
-                      right: column.fixed === 'right' ? 0 : 'auto',
-                      left: column.fixed === 'left' ? 0 : 'auto',
-                      zIndex: column.fixed ? 1 : 'auto',
-                      backgroundColor: 'background.paper',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {resolveTitle(column.title as AppTableColumn<object>['title'])}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {dataSource.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={columns.length + (rowSelection ? 1 : 0)} align="center">
-                    <Typography color="text.secondary" sx={{ py: 4 }}>
+          <div className="smc-table-scroll">
+            <table className="smc-table">
+              <thead>
+                <tr>
+                  {rowSelection && (
+                    <th style={{ width: 44 }}>
+                      <Checkbox
+                        checked={allSelected}
+                        indeterminate={partiallySelected}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                      />
+                    </th>
+                  )}
+                  {columns.map((column) => (
+                    <th
+                      key={String(column.key ?? column.dataIndex ?? column.title)}
+                      style={{
+                        textAlign: column.align || 'left',
+                        width: column.width,
+                        minWidth: column.width,
+                        position: column.fixed ? 'sticky' : undefined,
+                        right: column.fixed === 'right' ? 0 : undefined,
+                        left: column.fixed === 'left' ? 0 : undefined,
+                      }}
+                    >
+                      {resolveTitle(column.title as AppTableColumn<object>['title'])}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dataSource.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={columns.length + (rowSelection ? 1 : 0)}
+                      className="smc-table__empty"
+                    >
                       {emptyText}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                dataSource.map((record, index) => {
-                  const id = getRowIdentifier(record, rowKey);
+                    </td>
+                  </tr>
+                ) : (
+                  dataSource.map((record, index) => {
+                    const id = getRowIdentifier(record, rowKey);
+                    return (
+                      <tr key={String(id)}>
+                        {rowSelection && (
+                          <td>
+                            <Checkbox
+                              checked={selectedSet.has(id)}
+                              onChange={(e) => handleToggleRow(record, e.target.checked)}
+                            />
+                          </td>
+                        )}
+                        {columns.map((column) => {
+                          const value = getValue(record, column.dataIndex);
+                          const content = column.render
+                            ? column.render(value, record, index)
+                            : renderFallbackValue(value);
+                          return (
+                            <td
+                              key={String(column.key ?? column.dataIndex ?? column.title)}
+                              style={{
+                                textAlign: column.align || 'left',
+                                width: column.width,
+                                minWidth: column.width,
+                                maxWidth: column.ellipsis ? column.width : undefined,
+                                overflow: column.ellipsis ? 'hidden' : undefined,
+                                textOverflow: column.ellipsis ? 'ellipsis' : undefined,
+                                whiteSpace: column.ellipsis ? 'nowrap' : undefined,
+                                position: column.fixed ? 'sticky' : undefined,
+                                right: column.fixed === 'right' ? 0 : undefined,
+                                left: column.fixed === 'left' ? 0 : undefined,
+                                background: column.fixed ? 'var(--smc-surface)' : undefined,
+                              }}
+                            >
+                              {content}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-                  return (
-                    <TableRow key={id} hover>
-                      {rowSelection && (
-                        <TableCell padding="checkbox">
-                          <Checkbox
-                            checked={selectedSet.has(id)}
-                            onChange={(event) => handleToggleRow(record, event.target.checked)}
-                          />
-                        </TableCell>
-                      )}
-                      {columns.map((column) => {
-                        const value = getValue(record, column.dataIndex);
-                        const content = column.render
-                          ? column.render(value, record, index)
-                          : renderFallbackValue(value);
-
-                        return (
-                          <TableCell
-                            key={String(column.key ?? column.dataIndex ?? column.title)}
-                            align={column.align}
-                            sx={{
-                              width: column.width,
-                              minWidth: column.width,
-                              maxWidth: column.ellipsis ? column.width : undefined,
-                              overflow: column.ellipsis ? 'hidden' : 'visible',
-                              textOverflow: column.ellipsis ? 'ellipsis' : 'clip',
-                              whiteSpace: column.ellipsis ? 'nowrap' : 'normal',
-                              position: column.fixed ? 'sticky' : 'static',
-                              right: column.fixed === 'right' ? 0 : 'auto',
-                              left: column.fixed === 'left' ? 0 : 'auto',
-                              zIndex: column.fixed ? 1 : 'auto',
-                              backgroundColor: 'background.paper',
-                            }}
-                          >
-                            {content}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Box>
-
-      {pagination && (
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          justifyContent="space-between"
-          alignItems={{ xs: 'flex-start', md: 'center' }}
-          spacing={1}
-          sx={{ mt: 2 }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            {pagination.showTotal?.(pagination.total) ?? `共 ${pagination.total} 条`}
-          </Typography>
-          <TablePagination
-            component="div"
-            count={pagination.total}
-            page={Math.max(pagination.current - 1, 0)}
-            onPageChange={(_, page) => onChange?.({ current: page + 1, pageSize: pagination.pageSize })}
-            rowsPerPage={pagination.pageSize}
-            onRowsPerPageChange={(event) =>
-              onChange?.({
-                current: 1,
-                pageSize: Number(event.target.value),
-              })
-            }
-            labelRowsPerPage="每页条数"
-            rowsPerPageOptions={
-              pagination.showSizeChanger ? [10, 20, 50, 100].map((value) => ({
-                label: `${value}`,
-                value,
-              })) : []
-            }
-            labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}`}
-            slotProps={{
-              select: {
-                size: 'small',
-              },
-            }}
-            showFirstButton
-            showLastButton
-          />
-        </Stack>
-      )}
+        {pagination && (
+          <div className="smc-table__pag">
+            <div style={{ color: 'var(--smc-text-3)', fontSize: 13 }}>
+              {pagination.showTotal?.(pagination.total) ?? `共 ${pagination.total} 条`}
+            </div>
+            <Pagination
+              current={pagination.current}
+              pageSize={pagination.pageSize}
+              total={pagination.total}
+              showSizeChanger={pagination.showSizeChanger}
+              onChange={(next) => onChange?.(next)}
+            />
+          </div>
+        )}
+      </div>
     </Card>
   );
 }

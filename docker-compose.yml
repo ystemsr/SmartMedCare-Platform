@@ -98,10 +98,171 @@ services:
     networks:
       - smartmedcare
 
+  hadoop-namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: smartmedcare-hadoop-namenode
+    restart: unless-stopped
+    environment:
+      CLUSTER_NAME: smartmedcare
+      CORE_CONF_fs_defaultFS: hdfs://hadoop-namenode:9000
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      HDFS_CONF_dfs_replication: "1"
+    ports:
+      - "9870:9870"
+      - "9010:9000"
+    volumes:
+      - hadoop_namenode_data:/hadoop/dfs/name
+      - ./deploy/hadoop/core-site.xml:/etc/hadoop/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/etc/hadoop/hdfs-site.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9870/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - smartmedcare
+
+  hadoop-datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: smartmedcare-hadoop-datanode
+    restart: unless-stopped
+    environment:
+      SERVICE_PRECONDITION: "hadoop-namenode:9870"
+      CORE_CONF_fs_defaultFS: hdfs://hadoop-namenode:9000
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      HDFS_CONF_dfs_replication: "1"
+    volumes:
+      - hadoop_datanode_data:/hadoop/dfs/data
+      - ./deploy/hadoop/core-site.xml:/etc/hadoop/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/etc/hadoop/hdfs-site.xml:ro
+    depends_on:
+      hadoop-namenode:
+        condition: service_healthy
+    networks:
+      - smartmedcare
+
+  hive-metastore-db:
+    image: postgres:15
+    container_name: smartmedcare-hive-metastore-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: metastore
+      POSTGRES_USER: ${HIVE_METASTORE_DB_USER:-hive}
+      POSTGRES_PASSWORD: ${HIVE_METASTORE_DB_PASSWORD:-hive123}
+    volumes:
+      - hive_metastore_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HIVE_METASTORE_DB_USER:-hive} -d metastore"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - smartmedcare
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: smartmedcare-hive-metastore
+    restart: unless-stopped
+    environment:
+      SERVICE_PRECONDITION: "hadoop-namenode:9870 hadoop-datanode:9864 hive-metastore-db:5432"
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://hive-metastore-db:5432/metastore
+    command: /opt/hive/bin/hive --service metastore
+    ports:
+      - "9083:9083"
+    volumes:
+      - ./deploy/hive/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./deploy/hadoop/core-site.xml:/opt/hadoop-2.7.4/etc/hadoop/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/opt/hadoop-2.7.4/etc/hadoop/hdfs-site.xml:ro
+    depends_on:
+      hive-metastore-db:
+        condition: service_healthy
+      hadoop-namenode:
+        condition: service_healthy
+    networks:
+      - smartmedcare
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: smartmedcare-hive-server
+    restart: unless-stopped
+    environment:
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://hive-metastore-db:5432/metastore
+    command: /opt/hive/bin/hive --service hiveserver2
+    ports:
+      - "10000:10000"
+      - "10002:10002"
+    volumes:
+      - ./deploy/hive/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./deploy/hadoop/core-site.xml:/opt/hadoop-2.7.4/etc/hadoop/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/opt/hadoop-2.7.4/etc/hadoop/hdfs-site.xml:ro
+    depends_on:
+      - hive-metastore
+    networks:
+      - smartmedcare
+
+  spark-master:
+    image: bitnami/spark:3.5
+    container_name: smartmedcare-spark-master
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      SPARK_USER: spark
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    volumes:
+      - ./deploy/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
+      - ./deploy/hadoop/core-site.xml:/opt/bitnami/spark/conf/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/opt/bitnami/spark/conf/hdfs-site.xml:ro
+      - ./deploy/hive/hive-site.xml:/opt/bitnami/spark/conf/hive-site.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - smartmedcare
+
+  spark-worker:
+    image: bitnami/spark:3.5
+    container_name: smartmedcare-spark-worker
+    restart: unless-stopped
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      SPARK_USER: spark
+    volumes:
+      - ./deploy/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
+      - ./deploy/hadoop/core-site.xml:/opt/bitnami/spark/conf/core-site.xml:ro
+      - ./deploy/hadoop/hdfs-site.xml:/opt/bitnami/spark/conf/hdfs-site.xml:ro
+      - ./deploy/hive/hive-site.xml:/opt/bitnami/spark/conf/hive-site.xml:ro
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - smartmedcare
+
 volumes:
   mysql_data:
   redis_data:
   minio_data:
+  hadoop_namenode_data:
+  hadoop_datanode_data:
+  hive_metastore_db_data:
 
 networks:
   smartmedcare:

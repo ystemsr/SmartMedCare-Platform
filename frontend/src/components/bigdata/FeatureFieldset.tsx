@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Card, CardContent, TextField, Typography } from '@mui/material';
+import { Card, CardBody, Input } from '@/components/ui';
 import type { FeatureDict } from '../../types/bigdata';
 
 export interface FeatureFieldConfig {
@@ -74,50 +74,54 @@ interface FeatureFieldsetProps {
 
 const FeatureFieldset: React.FC<FeatureFieldsetProps> = ({ values, onChange }) => {
   return (
-    <Box sx={{ display: 'grid', gap: 2.5 }}>
+    <div style={{ display: 'grid', gap: 20 }}>
       {FEATURE_GROUPS.map((group) => (
-        <Card key={group.title} variant="outlined" sx={{ borderRadius: 3 }}>
-          <CardContent>
-            <Typography variant="subtitle1" fontWeight={700}>
+        <Card key={group.title}>
+          <CardBody>
+            <div style={{ fontSize: 'var(--smc-fs-lg)', fontWeight: 700, color: 'var(--smc-text)' }}>
               {group.title}
-            </Typography>
+            </div>
             {group.description && (
-              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+              <div
+                style={{
+                  fontSize: 'var(--smc-fs-xs)',
+                  color: 'var(--smc-text-2)',
+                  marginTop: 4,
+                  marginBottom: 16,
+                }}
+              >
                 {group.description}
-              </Typography>
+              </div>
             )}
-            <Box
-              sx={{
+            <div
+              style={{
                 display: 'grid',
-                gap: 2,
-                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+                gap: 16,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
               }}
             >
               {group.fields.map((field) => (
-                <TextField
-                  key={field.name}
+                <Input
+                  key={field.name as string}
                   label={field.label}
                   helperText={field.hint}
                   type="number"
-                  size="small"
                   value={values[field.name] ?? 0}
                   onChange={(event) => {
                     const raw = event.target.value;
                     const next = raw === '' ? 0 : Number(raw);
                     onChange(field.name, Number.isFinite(next) ? next : 0);
                   }}
-                  inputProps={{
-                    min: field.min,
-                    max: field.max,
-                    step: field.step ?? 1,
-                  }}
+                  min={field.min}
+                  max={field.max}
+                  step={field.step ?? 1}
                 />
               ))}
-            </Box>
-          </CardContent>
+            </div>
+          </CardBody>
         </Card>
       ))}
-    </Box>
+    </div>
   );
 };
 

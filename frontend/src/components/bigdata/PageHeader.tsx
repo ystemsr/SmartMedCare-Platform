@@ -1,5 +1,4 @@
 import React, { type ReactNode } from 'react';
-import { Box, Stack, Typography } from '@mui/material';
 
 interface PageHeaderProps {
   title: string;
@@ -8,25 +7,42 @@ interface PageHeaderProps {
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({ title, description, actions }) => (
-  <Stack
-    direction={{ xs: 'column', md: 'row' }}
-    spacing={2}
-    justifyContent="space-between"
-    alignItems={{ xs: 'flex-start', md: 'center' }}
-    sx={{ mb: 3 }}
+  <div
+    style={{
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 16,
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 24,
+    }}
   >
-    <Box>
-      <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: 0.2 }}>
+    <div style={{ minWidth: 0 }}>
+      <h2
+        style={{
+          margin: 0,
+          fontSize: 'var(--smc-fs-2xl)',
+          fontWeight: 700,
+          letterSpacing: 0.2,
+          color: 'var(--smc-text)',
+        }}
+      >
         {title}
-      </Typography>
+      </h2>
       {description && (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+        <p
+          style={{
+            margin: '6px 0 0',
+            fontSize: 'var(--smc-fs-sm)',
+            color: 'var(--smc-text-2)',
+          }}
+        >
           {description}
-        </Typography>
+        </p>
       )}
-    </Box>
-    {actions && <Box>{actions}</Box>}
-  </Stack>
+    </div>
+    {actions && <div>{actions}</div>}
+  </div>
 );
 
 export default PageHeader;

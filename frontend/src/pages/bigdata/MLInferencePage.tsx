@@ -1,24 +1,12 @@
 import React, { useState } from 'react';
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Stack,
-  Tab,
-  Tabs,
-  TextField,
-  Typography,
-} from '@mui/material';
-import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
-import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
-import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
+import { Play, Wand2, RotateCcw } from 'lucide-react';
 import PageHeader from '../../components/bigdata/PageHeader';
 import FeatureFieldset, {
   EMPTY_FEATURES,
   EXAMPLE_FEATURES,
 } from '../../components/bigdata/FeatureFieldset';
 import PredictionResult from '../../components/bigdata/PredictionResult';
+import { Button, Card, CardBody, Input, Tabs } from '@/components/ui';
 import { getLatestPrediction, predictOne } from '../../api/bigdata';
 import { message } from '../../utils/message';
 import type { FeatureDict, Prediction } from '../../types/bigdata';
@@ -81,99 +69,102 @@ const MLInferencePage: React.FC = () => {
     }
   };
 
+  const formPanel = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <FeatureFieldset values={features} onChange={handleChange} />
+
+      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        <Button variant="outlined" startIcon={<Wand2 size={16} />} onClick={handleFillExample}>
+          填充示例
+        </Button>
+        <Button variant="outlined" startIcon={<RotateCcw size={16} />} onClick={handleReset}>
+          重置
+        </Button>
+        <Button
+          variant="primary"
+          size="lg"
+          startIcon={<Play size={16} />}
+          disabled={predicting}
+          loading={predicting}
+          onClick={handlePredict}
+        >
+          {predicting ? '计算中...' : '立即预测'}
+        </Button>
+      </div>
+
+      {result && <PredictionResult prediction={result} subtitle="基于当前表单输入" />}
+    </div>
+  );
+
+  const historyPanel = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <Card>
+        <CardBody>
+          <div style={{ fontSize: 'var(--smc-fs-lg)', fontWeight: 700, marginBottom: 4 }}>
+            按老人 ID 查询
+          </div>
+          <div
+            style={{
+              fontSize: 'var(--smc-fs-sm)',
+              color: 'var(--smc-text-2)',
+              marginBottom: 16,
+            }}
+          >
+            查询某位老人最近一次模型预测结果
+          </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 220 }}>
+              <Input
+                label="老人 ID"
+                type="number"
+                value={elderId}
+                onChange={(event) => setElderId(event.target.value)}
+              />
+            </div>
+            <Button
+              variant="primary"
+              onClick={handleLoadHistory}
+              disabled={historyLoading}
+              loading={historyLoading}
+            >
+              {historyLoading ? '查询中...' : '查询'}
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      {history && (
+        <PredictionResult
+          prediction={history}
+          title={`老人 #${historyElderId ?? ''} 最新预测`}
+          subtitle="来自模型历史推理结果"
+        />
+      )}
+    </div>
+  );
+
   return (
-    <Box>
+    <div>
       <PageHeader
         title="AI 健康风险推理"
         description="基于机器学习模型对老人健康状态进行即时评估，输出高风险、随访建议和综合健康评分"
       />
 
-      <Card sx={{ mb: 3 }}>
-        <Tabs
-          value={tab}
-          onChange={(_, next) => setTab(next)}
-          sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
-        >
-          <Tab value="form" label="即时推理" />
-          <Tab value="history" label="历史记录" />
-        </Tabs>
+      <Card style={{ marginBottom: 24 }}>
+        <div style={{ padding: '0 8px' }}>
+          <Tabs
+            activeKey={tab}
+            onChange={(key) => setTab(key as 'form' | 'history')}
+            items={[
+              { key: 'form', label: '即时推理' },
+              { key: 'history', label: '历史记录' },
+            ]}
+          />
+        </div>
       </Card>
 
-      {tab === 'form' && (
-        <Stack spacing={3}>
-          <FeatureFieldset values={features} onChange={handleChange} />
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="flex-end">
-            <Button
-              variant="outlined"
-              startIcon={<AutoFixHighRoundedIcon />}
-              onClick={handleFillExample}
-            >
-              填充示例
-            </Button>
-            <Button
-              variant="outlined"
-              color="inherit"
-              startIcon={<RestartAltRoundedIcon />}
-              onClick={handleReset}
-            >
-              重置
-            </Button>
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<PlayArrowRoundedIcon />}
-              disabled={predicting}
-              onClick={handlePredict}
-            >
-              {predicting ? '计算中...' : '立即预测'}
-            </Button>
-          </Stack>
-
-          {result && <PredictionResult prediction={result} subtitle="基于当前表单输入" />}
-        </Stack>
-      )}
-
-      {tab === 'history' && (
-        <Stack spacing={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>
-                按老人 ID 查询
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                查询某位老人最近一次模型预测结果
-              </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-                <TextField
-                  label="老人 ID"
-                  type="number"
-                  size="small"
-                  value={elderId}
-                  onChange={(event) => setElderId(event.target.value)}
-                  sx={{ minWidth: 220 }}
-                />
-                <Button
-                  variant="contained"
-                  onClick={handleLoadHistory}
-                  disabled={historyLoading}
-                >
-                  {historyLoading ? '查询中...' : '查询'}
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-
-          {history && (
-            <PredictionResult
-              prediction={history}
-              title={`老人 #${historyElderId ?? ''} 最新预测`}
-              subtitle="来自模型历史推理结果"
-            />
-          )}
-        </Stack>
-      )}
-    </Box>
+      {tab === 'form' ? formPanel : historyPanel}
+    </div>
   );
 };
 

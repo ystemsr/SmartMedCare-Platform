@@ -1,29 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  Drawer,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
-import StopCircleRoundedIcon from '@mui/icons-material/StopCircleRounded';
+import { Plus, RefreshCw, XCircle } from 'lucide-react';
 import PermissionGuard from '../../components/PermissionGuard';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PageHeader from '../../components/bigdata/PageHeader';
 import JobStatusChip, { JOB_TYPE_LABEL } from '../../components/bigdata/JobStatusChip';
+import {
+  Button,
+  Chip,
+  Divider,
+  Drawer,
+  Modal,
+  Select,
+  Textarea,
+  confirm,
+} from '@/components/ui';
 import { cancelJob, getJobDetail, getJobs, submitJob } from '../../api/bigdata';
 import { formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
@@ -145,7 +135,13 @@ const JobManagerPage: React.FC = () => {
   };
 
   const handleCancel = async (jobId: string) => {
-    if (!window.confirm('确认取消该作业？')) return;
+    const ok = await confirm({
+      title: '取消作业',
+      content: '确认取消该作业？',
+      intent: 'danger',
+      okText: '取消作业',
+    });
+    if (!ok) return;
     try {
       await cancelJob(jobId);
       message.success('已请求取消');
@@ -164,7 +160,9 @@ const JobManagerPage: React.FC = () => {
       dataIndex: 'job_id',
       width: 240,
       render: (value) => (
-        <Chip size="small" variant="outlined" label={String(value)} sx={{ fontFamily: 'monospace' }} />
+        <Chip outlined style={{ fontFamily: 'monospace' }}>
+          {String(value)}
+        </Chip>
       ),
     },
     {
@@ -197,29 +195,30 @@ const JobManagerPage: React.FC = () => {
       width: 200,
       fixed: 'right',
       render: (_, record) => (
-        <Stack direction="row" spacing={0.5}>
-          <Button size="small" onClick={() => setSelected(record)}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <Button size="sm" variant="text" onClick={() => setSelected(record)}>
             查看日志
           </Button>
           {record.status === 'running' && (
             <PermissionGuard permission="bigdata:run">
               <Button
-                size="small"
-                color="error"
-                startIcon={<StopCircleRoundedIcon />}
+                size="sm"
+                variant="text"
+                danger
+                startIcon={<XCircle size={14} />}
                 onClick={() => handleCancel(record.job_id)}
               >
                 取消
               </Button>
             </PermissionGuard>
           )}
-        </Stack>
+        </div>
       ),
     },
   ];
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="作业管理"
         description="提交、监控与管理大数据批处理作业"
@@ -245,165 +244,168 @@ const JobManagerPage: React.FC = () => {
           }
         }}
         toolbar={
-          <Stack direction="row" spacing={1.5}>
-            <Button
-              variant="outlined"
-              startIcon={<RefreshRoundedIcon />}
-              onClick={fetchJobs}
-            >
+          <div style={{ display: 'flex', gap: 12 }}>
+            <Button variant="outlined" startIcon={<RefreshCw size={14} />} onClick={fetchJobs}>
               刷新
             </Button>
             <PermissionGuard permission="bigdata:run">
               <Button
-                variant="contained"
-                startIcon={<AddRoundedIcon />}
+                variant="primary"
+                startIcon={<Plus size={14} />}
                 onClick={() => setSubmitOpen(true)}
               >
                 提交新作业
               </Button>
             </PermissionGuard>
-          </Stack>
+          </div>
         }
       />
 
-      <Dialog open={submitOpen} onClose={() => setSubmitOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>提交新作业</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2.5} sx={{ pt: 1 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>作业类型</InputLabel>
-              <Select
-                label="作业类型"
-                value={submitType}
-                onChange={(event) => setSubmitType(event.target.value as JobType)}
-              >
-                {JOB_TYPE_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label="参数 (JSON, 可选)"
-              multiline
-              minRows={6}
-              value={paramsText}
-              onChange={(event) => setParamsText(event.target.value)}
-              placeholder={PARAMS_PLACEHOLDER}
-              InputProps={{ sx: { fontFamily: 'monospace', fontSize: '0.875rem' } }}
-            />
-            <Typography variant="caption" color="text.secondary">
-              参数将原样透传给后端，请参考作业类型所需的字段。
-            </Typography>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSubmitOpen(false)}>取消</Button>
-          <Button variant="contained" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? '提交中...' : '提交'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <Modal
+        open={submitOpen}
+        onClose={() => setSubmitOpen(false)}
+        title="提交新作业"
+        width={560}
+        footer={
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Button variant="text" onClick={() => setSubmitOpen(false)}>
+              取消
+            </Button>
+            <Button variant="primary" onClick={handleSubmit} loading={submitting} disabled={submitting}>
+              {submitting ? '提交中...' : '提交'}
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <Select<JobType>
+            label="作业类型"
+            value={submitType}
+            onChange={(next) => setSubmitType(next)}
+            options={JOB_TYPE_OPTIONS}
+          />
+          <Textarea
+            label="参数 (JSON, 可选)"
+            rows={6}
+            value={paramsText}
+            onChange={(event) => setParamsText(event.target.value)}
+            placeholder={PARAMS_PLACEHOLDER}
+            style={{ fontFamily: 'monospace', fontSize: 14 }}
+          />
+          <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
+            参数将原样透传给后端，请参考作业类型所需的字段。
+          </div>
+        </div>
+      </Modal>
 
       <Drawer
-        anchor="right"
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
-        PaperProps={{ sx: { width: { xs: '100%', md: 680 } } }}
+        placement="right"
+        width={680}
+        title="作业详情"
       >
-        <Box sx={{ p: 3 }}>
-          <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
-            作业详情
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            作业 ID：
-            <Box component="span" sx={{ fontFamily: 'monospace' }}>
-              {selected?.job_id}
-            </Box>
-          </Typography>
-          <Divider sx={{ mb: 2 }} />
+        <div
+          style={{
+            fontSize: 'var(--smc-fs-sm)',
+            color: 'var(--smc-text-2)',
+            marginBottom: 16,
+          }}
+        >
+          作业 ID：
+          <span style={{ fontFamily: 'monospace', color: 'var(--smc-text)' }}>
+            {selected?.job_id}
+          </span>
+        </div>
+        <Divider />
 
-          {detailLoading && !detail ? (
-            <Typography color="text.secondary">加载中...</Typography>
-          ) : detail ? (
-            <Stack spacing={2}>
-              <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-                <JobStatusChip status={detail.status} />
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={JOB_TYPE_LABEL[detail.job_type] || detail.job_type}
-                />
-                {detail.status === 'running' && (
-                  <Typography variant="caption" color="text.secondary">
-                    日志每 3 秒自动刷新
-                  </Typography>
-                )}
-              </Stack>
-              <Stack direction="row" spacing={3}>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    开始时间
-                  </Typography>
-                  <Typography variant="body2">{formatDateTime(detail.started_at)}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    结束时间
-                  </Typography>
-                  <Typography variant="body2">{formatDateTime(detail.finished_at)}</Typography>
-                </Box>
-              </Stack>
-
-              {detail.params && Object.keys(detail.params).length > 0 && (
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    参数
-                  </Typography>
-                  <Box
-                    component="pre"
-                    sx={{
-                      p: 1.5,
-                      bgcolor: 'grey.100',
-                      borderRadius: 2,
-                      fontSize: '0.8rem',
-                      maxHeight: 180,
-                      overflow: 'auto',
-                    }}
-                  >
-                    {JSON.stringify(detail.params, null, 2)}
-                  </Box>
-                </Box>
+        {detailLoading && !detail ? (
+          <div style={{ color: 'var(--smc-text-2)', marginTop: 16 }}>加载中...</div>
+        ) : detail ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 12,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <JobStatusChip status={detail.status} />
+              <Chip outlined>{JOB_TYPE_LABEL[detail.job_type] || detail.job_type}</Chip>
+              {detail.status === 'running' && (
+                <span style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
+                  日志每 3 秒自动刷新
+                </span>
               )}
+            </div>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
+                  开始时间
+                </div>
+                <div style={{ fontSize: 'var(--smc-fs-sm)' }}>
+                  {formatDateTime(detail.started_at)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
+                  结束时间
+                </div>
+                <div style={{ fontSize: 'var(--smc-fs-sm)' }}>
+                  {formatDateTime(detail.finished_at)}
+                </div>
+              </div>
+            </div>
 
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  日志
-                </Typography>
-                <Box
-                  component="pre"
-                  sx={{
-                    p: 2,
-                    bgcolor: '#0f172a',
-                    color: '#e2e8f0',
-                    borderRadius: 2,
-                    fontFamily: 'monospace',
-                    fontSize: '0.8rem',
-                    lineHeight: 1.6,
-                    maxHeight: 420,
+            {detail.params && Object.keys(detail.params).length > 0 && (
+              <div>
+                <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
+                  参数
+                </div>
+                <pre
+                  style={{
+                    margin: '4px 0 0',
+                    padding: 12,
+                    background: 'var(--smc-surface-alt)',
+                    border: '1px solid var(--smc-border)',
+                    borderRadius: 'var(--smc-r-md)',
+                    fontSize: 13,
+                    maxHeight: 180,
                     overflow: 'auto',
-                    whiteSpace: 'pre-wrap',
                   }}
                 >
-                  {detail.logs || '暂无日志输出'}
-                </Box>
-              </Box>
-            </Stack>
-          ) : null}
-        </Box>
+                  {JSON.stringify(detail.params, null, 2)}
+                </pre>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
+                日志
+              </div>
+              <pre
+                style={{
+                  margin: '4px 0 0',
+                  padding: 16,
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  borderRadius: 'var(--smc-r-md)',
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  maxHeight: 420,
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {detail.logs || '暂无日志输出'}
+              </pre>
+            </div>
+          </div>
+        ) : null}
       </Drawer>
-    </Box>
+    </div>
   );
 };
 

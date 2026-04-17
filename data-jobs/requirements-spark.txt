@@ -1,0 +1,6 @@
+torch==2.2.*
+numpy
+pandas
+pyspark==3.5.*
+pyhive
+thrift

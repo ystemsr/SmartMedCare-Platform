@@ -18,8 +18,8 @@ Pillow>=10.0.0
 # ML inference
 torch>=2.2,<2.5
 numpy>=1.26,<3.0
-# Hive JDBC over Thrift
-pyhive[hive]>=0.7.0
+# Hive JDBC over Thrift (pure-sasl avoids a C build step)
+pyhive[hive_pure_sasl]>=0.7.0
 thrift>=0.16
-sasl>=0.3.1
+pure-sasl>=0.6.2
 thrift-sasl>=0.4.3

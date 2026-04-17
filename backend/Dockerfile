@@ -43,6 +43,7 @@ RUN apt-get update && \
         libgomp1 \
         libsasl2-2 \
         libsasl2-modules \
+        docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /install /usr/local

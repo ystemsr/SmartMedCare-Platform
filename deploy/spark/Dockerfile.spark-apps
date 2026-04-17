@@ -1,4 +1,4 @@
-FROM bitnami/spark:3.5
+FROM bitnamilegacy/spark:3.5
 
 USER root
 
@@ -8,11 +8,11 @@ RUN pip install --no-cache-dir \
     torch==2.2.* \
     numpy \
     pandas \
-    pyhive \
+    "pyhive[hive_pure_sasl]" \
     thrift \
     thrift-sasl \
+    pure-sasl \
     hdfs \
-    sasl \
     sqlalchemy \
     pymysql
 

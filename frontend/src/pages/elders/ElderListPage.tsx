@@ -1,38 +1,26 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  Box,
+  Plus,
+  Trash2,
+  Pencil,
+  RefreshCw,
+  Search,
+  ToggleRight,
+  ShieldCheck,
+  Eye,
+  AlertTriangle,
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
   Button,
   Card,
-  CardActionArea,
   Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  FormControl,
-  InputAdornment,
-  InputLabel,
-  MenuItem,
+  Input,
   Select,
-  Stack,
-  Tab,
+  Spinner,
   Tabs,
-  TextField,
-  Typography,
-  type SelectChangeEvent,
-} from '@mui/material';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
-import LockResetRoundedIcon from '@mui/icons-material/LockResetRounded';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
-import ToggleOnRoundedIcon from '@mui/icons-material/ToggleOnRounded';
-import VerifiedUserRoundedIcon from '@mui/icons-material/VerifiedUserRounded';
-import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { useNavigate } from 'react-router-dom';
+  confirm,
+} from '../../components/ui';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -62,20 +50,13 @@ const formFields: FormFieldConfig[] = [
   { name: 'emergency_contact_phone', label: '紧急联系电话' },
 ];
 
-interface ConfirmState {
-  title: string;
-  content: string;
-  onConfirm: () => Promise<void> | void;
-}
-
 const ElderListPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState<'list' | 'archive'>('list');
   const [archiveKeyword, setArchiveKeyword] = useState('');
   const [formVisible, setFormVisible] = useState(false);
   const [editingElder, setEditingElder] = useState<Elder | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   const fetchFn = useCallback(
     (params: ElderListQuery & { page: number; page_size: number }) => getElders(params),
@@ -95,13 +76,14 @@ const ElderListPage: React.FC = () => {
     setFormVisible(true);
   };
 
-  const openConfirm = useCallback((title: string, content: string, onConfirm: () => Promise<void> | void) => {
-    setConfirmState({ title, content, onConfirm });
-  }, []);
-
-  const closeConfirm = () => setConfirmState(null);
-
   const handleDelete = async (id: number) => {
+    const ok = await confirm({
+      title: '删除老人档案',
+      content: '确定删除该老人档案？此操作不可撤销。',
+      intent: 'danger',
+      okText: '删除',
+    });
+    if (!ok) return;
     try {
       await deleteElder(id);
       message.success('删除成功');
@@ -112,6 +94,12 @@ const ElderListPage: React.FC = () => {
   };
 
   const handleActivateAccount = async (record: Elder) => {
+    const ok = await confirm({
+      title: '激活账户',
+      content: '确定为该老人激活登录账户？',
+      intent: 'info',
+    });
+    if (!ok) return;
     try {
       const res = await activateElderAccount(record.id);
       message.success(`账户已激活，用户名: ${res.data.username}，密码: ${res.data.password}`);
@@ -122,6 +110,12 @@ const ElderListPage: React.FC = () => {
   };
 
   const handleResetPassword = async (id: number) => {
+    const ok = await confirm({
+      title: '重置密码',
+      content: '确定重置密码？',
+      intent: 'warning',
+    });
+    if (!ok) return;
     try {
       await resetElderPassword(id);
       message.success('密码已重置');
@@ -132,6 +126,12 @@ const ElderListPage: React.FC = () => {
 
   const handleToggleStatus = async (id: number, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    const ok = await confirm({
+      title: newStatus === 'active' ? '启用账户' : '禁用账户',
+      content: `确定${newStatus === 'active' ? '启用' : '禁用'}该账户？`,
+      intent: newStatus === 'active' ? 'info' : 'warning',
+    });
+    if (!ok) return;
     try {
       await updateElderAccountStatus(id, newStatus);
       message.success(newStatus === 'active' ? '已启用' : '已禁用');
@@ -185,11 +185,13 @@ const ElderListPage: React.FC = () => {
         render: (value: unknown) => {
           const tags = value as string[] | undefined;
           return tags?.length ? (
-            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {tags.map((tag) => (
-                <Chip key={tag} label={tag} color="primary" variant="outlined" size="small" />
+                <Chip key={tag} tone="primary" outlined>
+                  {tag}
+                </Chip>
               ))}
-            </Stack>
+            </div>
           ) : (
             '-'
           );
@@ -201,7 +203,7 @@ const ElderListPage: React.FC = () => {
         width: 130,
         render: (value: unknown) => {
           const val = value as string | undefined;
-          return val || <Chip label="未激活" size="small" />;
+          return val || <Chip>未激活</Chip>;
         },
       },
       {
@@ -220,36 +222,26 @@ const ElderListPage: React.FC = () => {
         render: (_: unknown, record: Elder) => {
           const score = record.latest_risk_score;
           if (score === null || score === undefined) {
-            return <Chip label="未评估" size="small" variant="outlined" />;
+            return <Chip outlined>未评估</Chip>;
           }
           if (record.latest_high_risk === true) {
             return (
-              <Chip
-                icon={<WarningAmberIcon />}
-                label={`高风险 ${score.toFixed(0)}`}
-                color="error"
-                size="small"
-                variant="outlined"
-              />
+              <Chip tone="error" outlined icon={<AlertTriangle size={12} />}>
+                {`高风险 ${score.toFixed(0)}`}
+              </Chip>
             );
           }
           if (record.latest_high_risk === false && score >= 70) {
             return (
-              <Chip
-                label={`正常 ${score.toFixed(0)}`}
-                color="success"
-                size="small"
-                variant="outlined"
-              />
+              <Chip tone="success" outlined>
+                {`正常 ${score.toFixed(0)}`}
+              </Chip>
             );
           }
           return (
-            <Chip
-              label={`关注 ${score.toFixed(0)}`}
-              color="warning"
-              size="small"
-              variant="outlined"
-            />
+            <Chip tone="warning" outlined>
+              {`关注 ${score.toFixed(0)}`}
+            </Chip>
           );
         },
       },
@@ -260,12 +252,9 @@ const ElderListPage: React.FC = () => {
         render: (value: unknown) => {
           const status = value as string;
           return (
-            <Chip
-              label={status === 'active' ? '正常' : '已禁用'}
-              color={status === 'active' ? 'success' : 'error'}
-              size="small"
-              variant="outlined"
-            />
+            <Chip tone={status === 'active' ? 'success' : 'error'} outlined>
+              {status === 'active' ? '正常' : '已禁用'}
+            </Chip>
           );
         },
       },
@@ -275,20 +264,20 @@ const ElderListPage: React.FC = () => {
         width: 380,
         fixed: 'right' as const,
         render: (_: unknown, record: Elder) => (
-          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             <Button
-              size="small"
+              size="sm"
               variant="text"
-              startIcon={<VisibilityRoundedIcon />}
+              startIcon={<Eye size={14} />}
               onClick={() => navigate(`/elders/${record.id}`)}
             >
               查看
             </Button>
             <PermissionGuard permission="elder:update">
               <Button
-                size="small"
+                size="sm"
                 variant="text"
-                startIcon={<EditRoundedIcon />}
+                startIcon={<Pencil size={14} />}
                 onClick={() => handleEdit(record)}
               >
                 编辑
@@ -297,42 +286,28 @@ const ElderListPage: React.FC = () => {
             <PermissionGuard permission="elder:update">
               {!record.username ? (
                 <Button
-                  size="small"
+                  size="sm"
                   variant="text"
-                  color="info"
-                  startIcon={<VerifiedUserRoundedIcon />}
-                  onClick={() =>
-                    openConfirm('激活账户', '确定为该老人激活登录账户？', () =>
-                      handleActivateAccount(record),
-                    )
-                  }
+                  startIcon={<ShieldCheck size={14} />}
+                  onClick={() => handleActivateAccount(record)}
                 >
                   激活账户
                 </Button>
               ) : (
                 <>
                   <Button
-                    size="small"
+                    size="sm"
                     variant="text"
-                    startIcon={<LockResetRoundedIcon />}
-                    onClick={() =>
-                      openConfirm('重置密码', '确定重置密码？', () => handleResetPassword(record.id))
-                    }
+                    startIcon={<RefreshCw size={14} />}
+                    onClick={() => handleResetPassword(record.id)}
                   >
                     重置密码
                   </Button>
                   <Button
-                    size="small"
+                    size="sm"
                     variant="text"
-                    color={record.account_status === 'active' ? 'warning' : 'success'}
-                    startIcon={<ToggleOnRoundedIcon />}
-                    onClick={() =>
-                      openConfirm(
-                        record.account_status === 'active' ? '禁用账户' : '启用账户',
-                        `确定${record.account_status === 'active' ? '禁用' : '启用'}该账户？`,
-                        () => handleToggleStatus(record.id, record.account_status),
-                      )
-                    }
+                    startIcon={<ToggleRight size={14} />}
+                    onClick={() => handleToggleStatus(record.id, record.account_status)}
                   >
                     {record.account_status === 'active' ? '禁用' : '启用'}
                   </Button>
@@ -341,22 +316,20 @@ const ElderListPage: React.FC = () => {
             </PermissionGuard>
             <PermissionGuard permission="elder:delete">
               <Button
-                size="small"
+                size="sm"
                 variant="text"
-                color="error"
-                startIcon={<DeleteRoundedIcon />}
-                onClick={() =>
-                  openConfirm('删除老人档案', '确定删除该老人档案？', () => handleDelete(record.id))
-                }
+                danger
+                startIcon={<Trash2 size={14} />}
+                onClick={() => handleDelete(record.id)}
               >
                 删除
               </Button>
             </PermissionGuard>
-          </Stack>
+          </div>
         ),
       },
     ],
-    [navigate, openConfirm],
+    [navigate],
   );
 
   const handleArchiveSearch = useCallback(() => {
@@ -366,125 +339,94 @@ const ElderListPage: React.FC = () => {
   const archiveCards = useMemo(
     () =>
       data.map((elder) => (
-        <Box key={elder.id} sx={{ width: { xs: '100%', sm: '50%', md: '33.333%', lg: '25%' } }}>
+        <div
+          key={elder.id}
+          style={{ flex: '1 1 240px', minWidth: 240, maxWidth: 320 }}
+        >
           <Card
-            variant="outlined"
-            sx={{ height: '100%', borderRadius: 4, overflow: 'hidden' }}
+            hoverable
+            style={{ height: '100%', cursor: 'pointer' }}
+            onClick={() => navigate(`/elders/${elder.id}/archive`)}
           >
-            <CardActionArea
-              onClick={() => navigate(`/elders/${elder.id}/archive`)}
-              sx={{ height: '100%', alignItems: 'stretch' }}
-            >
-              <Box sx={{ p: 2.5, height: '100%' }}>
-                <Stack spacing={1.5} sx={{ height: '100%' }}>
-                  <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-                      {elder.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {formatGender(elder.gender)} · {elder.phone || '-'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                      标签
-                    </Typography>
-                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                      {elder.tags?.length ? (
-                        elder.tags.map((tag) => (
-                          <Chip key={tag} label={tag} color="primary" variant="outlined" size="small" />
-                        ))
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          暂无标签
-                        </Typography>
-                      )}
-                    </Stack>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    点击查看健康档案
-                  </Typography>
-                </Stack>
-              </Box>
-            </CardActionArea>
+            <div style={{ padding: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{elder.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 12 }}>
+                {formatGender(elder.gender)} · {elder.phone || '-'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--smc-text-2)', marginBottom: 6 }}>标签</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {elder.tags?.length ? (
+                  elder.tags.map((tag) => (
+                    <Chip key={tag} tone="primary" outlined>
+                      {tag}
+                    </Chip>
+                  ))
+                ) : (
+                  <span style={{ fontSize: 13, color: 'var(--smc-text-3)' }}>暂无标签</span>
+                )}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>点击查看健康档案</div>
+            </div>
           </Card>
-        </Box>
+        </div>
       )),
     [data, navigate],
   );
 
   const filterBar = (
-    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} useFlexGap flexWrap="wrap">
-      <FormControl size="small" sx={{ minWidth: 120 }}>
-        <InputLabel>性别</InputLabel>
+    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div style={{ minWidth: 120 }}>
         <Select
           label="性别"
           value={query.gender || ''}
-          onChange={(event: SelectChangeEvent) =>
-            setQuery((prev) => ({ ...prev, gender: event.target.value || undefined }))
+          onChange={(v) =>
+            setQuery((prev) => ({ ...prev, gender: v ? String(v) : undefined }))
           }
-        >
-          <MenuItem value="">全部</MenuItem>
-          {GENDER_OPTIONS.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-
-      <FormControl size="small" sx={{ minWidth: 140 }}>
-        <InputLabel>风险等级</InputLabel>
+          options={[{ label: '全部', value: '' }, ...GENDER_OPTIONS]}
+        />
+      </div>
+      <div style={{ minWidth: 140 }}>
         <Select
           label="风险等级"
           value={query.risk_level || ''}
-          onChange={(event: SelectChangeEvent) =>
-            setQuery((prev) => ({ ...prev, risk_level: event.target.value || undefined }))
+          onChange={(v) =>
+            setQuery((prev) => ({ ...prev, risk_level: v ? String(v) : undefined }))
           }
-        >
-          <MenuItem value="">全部</MenuItem>
-          {RISK_LEVEL_OPTIONS.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-
-      <FormControl size="small" sx={{ minWidth: 140 }}>
-        <InputLabel>账户状态</InputLabel>
+          options={[{ label: '全部', value: '' }, ...RISK_LEVEL_OPTIONS]}
+        />
+      </div>
+      <div style={{ minWidth: 140 }}>
         <Select
           label="账户状态"
           value={query.account_status || ''}
-          onChange={(event: SelectChangeEvent) =>
-            setQuery((prev) => ({ ...prev, account_status: event.target.value || undefined }))
+          onChange={(v) =>
+            setQuery((prev) => ({ ...prev, account_status: v ? String(v) : undefined }))
           }
-        >
-          <MenuItem value="">全部</MenuItem>
-          {ACCOUNT_STATUS_OPTIONS.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-
+          options={[{ label: '全部', value: '' }, ...ACCOUNT_STATUS_OPTIONS]}
+        />
+      </div>
       <PermissionGuard permission="elder:create">
-        <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={handleCreate}>
+        <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
           新增老人
         </Button>
       </PermissionGuard>
-    </Stack>
+    </div>
   );
 
   return (
-    <Box>
-      <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
-        <Tab label="列表管理" />
-        <Tab label="健康档案" />
-      </Tabs>
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={(k) => setActiveTab(k as 'list' | 'archive')}
+          items={[
+            { key: 'list', label: '列表管理' },
+            { key: 'archive', label: '健康档案' },
+          ]}
+        />
+      </div>
 
-      {activeTab === 0 ? (
+      {activeTab === 'list' ? (
         <>
           <AppTable<Elder>
             columns={columns}
@@ -507,86 +449,61 @@ const ElderListPage: React.FC = () => {
             confirmLoading={submitLoading}
             width={600}
           />
-
-          <Dialog open={Boolean(confirmState)} onClose={closeConfirm}>
-            <DialogTitle>{confirmState?.title}</DialogTitle>
-            <DialogContent>
-              <DialogContentText>{confirmState?.content}</DialogContentText>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={closeConfirm} color="inherit">
-                取消
-              </Button>
-              <Button
-                onClick={async () => {
-                  const action = confirmState?.onConfirm;
-                  closeConfirm();
-                  await action?.();
-                }}
-                color="error"
-                variant="contained"
-              >
-                确认
-              </Button>
-            </DialogActions>
-          </Dialog>
         </>
       ) : (
-        <Stack spacing={2.5}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            justifyContent="space-between"
-            alignItems={{ xs: 'stretch', sm: 'center' }}
-            spacing={2}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 16,
+              flexWrap: 'wrap',
+            }}
           >
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-                老人健康档案
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
+            <div>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>老人健康档案</h2>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--smc-text-2)' }}>
                 查看并进入单个老人的健康档案详情
-              </Typography>
-            </Box>
+              </p>
+            </div>
 
-            <TextField
-              value={archiveKeyword}
-              onChange={(event) => setArchiveKeyword(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  handleArchiveSearch();
-                }
-              }}
-              placeholder="搜索姓名/手机号/身份证"
-              size="small"
-              sx={{ width: { xs: '100%', sm: 340 } }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <SearchRoundedIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Stack>
+            <div style={{ width: 340, maxWidth: '100%' }}>
+              <Input
+                value={archiveKeyword}
+                onChange={(event) => setArchiveKeyword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') handleArchiveSearch();
+                }}
+                placeholder="搜索姓名/手机号/身份证"
+                endAdornment={<Search size={14} />}
+              />
+            </div>
+          </div>
 
           {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 320 }}>
-              <CircularProgress size={36} />
-            </Box>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                minHeight: 320,
+              }}
+            >
+              <Spinner />
+            </div>
           ) : data.length === 0 ? (
-            <Card variant="outlined" sx={{ p: 4 }}>
-              <Typography variant="body2" color="text.secondary" align="center">
+            <Card>
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--smc-text-2)' }}>
                 暂无老人档案
-              </Typography>
+              </div>
             </Card>
           ) : (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              {archiveCards}
-            </Box>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>{archiveCards}</div>
           )}
-        </Stack>
+        </div>
       )}
-    </Box>
+    </div>
   );
 };
 

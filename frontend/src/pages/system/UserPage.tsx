@@ -1,8 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { Button, Chip, Stack } from '@mui/material';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
-import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Button, Chip, confirm } from '../../components/ui';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -60,9 +58,13 @@ const UserPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('确定删除该用户？')) {
-      return;
-    }
+    const ok = await confirm({
+      title: '删除用户',
+      content: '确定删除该用户？',
+      intent: 'danger',
+      okText: '删除',
+    });
+    if (!ok) return;
 
     try {
       await deleteUser(id);
@@ -85,17 +87,13 @@ const UserPage: React.FC = () => {
       render: (value) => {
         const roles = value as User['roles'] | undefined;
         return roles?.length ? (
-          <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {roles.map((role) => (
-              <Chip
-                key={role.id}
-                label={role.display_name}
-                size="small"
-                color="primary"
-                variant="outlined"
-              />
+              <Chip key={role.id} tone="primary" outlined>
+                {role.display_name}
+              </Chip>
             ))}
-          </Stack>
+          </div>
         ) : (
           '-'
         );
@@ -108,12 +106,9 @@ const UserPage: React.FC = () => {
       render: (value) => {
         const status = String(value);
         return (
-          <Chip
-            size="small"
-            color={status === 'active' ? 'success' : 'error'}
-            variant="outlined"
-            label={status === 'active' ? '正常' : '禁用'}
-          />
+          <Chip tone={status === 'active' ? 'success' : 'error'} outlined>
+            {status === 'active' ? '正常' : '禁用'}
+          </Chip>
         );
       },
     },
@@ -129,27 +124,27 @@ const UserPage: React.FC = () => {
       width: 160,
       fixed: 'right',
       render: (_, record) => (
-        <Stack direction="row" spacing={0.5}>
+        <div style={{ display: 'flex', gap: 4 }}>
           <PermissionGuard permission="user:manage">
             <Button
-              size="small"
+              size="sm"
               variant="text"
-              startIcon={<EditRoundedIcon fontSize="small" />}
+              startIcon={<Pencil size={14} />}
               onClick={() => handleEdit(record)}
             >
               编辑
             </Button>
             <Button
-              size="small"
+              size="sm"
               variant="text"
-              color="error"
-              startIcon={<DeleteRoundedIcon fontSize="small" />}
+              danger
+              startIcon={<Trash2 size={14} />}
               onClick={() => handleDelete(record.id)}
             >
               删除
             </Button>
           </PermissionGuard>
-        </Stack>
+        </div>
       ),
     },
   ];
@@ -166,7 +161,7 @@ const UserPage: React.FC = () => {
         searchPlaceholder="搜索用户名/姓名"
         toolbar={
           <PermissionGuard permission="user:manage">
-            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={handleCreate}>
+            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
               新增用户
             </Button>
           </PermissionGuard>

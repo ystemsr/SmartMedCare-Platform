@@ -1,18 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Box,
-  Button,
-  Checkbox,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  Stack,
-  Typography,
-} from '@mui/material';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import ManageAccountsRoundedIcon from '@mui/icons-material/ManageAccountsRounded';
+import { Plus, Settings } from 'lucide-react';
+import { Button, Checkbox, Modal } from '../../components/ui';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
@@ -48,23 +36,16 @@ function PermissionTreeNode({
   const indeterminate = selectedCount > 0 && selectedCount < nodeKeys.length;
 
   return (
-    <Box sx={{ pl: depth * 2 }}>
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={checked}
-            indeterminate={indeterminate}
-            onChange={(_, nextChecked) => onToggle(node, nextChecked)}
-          />
-        }
+    <div style={{ paddingLeft: depth * 16 }}>
+      <Checkbox
+        checked={checked}
+        indeterminate={indeterminate}
+        onChange={(event) => onToggle(node, event.target.checked)}
         label={
-          <Typography variant="body2" sx={{ fontWeight: depth === 0 ? 600 : 400 }}>
-            {node.title}
-          </Typography>
+          <span style={{ fontWeight: depth === 0 ? 600 : 400, fontSize: 14 }}>{node.title}</span>
         }
-        sx={{ alignItems: 'flex-start', mr: 0 }}
       />
-      <Stack spacing={0.25}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {node.children?.map((child) => (
           <PermissionTreeNode
             key={child.key}
@@ -74,8 +55,8 @@ function PermissionTreeNode({
             onToggle={onToggle}
           />
         ))}
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -168,9 +149,9 @@ const RolePage: React.FC = () => {
       render: (_, record) => (
         <PermissionGuard permission="role:manage">
           <Button
-            size="small"
+            size="sm"
             variant="text"
-            startIcon={<ManageAccountsRoundedIcon fontSize="small" />}
+            startIcon={<Settings size={14} />}
             onClick={() => openPermModal(record)}
           >
             配置权限
@@ -189,7 +170,7 @@ const RolePage: React.FC = () => {
         pagination={false}
         toolbar={
           <PermissionGuard permission="role:manage">
-            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setFormVisible(true)}>
+            <Button startIcon={<Plus size={14} />} onClick={() => setFormVisible(true)}>
               新增角色
             </Button>
           </PermissionGuard>
@@ -215,40 +196,39 @@ const RolePage: React.FC = () => {
         onCancel={() => setFormVisible(false)}
       />
 
-      <Dialog
+      <Modal
         open={permModalVisible}
         onClose={() => setPermModalVisible(false)}
-        maxWidth="sm"
-        fullWidth
+        title={`配置权限 - ${currentRole?.display_name || ''}`}
+        width={560}
+        footer={
+          <>
+            <Button variant="outlined" onClick={() => setPermModalVisible(false)}>
+              取消
+            </Button>
+            <Button onClick={handlePermSubmit} loading={permLoading}>
+              {permLoading ? '保存中...' : '确定'}
+            </Button>
+          </>
+        }
       >
-        <DialogTitle>{`配置权限 - ${currentRole?.display_name || ''}`}</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={1.5} sx={{ pt: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              勾选权限后将覆盖该角色现有权限。
-            </Typography>
-            <Stack spacing={0.5}>
-              {permissionsTree.map((node) => (
-                <PermissionTreeNode
-                  key={node.key}
-                  node={node}
-                  depth={0}
-                  selectedKeys={checkedKeySet}
-                  onToggle={handlePermToggle}
-                />
-              ))}
-            </Stack>
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setPermModalVisible(false)} color="inherit">
-            取消
-          </Button>
-          <Button onClick={handlePermSubmit} variant="contained" disabled={permLoading}>
-            {permLoading ? '保存中...' : '确定'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>
+            勾选权限后将覆盖该角色现有权限。
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {permissionsTree.map((node) => (
+              <PermissionTreeNode
+                key={node.key}
+                node={node}
+                depth={0}
+                selectedKeys={checkedKeySet}
+                onToggle={handlePermToggle}
+              />
+            ))}
+          </div>
+        </div>
+      </Modal>
     </>
   );
 };

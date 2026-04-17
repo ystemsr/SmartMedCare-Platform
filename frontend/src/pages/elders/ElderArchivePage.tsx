@@ -1,16 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Button,
-  Card,
-  Chip,
-  CircularProgress,
-  Divider,
-  Stack,
-  Typography,
-} from '@mui/material';
-import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
+import { ArrowLeft } from 'lucide-react';
+import { Button, Card, Chip, Divider, Spinner } from '../../components/ui';
 import { getElderDetail, getHealthRecords, getMedicalRecords, getCareRecords } from '../../api/elders';
 import { formatGender, formatDate, formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
@@ -23,7 +14,7 @@ interface TimelineEntry {
   content: string;
 }
 
-function StatCard({
+function InlineStatCard({
   label,
   value,
   color,
@@ -33,15 +24,11 @@ function StatCard({
   color: string;
 }) {
   return (
-    <Card variant="outlined" sx={{ flex: 1 }}>
-      <Box sx={{ p: 2.5 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-          {label}
-        </Typography>
-        <Typography variant="h4" sx={{ color, fontWeight: 700 }}>
-          {value}
-        </Typography>
-      </Box>
+    <Card>
+      <div style={{ padding: 20 }}>
+        <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 4 }}>{label}</div>
+        <div style={{ fontSize: 28, fontWeight: 700, color }}>{value}</div>
+      </div>
     </Card>
   );
 }
@@ -123,153 +110,154 @@ const ElderArchivePage: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-        <CircularProgress size={36} />
-      </Box>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '50vh',
+        }}
+      >
+        <Spinner />
+      </div>
     );
   }
 
   return (
-    <Stack spacing={2.5}>
-      <Button
-        variant="text"
-        startIcon={<ArrowBackRoundedIcon />}
-        onClick={() => navigate(-1)}
-        sx={{ alignSelf: 'flex-start' }}
-      >
-        返回
-      </Button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <Button variant="text" startIcon={<ArrowLeft size={14} />} onClick={() => navigate(-1)}>
+          返回
+        </Button>
+      </div>
 
       <Card>
-        <Box sx={{ p: 3 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+        <div style={{ padding: 24 }}>
+          <h2 style={{ margin: '0 0 16px', fontSize: 22, fontWeight: 700 }}>
             {elder?.name || ''} - 健康档案
-          </Typography>
-          <Box
-            sx={{
+          </h2>
+          <div
+            style={{
               display: 'grid',
-              gap: 2,
-              gridTemplateColumns: {
-                xs: '1fr',
-                sm: 'repeat(2, minmax(0, 1fr))',
-                lg: 'repeat(3, minmax(0, 1fr))',
-              },
+              gap: 16,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             }}
           >
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                姓名
-              </Typography>
-              <Typography variant="body2">{elder?.name || '-'}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                性别
-              </Typography>
-              <Typography variant="body2">{formatGender(elder?.gender)}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                出生日期
-              </Typography>
-              <Typography variant="body2">{formatDate(elder?.birth_date)}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                联系电话
-              </Typography>
-              <Typography variant="body2">{elder?.phone || '-'}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                地址
-              </Typography>
-              <Typography variant="body2">{elder?.address || '-'}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                标签
-              </Typography>
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>姓名</div>
+              <div style={{ fontSize: 14 }}>{elder?.name || '-'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>性别</div>
+              <div style={{ fontSize: 14 }}>{formatGender(elder?.gender)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>出生日期</div>
+              <div style={{ fontSize: 14 }}>{formatDate(elder?.birth_date)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>联系电话</div>
+              <div style={{ fontSize: 14 }}>{elder?.phone || '-'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>地址</div>
+              <div style={{ fontSize: 14 }}>{elder?.address || '-'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>标签</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                 {elder?.tags?.length ? (
                   elder.tags.map((tag) => (
-                    <Chip key={tag} label={tag} color="primary" variant="outlined" size="small" />
+                    <Chip key={tag} tone="primary" outlined>
+                      {tag}
+                    </Chip>
                   ))
                 ) : (
-                  <Typography variant="body2">-</Typography>
+                  <span style={{ fontSize: 14 }}>-</span>
                 )}
-              </Stack>
-            </Box>
-          </Box>
-        </Box>
+              </div>
+            </div>
+          </div>
+        </div>
       </Card>
 
       <Card>
-        <Box sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            统计概览
-          </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <StatCard label="健康记录数" value={stats.health} color="#1f6feb" />
-            <StatCard label="医疗记录数" value={stats.medical} color="#1f9d63" />
-            <StatCard label="照护记录数" value={stats.care} color="#d9822b" />
-          </Stack>
-        </Box>
+        <div style={{ padding: 24 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>统计概览</h3>
+          <div
+            style={{
+              display: 'grid',
+              gap: 16,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            }}
+          >
+            <InlineStatCard label="健康记录数" value={stats.health} color="#1f6feb" />
+            <InlineStatCard label="医疗记录数" value={stats.medical} color="#1f9d63" />
+            <InlineStatCard label="照护记录数" value={stats.care} color="#d9822b" />
+          </div>
+        </div>
       </Card>
 
       <Card>
-        <Box sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            时间线
-          </Typography>
-          <Stack spacing={2}>
+        <div style={{ padding: 24 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>时间线</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {timeline.length ? (
               timeline.map((entry, index) => (
-                <Box key={`${entry.type}-${entry.time}-${index}`} sx={{ display: 'flex', gap: 2 }}>
-                  <Box
-                    sx={{
+                <div
+                  key={`${entry.type}-${entry.time}-${index}`}
+                  style={{ display: 'flex', gap: 16 }}
+                >
+                  <div
+                    style={{
                       width: 12,
                       display: 'flex',
                       justifyContent: 'center',
+                      alignItems: 'flex-start',
+                      paddingTop: 6,
                     }}
                   >
-                    <Box
-                      sx={{
+                    <span
+                      style={{
                         width: 12,
                         height: 12,
                         borderRadius: '50%',
-                        mt: 0.8,
                         backgroundColor: typeColorMap[entry.type],
                         boxShadow: `0 0 0 6px ${typeColorMap[entry.type]}22`,
                       }}
                     />
-                  </Box>
-                  <Box sx={{ flex: 1, pb: 2 }}>
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  </div>
+                  <div style={{ flex: 1, paddingBottom: 16 }}>
+                    <div
+                      style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}
+                    >
                       <Chip
-                        label={entry.label}
-                        size="small"
-                        variant="outlined"
-                        sx={{ borderColor: typeColorMap[entry.type], color: typeColorMap[entry.type] }}
-                      />
-                      <Typography variant="caption" color="text.secondary">
+                        outlined
+                        style={{
+                          borderColor: typeColorMap[entry.type],
+                          color: typeColorMap[entry.type],
+                        }}
+                      >
+                        {entry.label}
+                      </Chip>
+                      <span style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>
                         {formatDateTime(entry.time)}
-                      </Typography>
-                    </Stack>
-                    <Typography variant="body2">{entry.content}</Typography>
-                    {index < timeline.length - 1 && <Divider sx={{ mt: 2 }} />}
-                  </Box>
-                </Box>
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 14 }}>{entry.content}</div>
+                    {index < timeline.length - 1 && <Divider />}
+                  </div>
+                </div>
               ))
             ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+              <div style={{ textAlign: 'center', padding: 32, color: 'var(--smc-text-2)' }}>
                 暂无记录
-              </Typography>
+              </div>
             )}
-          </Stack>
-        </Box>
+          </div>
+        </div>
       </Card>
-    </Stack>
+    </div>
   );
 };
 

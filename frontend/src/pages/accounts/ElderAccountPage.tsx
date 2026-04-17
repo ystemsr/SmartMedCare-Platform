@@ -1,7 +1,6 @@
 import React, { useCallback } from 'react';
-import { Button, Chip, Stack } from '@mui/material';
-import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
-import PowerSettingsNewRoundedIcon from '@mui/icons-material/PowerSettingsNewRounded';
+import { RefreshCw, Power } from 'lucide-react';
+import { Button, Chip, confirm } from '../../components/ui';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PermissionGuard from '../../components/PermissionGuard';
 import { useTable } from '../../hooks/useTable';
@@ -20,9 +19,12 @@ const ElderAccountPage: React.FC = () => {
     useTable<Elder, ElderListQuery>(fetchFn);
 
   const handleResetPassword = async (elderId: number) => {
-    if (!window.confirm('确定重置密码？')) {
-      return;
-    }
+    const ok = await confirm({
+      title: '重置密码',
+      content: '确定重置密码？',
+      intent: 'warning',
+    });
+    if (!ok) return;
 
     try {
       await resetElderPassword(elderId);
@@ -34,9 +36,12 @@ const ElderAccountPage: React.FC = () => {
 
   const handleToggleStatus = async (elderId: number, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
-    if (!window.confirm(`确定${newStatus === 'active' ? '启用' : '禁用'}该账户？`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: newStatus === 'active' ? '启用账户' : '禁用账户',
+      content: `确定${newStatus === 'active' ? '启用' : '禁用'}该账户？`,
+      intent: newStatus === 'active' ? 'info' : 'warning',
+    });
+    if (!ok) return;
 
     try {
       await updateElderAccountStatus(elderId, newStatus);
@@ -64,12 +69,9 @@ const ElderAccountPage: React.FC = () => {
       render: (value) => {
         const status = String(value);
         return (
-          <Chip
-            size="small"
-            color={status === 'active' ? 'success' : 'error'}
-            variant="outlined"
-            label={status === 'active' ? '正常' : '已禁用'}
-          />
+          <Chip tone={status === 'active' ? 'success' : 'error'} outlined>
+            {status === 'active' ? '正常' : '已禁用'}
+          </Chip>
         );
       },
     },
@@ -79,27 +81,27 @@ const ElderAccountPage: React.FC = () => {
       width: 220,
       fixed: 'right',
       render: (_, record) => (
-        <Stack direction="row" spacing={0.5}>
+        <div style={{ display: 'flex', gap: 4 }}>
           <PermissionGuard permission="elder:update">
             <Button
-              size="small"
+              size="sm"
               variant="text"
-              startIcon={<RestartAltRoundedIcon fontSize="small" />}
+              startIcon={<RefreshCw size={14} />}
               onClick={() => handleResetPassword(record.id)}
             >
               重置密码
             </Button>
             <Button
-              size="small"
+              size="sm"
               variant="text"
-              color={record.account_status === 'active' ? 'error' : 'primary'}
-              startIcon={<PowerSettingsNewRoundedIcon fontSize="small" />}
+              danger={record.account_status === 'active'}
+              startIcon={<Power size={14} />}
               onClick={() => handleToggleStatus(record.id, record.account_status)}
             >
               {record.account_status === 'active' ? '禁用' : '启用'}
             </Button>
           </PermissionGuard>
-        </Stack>
+        </div>
       ),
     },
   ];

@@ -6,6 +6,8 @@ import {
   getElderHealthRecords,
   getElderFamily,
   getElderFollowups,
+  getCurrentWeather,
+  type WeatherInfo,
 } from '@/api/elderPortal';
 import WelcomeBanner from '@/components/elder-portal/WelcomeBanner';
 import HealthStatusCard, {
@@ -66,6 +68,10 @@ const ElderHomePage: React.FC = () => {
   const [followup, setFollowup] = useState<RecentFollowup | null>(null);
   const [followupLoading, setFollowupLoading] = useState(false);
 
+  const [weather, setWeather] = useState<WeatherInfo | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+
   // TODO: backend currently has no doctor-elder link; show placeholder until added.
   const doctor: DoctorInfo | null = null;
 
@@ -82,6 +88,33 @@ const ElderHomePage: React.FC = () => {
       }
     };
     void fetchProfile();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadWeather = async () => {
+      try {
+        setWeatherLoading(true);
+        setWeatherError(null);
+        const res = await getCurrentWeather();
+        if (!cancelled) setWeather(res.data || null);
+      } catch (err) {
+        if (!cancelled) {
+          setWeather(null);
+          setWeatherError(err instanceof Error ? err.message : '天气获取失败');
+        }
+      } finally {
+        if (!cancelled) setWeatherLoading(false);
+      }
+    };
+
+    void loadWeather();
+    // Weather data is refreshed server-side; poll every 10 minutes for a fresh snapshot.
+    const timer = window.setInterval(loadWeather, 10 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -169,7 +202,12 @@ const ElderHomePage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <WelcomeBanner name={profile?.name} />
+      <WelcomeBanner
+        name={profile?.name}
+        weather={weather}
+        weatherLoading={weatherLoading}
+        weatherError={weatherError}
+      />
 
       <div
         className="grid grid-cols-1 lg:grid-cols-2"

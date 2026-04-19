@@ -3,7 +3,7 @@
 import logging
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,8 +13,10 @@ from app.schemas.invite_code import InviteCodeResponse, InviteCodeValidateRespon
 logger = logging.getLogger(__name__)
 
 CODE_LENGTH = 8
-CODE_EXPIRY_DAYS = 7
 MAX_FAMILY_MEMBERS = 3
+# Invite codes are permanent per elder; store a sentinel far-future expiry so
+# legacy expires_at checks elsewhere always pass.
+_PERMANENT_EXPIRES_AT = datetime(2099, 12, 31, 23, 59, 59)
 
 
 def _generate_code() -> str:
@@ -30,8 +32,7 @@ class InviteCodeService:
 
     @staticmethod
     async def generate_code(db: AsyncSession, elder_id: int) -> InviteCodeResponse:
-        """Generate or return existing active invite code for an elder."""
-        # Check for existing active code
+        """Return the elder's permanent invite code, creating it on first call."""
         existing = await InviteCodeRepository.get_active_by_elder_id(db, elder_id)
         if existing:
             return InviteCodeResponse(
@@ -42,15 +43,13 @@ class InviteCodeService:
                 remaining_slots=existing.max_uses - existing.used_count,
             )
 
-        # Generate new code
         code = _generate_code()
-        expires_at = datetime.now(timezone.utc) + timedelta(days=CODE_EXPIRY_DAYS)
         invite = await InviteCodeRepository.create(
-            db, elder_id=elder_id, code=code, expires_at=expires_at
+            db, elder_id=elder_id, code=code, expires_at=_PERMANENT_EXPIRES_AT
         )
         await db.commit()
         await db.refresh(invite)
-        logger.info("Invite code generated: elder_id=%s code=%s", elder_id, code)
+        logger.info("Permanent invite code created: elder_id=%s code=%s", elder_id, code)
         return InviteCodeResponse(
             code=invite.code,
             expires_at=invite.expires_at,
@@ -61,10 +60,10 @@ class InviteCodeService:
 
     @staticmethod
     async def get_active_code(db: AsyncSession, elder_id: int) -> InviteCodeResponse | None:
-        """Get active invite code for an elder."""
+        """Get the elder's permanent invite code, creating it lazily if missing."""
         existing = await InviteCodeRepository.get_active_by_elder_id(db, elder_id)
-        if not existing:
-            return None
+        if existing is None:
+            return await InviteCodeService.generate_code(db, elder_id)
         return InviteCodeResponse(
             code=existing.code,
             expires_at=existing.expires_at,

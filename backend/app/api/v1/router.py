@@ -33,3 +33,7 @@ api_router.include_router(family.router, prefix="/family", tags=["家属管理"]
 # ===== Big Data routes (feat/bigdata-backend) =====
 from app.api.v1.endpoints import bigdata
 api_router.include_router(bigdata.router, prefix="/bigdata", tags=["大数据"])
+
+# ===== Weather (OpenWeatherMap) =====
+from app.api.v1.endpoints import weather
+api_router.include_router(weather.router, prefix="/weather", tags=["天气"])

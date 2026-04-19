@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, History, RotateCcw } from 'lucide-react';
+import { History, RotateCcw } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Alert, Button, Card, CardBody, DatePicker } from '@/components/ui';
 import { useAuthStore } from '../../store/auth';
@@ -224,36 +224,6 @@ const ElderHealthPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <Card style={{ borderRadius: 18 }}>
-        <CardBody style={{ padding: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 12,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: '#fef2f2',
-                color: '#c2410c',
-                flexShrink: 0,
-              }}
-            >
-              <Activity size={22} />
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 20, color: 'var(--smc-text)' }}>
-                我的健康档案
-              </div>
-              <div style={{ fontSize: 15, color: 'var(--smc-text-2)', marginTop: 4, lineHeight: 1.7 }}>
-                顶部展示最近 7 天的健康趋势与当前预警，下方为完整历史记录。
-              </div>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
-
       <HealthTrendCharts records={trendRecords} />
 
       <AlertsPanel alerts={alerts} loading={alertsLoading} failed={alertsFailed} />

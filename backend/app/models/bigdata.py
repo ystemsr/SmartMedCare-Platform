@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, Numeric, String
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
@@ -22,6 +22,8 @@ class BigDataJob(BaseModel):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     submitted_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rows_processed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
 
 class PredictionResult(BaseModel):

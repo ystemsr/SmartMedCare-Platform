@@ -31,6 +31,8 @@ export interface AppShellMenuItem {
   label: string;
   icon: ReactNode;
   children?: AppShellMenuItem[];
+  /** Optional unread / pending count; rendered as a red circular badge. */
+  badge?: number;
 }
 
 interface AppShellProps {
@@ -148,10 +150,34 @@ const NavItem: React.FC<NavItemProps> = ({
       )}
 
       <motion.span
-        style={{ scale: activeScale }}
+        style={{ scale: activeScale, position: 'relative' }}
         className="smc-navitem__icon"
       >
         {item.icon}
+        {typeof item.badge === 'number' && item.badge > 0 && (
+          <span
+            aria-label={`${item.badge} 项待办`}
+            style={{
+              position: 'absolute',
+              top: -4,
+              right: -6,
+              minWidth: 14,
+              height: 14,
+              padding: '0 3px',
+              borderRadius: 7,
+              background: 'var(--smc-error)',
+              color: '#fff',
+              fontSize: 9,
+              fontWeight: 700,
+              lineHeight: '14px',
+              textAlign: 'center',
+              boxShadow: '0 0 0 1.5px var(--smc-bg, #fff)',
+              pointerEvents: 'none',
+            }}
+          >
+            {item.badge > 99 ? '99+' : item.badge}
+          </span>
+        )}
       </motion.span>
 
       <motion.span

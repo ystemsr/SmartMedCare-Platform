@@ -34,6 +34,16 @@ api_router.include_router(family.router, prefix="/family", tags=["家属管理"]
 from app.api.v1.endpoints import bigdata
 api_router.include_router(bigdata.router, prefix="/bigdata", tags=["大数据"])
 
+# ===== Survey tasks =====
+from app.api.v1.endpoints import surveys
+api_router.include_router(surveys.router, prefix="/surveys", tags=["调查任务"])
+
+# ===== Prediction tasks (ML evaluation as a unit of work) =====
+from app.api.v1.endpoints import predictions
+api_router.include_router(
+    predictions.router, prefix="/bigdata/predictions", tags=["预测任务"]
+)
+
 # ===== Weather (OpenWeatherMap) =====
 from app.api.v1.endpoints import weather
 api_router.include_router(weather.router, prefix="/weather", tags=["天气"])

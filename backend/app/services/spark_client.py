@@ -102,9 +102,10 @@ async def _update_job(job_id: str, data: dict) -> None:
 
 async def _run_and_track(job_id: str, cmd: list[str], log_path: str) -> None:
     """Run the command and track status in DB. Captures stdout+stderr to log_path."""
+    started_at = datetime.now(timezone.utc)
     await _update_job(
         job_id,
-        {"status": "running", "started_at": datetime.now(timezone.utc)},
+        {"status": "running", "started_at": started_at},
     )
 
     try:
@@ -117,11 +118,15 @@ async def _run_and_track(job_id: str, cmd: list[str], log_path: str) -> None:
             returncode = await proc.wait()
     except (OSError, FileNotFoundError) as e:
         logger.exception("Failed to launch spark job %s", job_id)
+        finished_at = datetime.now(timezone.utc)
         await _update_job(
             job_id,
             {
                 "status": "failed",
-                "finished_at": datetime.now(timezone.utc),
+                "finished_at": finished_at,
+                "duration_ms": int(
+                    (finished_at - started_at).total_seconds() * 1000
+                ),
             },
         )
         try:
@@ -131,12 +136,37 @@ async def _run_and_track(job_id: str, cmd: list[str], log_path: str) -> None:
             pass
         return
 
+    finished_at = datetime.now(timezone.utc)
     status = "succeeded" if returncode == 0 else "failed"
+    rows_processed = _parse_rows_from_log(log_path)
     await _update_job(
         job_id,
-        {"status": status, "finished_at": datetime.now(timezone.utc)},
+        {
+            "status": status,
+            "finished_at": finished_at,
+            "duration_ms": int((finished_at - started_at).total_seconds() * 1000),
+            "rows_processed": rows_processed,
+        },
     )
     logger.info("Job %s finished with status=%s rc=%s", job_id, status, returncode)
+
+
+def _parse_rows_from_log(log_path: str) -> Optional[int]:
+    """Best-effort: scan the log tail for a 'rows_processed=N' hint."""
+    import re
+
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()[-8192:]
+    except OSError:
+        return None
+    matches = re.findall(r"rows_processed[=:]\s*(\d+)", content, re.IGNORECASE)
+    if not matches:
+        return None
+    try:
+        return int(matches[-1])
+    except ValueError:
+        return None
 
 
 async def submit_job(

@@ -37,6 +37,49 @@ class BigDataJobRepository:
         return await paginate(query, db, pagination, BigDataJobResponse)
 
     @staticmethod
+    async def list_filtered(
+        db: AsyncSession,
+        pagination: PaginationParams,
+        *,
+        statuses: Optional[list[str]] = None,
+        job_types: Optional[list[str]] = None,
+        submitted_by: Optional[int] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ):
+        query = select(BigDataJob).where(BigDataJob.deleted_at.is_(None))
+        if statuses:
+            query = query.where(BigDataJob.status.in_(statuses))
+        if job_types:
+            query = query.where(BigDataJob.job_type.in_(job_types))
+        if submitted_by is not None:
+            query = query.where(BigDataJob.submitted_by == submitted_by)
+        if date_from:
+            query = query.where(BigDataJob.created_at >= date_from)
+        if date_to:
+            query = query.where(BigDataJob.created_at <= date_to)
+        return await paginate(query, db, pagination, BigDataJobResponse)
+
+    @staticmethod
+    async def count_recent_by_status(
+        db: AsyncSession, since, job_types: Optional[list[str]] = None
+    ) -> dict[str, int]:
+        from sqlalchemy import func
+
+        stmt = (
+            select(BigDataJob.status, func.count())
+            .where(
+                BigDataJob.deleted_at.is_(None),
+                BigDataJob.created_at >= since,
+            )
+            .group_by(BigDataJob.status)
+        )
+        if job_types:
+            stmt = stmt.where(BigDataJob.job_type.in_(job_types))
+        rows = (await db.execute(stmt)).all()
+        return {r[0]: int(r[1]) for r in rows}
+
+    @staticmethod
     async def update(db: AsyncSession, job: BigDataJob, data: dict) -> BigDataJob:
         for k, v in data.items():
             setattr(job, k, v)
@@ -109,6 +152,55 @@ class PredictionResultRepository:
         )
         rows = (await db.execute(stmt)).scalars().all()
         return {row.elder_id: row for row in rows}
+
+    @staticmethod
+    async def list_history_for_elder(
+        db: AsyncSession, elder_id: int, limit: int = 30
+    ) -> list[PredictionResult]:
+        stmt = (
+            select(PredictionResult)
+            .where(
+                PredictionResult.elder_id == elder_id,
+                PredictionResult.deleted_at.is_(None),
+            )
+            .order_by(desc(PredictionResult.predicted_at))
+            .limit(limit)
+        )
+        return list((await db.execute(stmt)).scalars().all())
+
+    @staticmethod
+    async def risk_distribution(db: AsyncSession) -> dict:
+        """Return counts of elders bucketed by health_score of latest prediction."""
+        from sqlalchemy import and_, case, func
+
+        subq = (
+            select(
+                PredictionResult.elder_id.label("eid"),
+                func.max(PredictionResult.predicted_at).label("max_at"),
+            )
+            .where(PredictionResult.deleted_at.is_(None))
+            .group_by(PredictionResult.elder_id)
+            .subquery()
+        )
+        bucket = case(
+            (PredictionResult.health_score >= 80, "low"),
+            (PredictionResult.health_score >= 60, "medium"),
+            (PredictionResult.health_score >= 40, "high"),
+            else_="critical",
+        )
+        stmt = (
+            select(bucket.label("bucket"), func.count())
+            .join(
+                subq,
+                and_(
+                    PredictionResult.elder_id == subq.c.eid,
+                    PredictionResult.predicted_at == subq.c.max_at,
+                ),
+            )
+            .group_by("bucket")
+        )
+        rows = (await db.execute(stmt)).all()
+        return {r[0]: int(r[1]) for r in rows}
 
     @staticmethod
     def to_response(row: PredictionResult) -> PredictionResultResponse:

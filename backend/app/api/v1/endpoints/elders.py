@@ -15,6 +15,7 @@ from app.schemas.elder import (
     AccountStatusUpdate,
     ElderCreate,
     ElderResponse,
+    ElderSelfUpdate,
     ElderUpdate,
 )
 from app.schemas.health_archive import (
@@ -56,6 +57,25 @@ async def get_elder_self(
     if elder is None:
         return error_response(NOT_FOUND, "未找到关联的老人档案")
     return success_response(ElderResponse.model_validate(elder).model_dump())
+
+
+@router.put("/me")
+async def update_elder_self(
+    body: ElderSelfUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("elder:self_read")),
+):
+    """Allow the current elder to update their own contact details."""
+    from app.repositories.elder import ElderRepository
+    elder = await ElderRepository.get_by_user_id(db, current_user.id)
+    if elder is None:
+        return error_response(NOT_FOUND, "未找到关联的老人档案")
+
+    update_payload = ElderUpdate(**body.model_dump(exclude_unset=True))
+    result = await ElderService.update_elder(db, elder.id, update_payload)
+    if result is None:
+        return error_response(NOT_FOUND, "未找到关联的老人档案")
+    return success_response(data=result.model_dump(mode="json"))
 
 
 @router.get("/me/family")

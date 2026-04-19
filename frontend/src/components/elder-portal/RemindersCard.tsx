@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, type Transition } from 'motion/react';
+import { motion } from 'motion/react';
 import { Bell } from 'lucide-react';
 import { Card, CardBody, Checkbox } from '@/components/ui';
 
@@ -9,19 +9,6 @@ export interface ReminderItem {
   time?: string;
   defaultChecked?: boolean;
 }
-
-const getPathAnimate = (isChecked: boolean) => ({
-  pathLength: isChecked ? 1 : 0,
-  opacity: isChecked ? 1 : 0,
-});
-
-const getPathTransition = (isChecked: boolean): Transition => ({
-  pathLength: { duration: 0.8, ease: 'easeInOut' },
-  opacity: {
-    duration: 0.01,
-    delay: isChecked ? 0 : 0.8,
-  },
-});
 
 interface RemindersCardProps {
   items: ReminderItem[];
@@ -98,9 +85,19 @@ const RemindersCard: React.FC<RemindersCardProps> = ({ items }) => {
                       setChecked(updated);
                     }}
                   />
-                  <div style={{ position: 'relative', display: 'inline-block', flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      position: 'relative',
+                      flex: 1,
+                      minWidth: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
                     <span
                       style={{
+                        display: 'inline-block',
+                        position: 'relative',
                         fontSize: 17,
                         color: 'var(--smc-text)',
                         fontWeight: 500,
@@ -109,34 +106,24 @@ const RemindersCard: React.FC<RemindersCardProps> = ({ items }) => {
                       }}
                     >
                       {item.label}
-                    </span>
-                    <motion.svg
-                      width="100%"
-                      height="32"
-                      viewBox="0 0 340 32"
-                      preserveAspectRatio="none"
-                      style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        pointerEvents: 'none',
-                        zIndex: 2,
-                      }}
-                    >
-                      <motion.path
-                        d="M 10 16.91 s 79.8 -11.36 98.1 -11.34 c 22.2 0.02 -47.82 14.25 -33.39 22.02 c 12.61 6.77 124.18 -27.98 133.31 -17.28 c 7.52 8.38 -26.8 20.02 4.61 22.05 c 24.55 1.93 113.37 -20.36 113.37 -20.36"
-                        vectorEffect="non-scaling-stroke"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeMiterlimit={10}
-                        fill="none"
-                        stroke="var(--smc-text)"
+                      <motion.span
+                        aria-hidden
                         initial={false}
-                        animate={getPathAnimate(isChecked)}
-                        transition={getPathTransition(isChecked)}
+                        animate={{ scaleX: isChecked ? 1 : 0 }}
+                        transition={{ duration: 0.45, ease: 'easeInOut' }}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          right: 0,
+                          top: '50%',
+                          height: 2,
+                          borderRadius: 2,
+                          background: 'var(--smc-text)',
+                          transformOrigin: 'left center',
+                          pointerEvents: 'none',
+                        }}
                       />
-                    </motion.svg>
+                    </span>
                   </div>
                   {item.time && (
                     <span

@@ -40,7 +40,7 @@ import { message } from '../../utils/message';
 import type { Followup, FollowupListQuery } from '../../types/followup';
 
 const formFields: FormFieldConfig[] = [
-  { name: 'elder_id', label: '老人ID', type: 'number', required: true },
+  { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
   { name: 'plan_type', label: '随访方式', type: 'select', required: true, options: FOLLOWUP_TYPE_OPTIONS },
   { name: 'planned_at', label: '计划时间', type: 'date', required: true },
   { name: 'assigned_to', label: '负责人ID', type: 'number', required: true },

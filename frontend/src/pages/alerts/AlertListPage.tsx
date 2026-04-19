@@ -24,7 +24,7 @@ import { message } from '../../utils/message';
 import type { Alert, AlertListQuery } from '../../types/alert';
 
 const createFields: FormFieldConfig[] = [
-  { name: 'elder_id', label: '老人ID', type: 'number', required: true },
+  { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
   { name: 'type', label: '预警类型', required: true },
   { name: 'title', label: '预警标题', required: true },
   { name: 'description', label: '描述', type: 'textarea', required: true },

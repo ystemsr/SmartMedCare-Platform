@@ -6,7 +6,8 @@ import FeatureFieldset, {
   EXAMPLE_FEATURES,
 } from '../../components/bigdata/FeatureFieldset';
 import PredictionResult from '../../components/bigdata/PredictionResult';
-import { Button, Card, CardBody, Input, Tabs } from '@/components/ui';
+import { Button, Card, CardBody, Tabs } from '@/components/ui';
+import ElderPicker from '../../components/ElderPicker';
 import { getLatestPrediction, predictOne } from '../../api/bigdata';
 import { message } from '../../utils/message';
 import type { FeatureDict, Prediction } from '../../types/bigdata';
@@ -18,7 +19,7 @@ const MLInferencePage: React.FC = () => {
   const [predicting, setPredicting] = useState(false);
   const [result, setResult] = useState<Prediction | null>(null);
 
-  const [elderId, setElderId] = useState<string>('');
+  const [elderId, setElderId] = useState<number | ''>('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [history, setHistory] = useState<Prediction | null>(null);
   const [historyElderId, setHistoryElderId] = useState<number | null>(null);
@@ -51,16 +52,15 @@ const MLInferencePage: React.FC = () => {
   };
 
   const handleLoadHistory = async () => {
-    const parsed = Number(elderId);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      message.warning('请输入有效的老人 ID');
+    if (elderId === '' || !Number.isFinite(elderId) || elderId <= 0) {
+      message.warning('请选择老人');
       return;
     }
     setHistoryLoading(true);
     try {
-      const res = await getLatestPrediction(parsed);
+      const res = await getLatestPrediction(elderId);
       setHistory(res.data);
-      setHistoryElderId(parsed);
+      setHistoryElderId(elderId);
     } catch (err) {
       setHistory(null);
       message.error(err instanceof Error ? err.message : '加载历史记录失败');
@@ -101,7 +101,7 @@ const MLInferencePage: React.FC = () => {
       <Card>
         <CardBody>
           <div style={{ fontSize: 'var(--smc-fs-lg)', fontWeight: 700, marginBottom: 4 }}>
-            按老人 ID 查询
+            按老人查询
           </div>
           <div
             style={{
@@ -113,12 +113,11 @@ const MLInferencePage: React.FC = () => {
             查询某位老人最近一次模型预测结果
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 220 }}>
-              <Input
-                label="老人 ID"
-                type="number"
+            <div style={{ minWidth: 320, flex: 1 }}>
+              <ElderPicker
+                label="老人"
                 value={elderId}
-                onChange={(event) => setElderId(event.target.value)}
+                onChange={(id) => setElderId(id)}
               />
             </div>
             <Button

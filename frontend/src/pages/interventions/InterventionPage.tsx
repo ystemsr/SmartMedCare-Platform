@@ -34,7 +34,7 @@ const INTERVENTION_TYPE_OPTIONS = [
 ];
 
 const formFields: FormFieldConfig[] = [
-  { name: 'elder_id', label: '老人ID', type: 'number', required: true },
+  { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
   { name: 'type', label: '干预类型', type: 'select', required: true, options: INTERVENTION_TYPE_OPTIONS },
   { name: 'content', label: '干预内容', type: 'textarea', required: true },
   { name: 'followup_id', label: '关联随访ID', type: 'number' },

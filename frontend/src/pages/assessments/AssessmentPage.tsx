@@ -4,7 +4,6 @@ import {
   Button,
   Chip,
   DatePicker,
-  Input,
   Modal,
   Select,
   confirm,
@@ -12,6 +11,7 @@ import {
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
+import ElderPicker from '../../components/ElderPicker';
 import PermissionGuard from '../../components/PermissionGuard';
 import { useTable } from '../../hooks/useTable';
 import {
@@ -34,7 +34,7 @@ const ASSESSMENT_TYPE_OPTIONS = [
 ];
 
 const formFields: FormFieldConfig[] = [
-  { name: 'elder_id', label: '老人ID', type: 'number', required: true },
+  { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
   { name: 'assessment_type', label: '评估类型', type: 'select', options: ASSESSMENT_TYPE_OPTIONS },
   { name: 'score', label: '评估分数', type: 'number', required: true },
   { name: 'risk_level', label: '风险等级', type: 'select', required: true, options: RISK_LEVEL_OPTIONS },
@@ -45,7 +45,7 @@ const AssessmentPage: React.FC = () => {
   const [formVisible, setFormVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<Assessment | null>(null);
   const [generateModalVisible, setGenerateModalVisible] = useState(false);
-  const [generateElderId, setGenerateElderId] = useState('');
+  const [generateElderId, setGenerateElderId] = useState<number | ''>('');
   const [generateLoading, setGenerateLoading] = useState(false);
 
   const fetchFn = useCallback(
@@ -85,16 +85,15 @@ const AssessmentPage: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    const elderId = Number(generateElderId);
-    if (!Number.isFinite(elderId) || elderId <= 0) {
-      message.warning('请输入有效的老人ID');
+    if (generateElderId === '' || !Number.isFinite(generateElderId) || generateElderId <= 0) {
+      message.warning('请选择老人');
       return;
     }
 
     try {
       setGenerateLoading(true);
       await generateAssessment({
-        elder_id: elderId,
+        elder_id: generateElderId,
         force_recalculate: true,
       });
       message.success('评估生成成功');
@@ -279,11 +278,11 @@ const AssessmentPage: React.FC = () => {
           </>
         }
       >
-        <Input
-          label="老人ID"
+        <ElderPicker
+          label="老人"
+          required
           value={generateElderId}
-          onChange={(event) => setGenerateElderId(event.target.value)}
-          placeholder="请输入老人ID"
+          onChange={(id) => setGenerateElderId(id)}
         />
       </Modal>
     </>

@@ -33,6 +33,19 @@ class ElderUpdate(BaseModel):
     tags: Optional[list[str]] = None
 
 
+class ElderSelfUpdate(BaseModel):
+    """Schema for an elder updating their own contact details.
+
+    Restricted to contact fields — identity fields (name/gender/birth_date)
+    must be changed by medical staff after verification.
+    """
+
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+
+
 class ElderTagResponse(BaseModel):
     """Schema for a single elder tag."""
 

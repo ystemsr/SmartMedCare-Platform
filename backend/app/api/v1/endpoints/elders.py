@@ -69,14 +69,17 @@ async def get_elder_family(
     if elder is None:
         return error_response(NOT_FOUND, "未找到关联的老人档案")
 
-    # Query family members
+    # Query family members joined with user profile so the UI can render names.
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     # Import FamilyMember - may not exist yet if family backend hasn't merged
     try:
         from app.models.family_member import FamilyMember
         stmt = (
             select(FamilyMember)
+            .options(selectinload(FamilyMember.user))
             .where(FamilyMember.elder_id == elder.id, FamilyMember.deleted_at.is_(None))
+            .order_by(FamilyMember.created_at.desc())
         )
         result = await db.execute(stmt)
         members = result.scalars().all()
@@ -84,6 +87,9 @@ async def get_elder_family(
             {
                 "id": m.id,
                 "user_id": m.user_id,
+                "username": m.user.username if m.user else None,
+                "real_name": m.user.real_name if m.user else None,
+                "phone": m.user.phone if m.user else None,
                 "relationship": m.relationship,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }

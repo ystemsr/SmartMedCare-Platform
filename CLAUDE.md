@@ -286,6 +286,7 @@ git checkout -b fix/xxx
 - Use Conventional Commits specification for all commit messages, written in English only.
 - All code comments and documentation should be in English.
 - User-facing UI text must be in Simplified Chinese (zh-CN).
+- **After every code change, rebuild the affected service image(s) and restart via docker compose** (e.g., `docker compose up -d --build <service>`). A plain `docker compose restart` does not pick up code changes because images are not rebuilt.
 
 ### Backend (Python / FastAPI)
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, DatePicker, Input, Modal, Select, Textarea } from './ui';
+import ElderPicker from './ElderPicker';
 import { message } from '../utils/message';
 
 export interface FormFieldRule {
@@ -13,11 +14,13 @@ export interface FormFieldRule {
 export interface FormFieldConfig {
   name: string;
   label: string;
-  type?: 'input' | 'textarea' | 'number' | 'select' | 'date' | 'password';
+  type?: 'input' | 'textarea' | 'number' | 'select' | 'date' | 'password' | 'elder-picker';
   required?: boolean;
   options?: { label: string; value: string | number }[];
   placeholder?: string;
   rules?: FormFieldRule[];
+  /** For 'elder-picker': name of a sibling field in initialValues holding the elder's display name (e.g. 'elder_name') */
+  labelField?: string;
 }
 
 interface AppFormProps<T = any> {
@@ -148,6 +151,24 @@ const AppForm: React.FC<AppFormProps> = ({
                 required={field.required}
                 value={(value as string) || null}
                 onChange={(v) => updateValue(field.name, v ?? '')}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'elder-picker') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            return (
+              <ElderPicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as number | '' | null) ?? ''}
+                onChange={(v) => updateValue(field.name, v)}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
                 error={errors[field.name]}
               />
             );

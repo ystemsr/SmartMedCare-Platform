@@ -34,3 +34,8 @@ export function getElderHealthRecords(elderId: number, params?: Record<string, u
 export function getElderAlerts(params?: Record<string, unknown>) {
   return http.get('/alerts', { params });
 }
+
+/** Get followups for the given elder. */
+export function getElderFollowups(elderId: number, params?: Record<string, unknown>) {
+  return http.get('/followups', { params: { elder_id: elderId, ...(params || {}) } });
+}

@@ -27,3 +27,6 @@ from app.models.family_member import FamilyMember  # noqa: F401
 
 # ===== Big Data & ML models (feat/bigdata-backend) =====
 from app.models.bigdata import BigDataJob, PredictionResult  # noqa: F401
+from app.models.hive_history import HiveQueryHistory, HiveSavedQuery  # noqa: F401
+from app.models.survey_task import SurveyTask  # noqa: F401
+from app.models.prediction_task import PredictionTask  # noqa: F401

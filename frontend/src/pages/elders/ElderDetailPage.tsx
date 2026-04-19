@@ -15,7 +15,7 @@ import {
   getCareRecords,
   createCareRecord,
 } from '../../api/elders';
-import { getElderPredictions } from '../../api/bigdata';
+import { getPredictionHistory } from '../../api/bigdata';
 import { formatGender, formatDate, formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
 import type { Elder, HealthRecord, MedicalRecord, CareRecord } from '../../types/elder';
@@ -125,13 +125,8 @@ const ElderDetailPage: React.FC = () => {
 
   const fetchPredictions = useCallback(async () => {
     try {
-      const res = await getElderPredictions(elderId);
-      const payload = res.data as unknown;
-      const list: PredictionRecord[] = Array.isArray(payload)
-        ? (payload as PredictionRecord[])
-        : payload
-          ? [payload as PredictionRecord]
-          : [];
+      const res = await getPredictionHistory(elderId, 30);
+      const list = res.data.items || [];
       list.sort((a, b) => (b.predicted_at || '').localeCompare(a.predicted_at || ''));
       setPredictions(list);
     } catch {

@@ -21,6 +21,11 @@ import FamilyCard, { type FamilyMember } from '@/components/elder-portal/FamilyC
 import RecentFollowupCard, {
   type RecentFollowup,
 } from '@/components/elder-portal/RecentFollowupCard';
+import PendingSurveysCard, {
+  type PendingItem,
+} from '@/components/elder-portal/PendingSurveysCard';
+import { listMySurveys } from '@/api/surveys';
+import { listMyPredictionTasks } from '@/api/predictions';
 
 interface ElderProfile {
   id: number;
@@ -71,6 +76,9 @@ const ElderHomePage: React.FC = () => {
   const [weather, setWeather] = useState<WeatherInfo | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState<string | null>(null);
+
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [surveysLoading, setSurveysLoading] = useState(false);
 
   // TODO: backend currently has no doctor-elder link; show placeholder until added.
   const doctor: DoctorInfo | null = null;
@@ -172,9 +180,44 @@ const ElderHomePage: React.FC = () => {
       }
     };
 
+    const fetchSurveys = async () => {
+      setSurveysLoading(true);
+      try {
+        const [s, p] = await Promise.all([
+          listMySurveys({ status: 'pending', limit: 10 }),
+          listMyPredictionTasks({ status: 'pending_elder', limit: 10 }),
+        ]);
+        const merged: PendingItem[] = [];
+        (s.data.items || []).forEach((t) =>
+          merged.push({
+            key: `surv-${t.id}`,
+            kind: 'survey',
+            title: t.title,
+            fields_count: t.requested_fields.length,
+            doctor_name: t.doctor_name,
+          }),
+        );
+        (p.data.items || []).forEach((t) =>
+          merged.push({
+            key: `pred-${t.id}`,
+            kind: 'prediction',
+            title: t.title,
+            fields_count: t.elder_requested_fields.length,
+            doctor_name: t.doctor_name,
+          }),
+        );
+        setPendingItems(merged);
+      } catch {
+        setPendingItems([]);
+      } finally {
+        setSurveysLoading(false);
+      }
+    };
+
     void fetchHealth();
     void fetchFamily();
     void fetchFollowup();
+    void fetchSurveys();
   }, [user?.elder_id]);
 
   if (profileLoading) {
@@ -214,16 +257,23 @@ const ElderHomePage: React.FC = () => {
         style={{ display: 'grid', gap: 20 }}
       >
         <HealthStatusCard data={healthData} loading={recordsLoading} />
-        <RemindersCard items={MOCK_REMINDERS} />
+        <PendingSurveysCard items={pendingItems} loading={surveysLoading} />
       </div>
 
       <div
-        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+        className="grid grid-cols-1 lg:grid-cols-2"
+        style={{ display: 'grid', gap: 20 }}
+      >
+        <RemindersCard items={MOCK_REMINDERS} />
+        <RecentFollowupCard followup={followup} loading={followupLoading} />
+      </div>
+
+      <div
+        className="grid grid-cols-1 md:grid-cols-2"
         style={{ display: 'grid', gap: 20 }}
       >
         <DoctorCard doctor={doctor} />
         <FamilyCard members={family} loading={familyLoading} />
-        <RecentFollowupCard followup={followup} loading={followupLoading} />
       </div>
     </div>
   );

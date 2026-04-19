@@ -115,6 +115,11 @@ const BasicLayout: React.FC = () => {
             icon: <BarChart3 size={16} />,
             label: 'Hive 查询',
           },
+          {
+            key: '/bigdata/analytics',
+            icon: <LineChart size={16} />,
+            label: '多维分析',
+          },
         ],
       });
     }

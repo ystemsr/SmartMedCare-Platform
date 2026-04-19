@@ -32,6 +32,8 @@ class BigDataJobResponse(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     submitted_by: Optional[int] = None
+    duration_ms: Optional[int] = None
+    rows_processed: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
@@ -97,6 +99,16 @@ class MLPredictRequest(BaseModel):
     features: dict[str, float] = Field(default_factory=dict)
 
 
+class FeatureContribution(BaseModel):
+    """Top-k attribution entry for a single feature."""
+
+    key: str
+    label: str
+    value: float
+    z_score: float
+    direction: str  # "higher" | "lower"
+
+
 class MLPredictResponse(BaseModel):
     """Single-record ML inference result."""
 
@@ -105,6 +117,51 @@ class MLPredictResponse(BaseModel):
     followup_prob: float
     followup_needed: bool
     health_score: float
+    contributions: Optional[list[FeatureContribution]] = None
+
+
+class MLFeaturePayload(BaseModel):
+    """Autofilled feature dict for an elder + gap list."""
+
+    elder_id: int
+    features: dict[str, Optional[float]] = Field(default_factory=dict)
+    sources: dict[str, Optional[str]] = Field(default_factory=dict)
+    missing: list[str] = Field(default_factory=list)
+
+
+class HiveSavedQueryCreate(BaseModel):
+    name: str = Field(..., max_length=128)
+    sql: str
+    description: Optional[str] = None
+
+
+class HiveSavedQueryUpdate(BaseModel):
+    name: Optional[str] = None
+    sql: Optional[str] = None
+    description: Optional[str] = None
+
+
+class HiveSavedQueryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    name: str
+    sql: str
+    description: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class HiveQueryHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    sql: str
+    row_count: int
+    duration_ms: int
+    status: str
+    error_message: Optional[str] = None
+    created_at: datetime
 
 
 class MLBatchPredictRequest(BaseModel):

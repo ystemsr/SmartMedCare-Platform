@@ -158,24 +158,53 @@ const MyTasksPanel: React.FC<MyTasksProps> = ({ catalog, refreshToken }) => {
     return m;
   }, [catalog]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await listPredictionTasks({
-        status: filter || undefined,
-        limit: 200,
-      });
-      setTasks(res.data.items);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '加载任务失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [filter]);
+  // `silent` skips the spinner for background polling so the list doesn't
+  // flicker each tick — visible loading is reserved for the first load and
+  // filter changes where the panel content actually needs to swap out.
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true);
+      try {
+        const res = await listPredictionTasks({
+          status: filter || undefined,
+          limit: 200,
+        });
+        setTasks(res.data.items);
+        // Keep the open detail modal in sync so polling can advance it from
+        // "排队推理中" to a final state without the user reopening it.
+        setDetail((prev) => {
+          if (!prev) return prev;
+          const fresh = res.data.items.find((t) => t.id === prev.id);
+          return fresh || prev;
+        });
+      } catch (err) {
+        if (!opts?.silent) {
+          message.error(err instanceof Error ? err.message : '加载任务失败');
+        }
+      } finally {
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [filter],
+  );
 
   useEffect(() => {
     load();
   }, [load, refreshToken]);
+
+  // Auto-refresh while any task is waiting for inference so the UI
+  // transitions from "排队推理中" to a final status without a manual refresh.
+  const hasPendingPrediction = useMemo(
+    () => tasks.some((t) => t.status === 'pending_prediction'),
+    [tasks],
+  );
+  useEffect(() => {
+    if (!hasPendingPrediction) return;
+    const timer = window.setInterval(() => {
+      load({ silent: true });
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingPrediction, load]);
 
   const handleCancel = async (task: PredictionTask) => {
     const ok = await confirm({
@@ -241,7 +270,7 @@ const MyTasksPanel: React.FC<MyTasksProps> = ({ catalog, refreshToken }) => {
             <Button
               variant="text"
               startIcon={<RefreshCw size={14} />}
-              onClick={load}
+              onClick={() => load()}
               disabled={loading}
             >
               刷新
@@ -492,11 +521,32 @@ const TaskDetailModal: React.FC<{
     }
   };
 
+  const snapshotGroups: Array<{
+    source: string;
+    title: string;
+    items: typeof allInputs;
+  }> = [
+    { source: 'doctor', title: '医生填写', items: [] },
+    { source: 'elder', title: '老人填写', items: [] },
+    { source: 'auto', title: '来自档案', items: [] },
+    { source: 'permanent', title: '历史记录', items: [] },
+  ];
+  for (const item of allInputs) {
+    const g = snapshotGroups.find((x) => x.source === item.source);
+    if (g) g.items.push(item);
+  }
+  const groupTone: Record<string, 'info' | 'success' | 'default'> = {
+    doctor: 'info',
+    elder: 'success',
+    auto: 'default',
+    permanent: 'default',
+  };
+
   return (
     <Modal
       open
       onClose={onClose}
-      width={720}
+      width={880}
       title={`任务详情 · #${task.id}`}
       footer={
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -521,16 +571,52 @@ const TaskDetailModal: React.FC<{
         </div>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* Header summary */}
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            padding: '14px 16px',
+            borderRadius: 10,
+            background: 'color-mix(in oklab, var(--smc-primary) 6%, transparent)',
+            border: '1px solid color-mix(in oklab, var(--smc-primary) 18%, transparent)',
+          }}
         >
-          <span style={{ fontSize: 18, fontWeight: 700 }}>
-            {task.elder_name || `老人${task.elder_id}`}
-          </span>
-          <Chip tone={STATUS_TONE[task.status]} outlined>
-            {STATUS_LABEL[task.status]}
-          </Chip>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ fontSize: 18, fontWeight: 700 }}>
+              {task.elder_name || `老人${task.elder_id}`}
+            </span>
+            <Chip tone={STATUS_TONE[task.status]} outlined>
+              {STATUS_LABEL[task.status]}
+            </Chip>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 18,
+              flexWrap: 'wrap',
+              fontSize: 12,
+              color: 'var(--smc-text-2)',
+            }}
+          >
+            <span>
+              <Clock size={12} style={{ verticalAlign: -2, marginRight: 4 }} />
+              创建：{formatDateTime(task.created_at)}
+            </span>
+            {task.doctor_name && <span>创建人：{task.doctor_name}</span>}
+            {task.predicted_at && (
+              <span>完成：{formatDateTime(task.predicted_at)}</span>
+            )}
+          </div>
         </div>
 
         {task.message && (
@@ -580,10 +666,10 @@ const TaskDetailModal: React.FC<{
               </Alert>
             )}
 
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>
-                医生数据（可修改，保存后若数据齐备会自动推理）
-              </div>
+            <SectionCard
+              title="医生数据"
+              subtitle="可修改，保存后若数据齐备会自动完成推理"
+            >
               <div
                 style={{
                   display: 'grid',
@@ -604,86 +690,149 @@ const TaskDetailModal: React.FC<{
                   />
                 ))}
               </div>
-            </div>
+            </SectionCard>
           </>
         )}
 
-        <Divider />
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>
-            输入快照
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gap: 8,
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-            }}
-          >
-            {allInputs.length === 0 ? (
-              <span style={{ color: 'var(--smc-text-3)' }}>无记录</span>
-            ) : (
-              allInputs.map(({ key, value, source }) => {
-                const entry = catalogMap[key];
-                if (!entry) return null;
-                let display = String(value ?? '—');
-                if (entry.type === 'enum' && entry.options) {
-                  const match = entry.options.find(
-                    (o) => Number(o.value) === Number(value),
-                  );
-                  display = match?.label || display;
-                } else if (entry.type === 'boolean') {
-                  display = value === 1 || value === '1' ? '是' : '否';
-                }
-                return (
-                  <div
-                    key={`${source}-${key}`}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: 8,
-                      border: '1px solid var(--smc-border)',
-                    }}
-                  >
+        <SectionCard title="输入快照" subtitle="本次评估使用的全部特征">
+          {allInputs.length === 0 ? (
+            <span style={{ color: 'var(--smc-text-3)', fontSize: 13 }}>
+              暂无记录
+            </span>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {snapshotGroups
+                .filter((g) => g.items.length > 0)
+                .map((group) => (
+                  <div key={group.source}>
                     <div
                       style={{
-                        fontSize: 11,
-                        color: 'var(--smc-text-3)',
-                        marginBottom: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        marginBottom: 8,
                       }}
                     >
-                      {entry.label}
-                    </div>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{display}</div>
-                    <div style={{ marginTop: 3 }}>
-                      <Chip
-                        tone={
-                          source === 'elder'
-                            ? 'success'
-                            : source === 'doctor'
-                              ? 'info'
-                              : 'default'
-                        }
-                        outlined
-                      >
-                        {source === 'auto'
-                          ? '档案'
-                          : source === 'permanent'
-                            ? '历史'
-                            : source === 'doctor'
-                              ? '医生'
-                              : '老人'}
+                      <Chip tone={groupTone[group.source]} outlined>
+                        {group.title}
                       </Chip>
+                      <span
+                        style={{ fontSize: 12, color: 'var(--smc-text-3)' }}
+                      >
+                        {group.items.length} 项
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 8,
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                      }}
+                    >
+                      {group.items.map(({ key, value }) => {
+                        const entry = catalogMap[key];
+                        if (!entry) return null;
+                        let display = String(value ?? '—');
+                        if (entry.type === 'enum' && entry.options) {
+                          const match = entry.options.find(
+                            (o) => Number(o.value) === Number(value),
+                          );
+                          display = match?.label || display;
+                        } else if (entry.type === 'boolean') {
+                          display = value === 1 || value === '1' ? '是' : '否';
+                        } else if (entry.unit && display !== '—') {
+                          display = `${display} ${entry.unit}`;
+                        }
+                        return (
+                          <div
+                            key={`${group.source}-${key}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 10,
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              background: 'var(--smc-bg-2, #fafafa)',
+                              border: '1px solid var(--smc-border)',
+                              minHeight: 38,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 12.5,
+                                color: 'var(--smc-text-2)',
+                                flex: '1 1 auto',
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={entry.label}
+                            >
+                              {entry.label}
+                            </span>
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                fontSize: 13,
+                                color: 'var(--smc-text)',
+                                flexShrink: 0,
+                                maxWidth: 140,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={display}
+                            >
+                              {display}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+                ))}
+            </div>
+          )}
+        </SectionCard>
       </div>
     </Modal>
   );
 };
+
+const SectionCard: React.FC<{
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}> = ({ title, subtitle, children }) => (
+  <div
+    style={{
+      padding: 16,
+      borderRadius: 10,
+      border: '1px solid var(--smc-border)',
+      background: 'var(--smc-surface, #fff)',
+    }}
+  >
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--smc-text)' }}>
+        {title}
+      </div>
+      {subtitle && (
+        <div
+          style={{
+            marginTop: 2,
+            fontSize: 12,
+            color: 'var(--smc-text-3)',
+          }}
+        >
+          {subtitle}
+        </div>
+      )}
+    </div>
+    {children}
+  </div>
+);
 
 // ============================================================================
 // Batch

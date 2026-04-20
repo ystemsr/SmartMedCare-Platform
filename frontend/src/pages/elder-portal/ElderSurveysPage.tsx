@@ -524,6 +524,14 @@ const SurveyFillModal: React.FC<{
     });
     return init;
   });
+
+  const hospitalStayNo = values.HOSPITAL_STAY === 0;
+  useEffect(() => {
+    if (hospitalStayNo && values.NUM_HOSPITAL_STAYS !== 0) {
+      setValues((prev) => ({ ...prev, NUM_HOSPITAL_STAYS: 0 }));
+    }
+  }, [hospitalStayNo, values.NUM_HOSPITAL_STAYS]);
+
   const [submitting, setSubmitting] = useState(false);
 
   const filled = Object.values(values).filter(
@@ -599,13 +607,16 @@ const SurveyFillModal: React.FC<{
                 </div>
               );
             }
+            const lockedByHospitalStay =
+              key === 'NUM_HOSPITAL_STAYS' && hospitalStayNo;
             return (
               <FeatureField
                 key={key}
                 entry={entry}
                 value={values[key]}
                 onChange={(v) => setValues((prev) => ({ ...prev, [key]: v }))}
-                disabled={readonly}
+                disabled={readonly || lockedByHospitalStay}
+                readonly={lockedByHospitalStay}
                 required
               />
             );
@@ -647,6 +658,15 @@ const PredictionFillModal: React.FC<{
     // (shouldn't happen, but guard).
     return init;
   });
+
+  // When "近一年是否住院" is 否, "近一年住院次数" is logically forced to 0
+  // and must not be editable by the elder.
+  const hospitalStayNo = values.HOSPITAL_STAY === 0;
+  useEffect(() => {
+    if (hospitalStayNo && values.NUM_HOSPITAL_STAYS !== 0) {
+      setValues((prev) => ({ ...prev, NUM_HOSPITAL_STAYS: 0 }));
+    }
+  }, [hospitalStayNo, values.NUM_HOSPITAL_STAYS]);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -761,13 +781,16 @@ const PredictionFillModal: React.FC<{
               {dynamicKeys.map((k) => {
                 const entry = catalogMap[k];
                 if (!entry) return null;
+                const lockedByHospitalStay =
+                  k === 'NUM_HOSPITAL_STAYS' && hospitalStayNo;
                 return (
                   <FeatureField
                     key={k}
                     entry={entry}
                     value={values[k]}
                     onChange={(v) => setValues((prev) => ({ ...prev, [k]: v }))}
-                    disabled={readonly}
+                    disabled={readonly || lockedByHospitalStay}
+                    readonly={lockedByHospitalStay}
                     required={entry.required !== false}
                   />
                 );

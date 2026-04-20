@@ -10,7 +10,7 @@ linked to the task.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,9 +49,7 @@ from app.services.feature_catalog import (
 )
 from app.services.prediction_pipeline import (
     build_task_result_payload,
-    route_or_run_sync,
     run_if_ready,
-    run_inference_background,
 )
 from app.utils.response import (
     FORBIDDEN,
@@ -183,13 +181,13 @@ async def _create_task_for(
     message: Optional[str],
     doctor_inputs: dict,
     due_at,
-    background_tasks: Optional[BackgroundTasks] = None,
 ) -> Optional[PredictionTask]:
     """Shared create helper. Returns the task or None if elder missing.
 
     If the task is already ready on creation (cached answers cover the
-    elder's side), inference is scheduled in the background so callers don't
-    block on the model.
+    elder's side), inference runs synchronously so the response already
+    carries the final result and the task never sits in pending_prediction
+    waiting on an unreliable background worker.
     """
     elder = (
         await db.execute(
@@ -221,16 +219,12 @@ async def _create_task_for(
         due_at=due_at,
     )
 
-    task, ready = await route_or_run_sync(db, task)
-    if ready and background_tasks is not None:
-        background_tasks.add_task(run_inference_background, task.id)
-    return task
+    return await run_if_ready(db, task)
 
 
 @router.post("/tasks")
 async def create_prediction_task(
     body: PredictionTaskCreate,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_permission("prediction:dispatch")),
 ):
@@ -245,7 +239,6 @@ async def create_prediction_task(
         message=body.message,
         doctor_inputs=doctor_inputs,
         due_at=body.due_at,
-        background_tasks=background_tasks,
     )
     if task is None:
         return error_response(NOT_FOUND, "Elder not found")
@@ -256,7 +249,6 @@ async def create_prediction_task(
 @router.post("/tasks/batch")
 async def batch_create_prediction_tasks(
     body: PredictionTaskBatchCreate,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_permission("prediction:dispatch")),
 ):
@@ -278,7 +270,6 @@ async def batch_create_prediction_tasks(
             message=body.message,
             doctor_inputs=doctor_inputs,
             due_at=body.due_at,
-            background_tasks=background_tasks,
         )
         if task is None:
             missing.append(elder_id)
@@ -371,13 +362,13 @@ async def get_prediction_task(
 async def update_doctor_inputs(
     task_id: int,
     body: PredictionTaskDoctorUpdate,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_permission("prediction:dispatch")),
 ):
     """Allow the creating doctor to revise their inputs while the task is
     still waiting for the elder's answers. If this update makes the task
-    ready, inference runs in the background so the response returns fast."""
+    ready, inference runs synchronously so the response carries the final
+    status."""
     task = await PredictionTaskRepository.get_by_id(db, task_id)
     if task is None:
         return error_response(NOT_FOUND, "Task not found")
@@ -393,9 +384,7 @@ async def update_doctor_inputs(
     await db.flush()
     await db.refresh(task)
 
-    task, ready = await route_or_run_sync(db, task)
-    if ready:
-        background_tasks.add_task(run_inference_background, task.id)
+    task = await run_if_ready(db, task)
     rows = await _serialize(db, [task], with_result=True)
     return success_response(data=rows[0])
 
@@ -428,16 +417,15 @@ async def cancel_prediction_task(
 async def submit_prediction_task(
     task_id: int,
     body: PredictionTaskElderSubmit,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """Elder submits their dynamic answers (+ optional static updates).
 
-    If submission makes the task ready, the task is marked as
-    pending_prediction in this request and the TorchScript inference runs
-    in the background — so the HTTP response always returns quickly, even
-    on the model's cold-start call.
+    When the submission completes the required inputs, inference runs
+    synchronously inside this request so the elder sees the final status
+    (predicted / failed) on the response and the task never lingers in
+    pending_prediction waiting on a background worker.
     """
     task = await PredictionTaskRepository.get_by_id(db, task_id)
     if task is None:
@@ -463,9 +451,7 @@ async def submit_prediction_task(
     merged.update(cleaned)
     task = await PredictionTaskRepository.save_elder_submission(db, task, merged)
 
-    task, ready = await route_or_run_sync(db, task)
-    if ready:
-        background_tasks.add_task(run_inference_background, task.id)
+    task = await run_if_ready(db, task)
     rows = await _serialize(db, [task], with_result=True)
     return success_response(data=rows[0])
 

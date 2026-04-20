@@ -10,16 +10,25 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.repositories.alert import AlertRepository
 from app.repositories.bigdata import PredictionResultRepository
-from app.repositories.elder import ElderRepository
 from app.repositories.followup import FollowupRepository
 from app.services import ml_inference
+from app.services.feature_catalog import (
+    DOCTOR_KEYS,
+    DYNAMIC_KEYS,
+    ELDER_KEYS,
+    assemble_feature_vector,
+    build_auto_inputs,
+    build_permanent_cached,
+    missing_required,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,80 +119,124 @@ async def run_and_dispatch(
     return diag
 
 
-def build_features_from_health_record(record, elder=None) -> dict:
-    """Map a HealthRecord (and optional Elder) to the 20-feature input dict.
+_DOCTOR_DYNAMIC_KEYS = frozenset(DOCTOR_KEYS) & frozenset(DYNAMIC_KEYS)
+_ELDER_DYNAMIC_KEYS = frozenset(ELDER_KEYS) & frozenset(DYNAMIC_KEYS)
 
-    Health records don't carry most of the survey-style features the model
-    was trained on, so non-vital features fall back to the scaler means
-    (i.e. the training-population average) to keep inference stable.
+
+async def _latest_dynamic_inputs_from_tasks(
+    session: AsyncSession, elder_id: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Pull the most recent non-null dynamic answers from prior prediction tasks.
+
+    Walks tasks oldest→newest so latest answers win, and keeps the
+    doctor/elder split intact so each value flows back into the source
+    bucket the model expects.
     """
-    defaults = dict(zip(ml_inference.FEATURE_COLS, ml_inference._SCALER_MEAN_RAW))
+    from app.models.prediction_task import PredictionTask  # noqa: WPS433
 
-    def _num(value):
-        if value is None:
-            return None
+    rows = (
+        await session.execute(
+            select(PredictionTask)
+            .where(
+                PredictionTask.elder_id == elder_id,
+                PredictionTask.deleted_at.is_(None),
+            )
+            .order_by(PredictionTask.updated_at.asc())
+        )
+    ).scalars().all()
+
+    doctor_out: dict[str, Any] = {}
+    elder_out: dict[str, Any] = {}
+    for task in rows:
+        if isinstance(task.doctor_inputs, dict):
+            for k, v in task.doctor_inputs.items():
+                if k in _DOCTOR_DYNAMIC_KEYS and v not in (None, ""):
+                    doctor_out[k] = v
+        if isinstance(task.elder_inputs, dict):
+            for k, v in task.elder_inputs.items():
+                if k in _ELDER_DYNAMIC_KEYS and v not in (None, ""):
+                    elder_out[k] = v
+    return doctor_out, elder_out
+
+
+async def _assemble_features_for_health_record(
+    session: AsyncSession, elder_id: int, record_snapshot: dict
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Build the 20-feature vector for a health-record-triggered inference.
+
+    Reuses the prediction-task pipeline so the doctor/elder split is
+    preserved:
+      - auto:      AGE / IS_FEMALE from elder profile, plus this record's
+                   HEIGHT_CM / WEIGHT_KG (overriding cached values so BMI
+                   reflects the freshly recorded vitals).
+      - permanent: cached static answers (RACE, SCHLYRS).
+      - doctor:    latest doctor-filled dynamic answers (SERIAL7, ADL, ...).
+      - elder:     latest elder-filled dynamic answers (SELF_HEALTH,
+                   FALL_2YR, HOSPITAL_STAY, ...).
+    """
+    auto = await build_auto_inputs(session, elder_id)
+
+    height = record_snapshot.get("height_cm")
+    if height is not None:
         try:
-            return float(value)
+            auto["HEIGHT_CM"] = float(height)
         except (TypeError, ValueError):
-            return None
+            pass
+    weight = record_snapshot.get("weight_kg")
+    if weight is not None:
+        try:
+            auto["WEIGHT_KG"] = float(weight)
+        except (TypeError, ValueError):
+            pass
 
-    features: dict = dict(defaults)
-
-    if elder is not None:
-        if getattr(elder, "birth_date", None):
-            try:
-                today = datetime.now(timezone.utc).date()
-                age = today.year - elder.birth_date.year - (
-                    (today.month, today.day)
-                    < (elder.birth_date.month, elder.birth_date.day)
-                )
-                features["AGE"] = float(age)
-            except Exception:
-                pass
-        gender = getattr(elder, "gender", None)
-        if gender is not None:
-            features["IS_FEMALE"] = 1.0 if gender == "female" else 0.0
-
-    height_cm = _num(getattr(record, "height_cm", None))
-    weight_kg = _num(getattr(record, "weight_kg", None))
-    if height_cm and weight_kg and height_cm > 0:
-        bmi = weight_kg / ((height_cm / 100.0) ** 2)
-        if bmi < 18.5:
-            features["BMI_CATEGORY"] = 0.0
-        elif bmi < 25:
-            features["BMI_CATEGORY"] = 1.0
-        elif bmi < 30:
-            features["BMI_CATEGORY"] = 2.0
-        else:
-            features["BMI_CATEGORY"] = 3.0
-
-    return features
+    permanent = await build_permanent_cached(session, elder_id)
+    doctor_inputs, elder_inputs = await _latest_dynamic_inputs_from_tasks(
+        session, elder_id
+    )
+    return assemble_feature_vector(
+        auto_inputs=auto,
+        permanent_inputs=permanent,
+        doctor_inputs=doctor_inputs,
+        elder_inputs=elder_inputs,
+    )
 
 
 async def run_for_health_record(elder_id: int, record_snapshot: dict) -> dict:
     """Background-safe entry point: open a new session, build features, dispatch.
 
-    `record_snapshot` is a plain dict of the health record fields (not an ORM
-    object) so we don't touch objects attached to a closed session.
+    Skips inference when any required input is still missing — without a
+    full feature vector the model would just see a near-constant input
+    and produce a misleading prediction. Operators are expected to drive
+    a proper PredictionTask when there's no cached answer to fall back on.
+
+    `record_snapshot` is a plain dict of the health record fields (not an
+    ORM object) so we don't touch objects attached to a closed session.
     """
+    diag: dict = {
+        "prediction_id": None,
+        "alert_id": None,
+        "followup_id": None,
+        "skipped_reason": None,
+    }
     try:
         async with AsyncSessionLocal() as session:
-            elder = await ElderRepository.get_by_id(session, elder_id)
-            record_obj = _DictView(record_snapshot)
-            features = build_features_from_health_record(record_obj, elder=elder)
-            return await run_and_dispatch(session, elder_id, features)
+            features, _sources = await _assemble_features_for_health_record(
+                session, elder_id, record_snapshot
+            )
+            gaps = missing_required(features)
+            if gaps:
+                logger.info(
+                    "ml_orchestrator: skip inference elder_id=%s, missing=%s",
+                    elder_id,
+                    gaps,
+                )
+                diag["skipped_reason"] = "missing_required_inputs"
+                return diag
+            dispatched = await run_and_dispatch(session, elder_id, features)
+            diag.update(dispatched)
+            return diag
     except Exception:
         logger.exception(
             "ml_orchestrator.run_for_health_record failed elder_id=%s", elder_id
         )
-        return {"prediction_id": None, "alert_id": None, "followup_id": None}
-
-
-class _DictView:
-    """Attribute-style access over a dict, for build_features_from_health_record."""
-
-    def __init__(self, data: dict) -> None:
-        self._data = data
-
-    def __getattr__(self, name: str):
-        return self._data.get(name)
+        return diag

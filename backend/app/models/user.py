@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, BaseModel
+from app.models.base import Base, BaseModel, _utcnow
 
 
 class User(BaseModel):
@@ -54,6 +54,7 @@ class UserRole(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
+        default=_utcnow,
         server_default=func.now(),
     )
 

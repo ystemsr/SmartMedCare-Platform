@@ -78,24 +78,30 @@ const AlertListPage: React.FC = () => {
     }
   };
 
-  const handleBatchStatus = async (status: 'resolved' | 'ignored') => {
+  const handleBatchStatus = async (status: 'processing' | 'resolved' | 'ignored') => {
     if (selectedRowKeys.length === 0) {
       message.warning('请选择要处理的预警');
       return;
     }
 
     const ok = await confirm({
-      title: '批量处理',
+      title: '批量操作',
       content: `确认将选中的预警批量标记为${formatAlertStatus(status)}？`,
       intent: status === 'ignored' ? 'warning' : 'info',
     });
     if (!ok) return;
 
+    const remarkMap: Record<string, string> = {
+      processing: '批量转入处理中',
+      resolved: '批量标记为已解决',
+      ignored: '批量忽略',
+    };
+
     try {
       await batchUpdateAlertStatus({
         ids: selectedRowKeys as number[],
         status,
-        remark: status === 'resolved' ? '批量处理' : '批量忽略',
+        remark: remarkMap[status],
       });
       message.success('批量操作成功');
       setSelectedRowKeys([]);
@@ -292,6 +298,13 @@ const AlertListPage: React.FC = () => {
                 }
               />
             </div>
+            <Button
+              variant="outlined"
+              onClick={() => handleBatchStatus('processing')}
+              disabled={selectedRowKeys.length === 0}
+            >
+              批量处理
+            </Button>
             <Button
               variant="outlined"
               onClick={() => handleBatchStatus('resolved')}

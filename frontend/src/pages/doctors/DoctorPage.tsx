@@ -96,6 +96,25 @@ const DoctorPage: React.FC = () => {
     }
   };
 
+  const handleToggleStatus = async (record: User) => {
+    const nextStatus = record.status === 'active' ? 'disabled' : 'active';
+    const actionText = nextStatus === 'disabled' ? '停用' : '启用';
+    const ok = await confirm({
+      title: `确认${actionText}`,
+      content: `确定要${actionText}医生「${record.real_name || record.username}」吗？`,
+      intent: nextStatus === 'disabled' ? 'warning' : 'info',
+      okText: actionText,
+    });
+    if (!ok) return;
+    try {
+      await updateUser(record.id, { status: nextStatus });
+      message.success(`${actionText}成功`);
+      refresh();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : `${actionText}失败`);
+    }
+  };
+
   const columns: AppTableColumn<User>[] = [
     { title: '用户名', dataIndex: 'username', width: 130 },
     { title: '姓名', dataIndex: 'real_name', width: 110 },
@@ -132,24 +151,36 @@ const DoctorPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 120,
+      width: 160,
       fixed: 'right',
-      render: (_, record) => (
-        <div style={{ display: 'flex', gap: 4 }}>
-          <PermissionGuard permission="user:manage">
-            <Tooltip title="编辑">
-              <IconButton size="sm" onClick={() => handleEdit(record)}>
-                <Pencil size={14} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="删除">
-              <IconButton size="sm" onClick={() => handleDelete(record)}>
-                <Trash2 size={14} color="var(--smc-error)" />
-              </IconButton>
-            </Tooltip>
-          </PermissionGuard>
-        </div>
-      ),
+      render: (_, record) => {
+        const isActive = record.status === 'active';
+        return (
+          <div style={{ display: 'flex', gap: 4 }}>
+            <PermissionGuard permission="user:manage">
+              <Tooltip title="编辑">
+                <IconButton size="sm" onClick={() => handleEdit(record)}>
+                  <Pencil size={14} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={isActive ? '停用' : '启用'}>
+                <IconButton size="sm" onClick={() => handleToggleStatus(record)}>
+                  {isActive ? (
+                    <Ban size={14} color="var(--smc-warning)" />
+                  ) : (
+                    <CheckCircle2 size={14} color="var(--smc-success)" />
+                  )}
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="删除">
+                <IconButton size="sm" onClick={() => handleDelete(record)}>
+                  <Trash2 size={14} color="var(--smc-error)" />
+                </IconButton>
+              </Tooltip>
+            </PermissionGuard>
+          </div>
+        );
+      },
     },
   ];
 

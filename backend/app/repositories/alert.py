@@ -46,6 +46,7 @@ class AlertRepository:
         date_start: Optional[str] = None,
         date_end: Optional[str] = None,
         source: Optional[str] = None,
+        title: Optional[str] = None,
     ):
         """Get paginated list of alerts with filters."""
         query = select(Alert).where(Alert.deleted_at.is_(None))
@@ -64,6 +65,10 @@ class AlertRepository:
             query = query.where(Alert.created_at >= date_start)
         if date_end is not None:
             query = query.where(Alert.created_at <= date_end)
+        if title:
+            keyword = title.strip()
+            if keyword:
+                query = query.where(Alert.title.ilike(f"%{keyword}%"))
 
         return await paginate(query, db, pagination, AlertResponse)
 

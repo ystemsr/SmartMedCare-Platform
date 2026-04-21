@@ -151,11 +151,18 @@ function Pagination({
         <ChevronsRight size={14} />
       </button>
       {showSizeChanger && (
-        <div style={{ marginLeft: 8, width: 100 }}>
+        <div style={{ marginLeft: 8, width: 120 }}>
           <Select
-            value={pageSize}
-            onChange={(v) => onChange({ current: 1, pageSize: Number(v) })}
-            options={[10, 20, 50, 100].map((v) => ({ label: `${v} / 页`, value: v }))}
+            value={current}
+            onChange={(v) => {
+              const next = Number(v);
+              if (next === current) return;
+              onChange({ current: next, pageSize });
+            }}
+            options={Array.from({ length: totalPages }, (_, i) => ({
+              label: `第 ${i + 1} / ${totalPages} 页`,
+              value: i + 1,
+            }))}
           />
         </div>
       )}

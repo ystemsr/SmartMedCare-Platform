@@ -11,9 +11,9 @@ import type { Followup } from '../../types/followup';
 const FollowupRecordPage: React.FC = () => {
   const [data, setData] = useState<Followup[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 30, total: 0 });
 
-  const fetchData = useCallback(async (page = 1, pageSize = 20) => {
+  const fetchData = useCallback(async (page = 1, pageSize = 30) => {
     setLoading(true);
     try {
       const res = await getFollowups({
@@ -83,7 +83,7 @@ const FollowupRecordPage: React.FC = () => {
       columns={columns}
       dataSource={data}
       loading={loading}
-      pagination={pagination}
+      pagination={{ ...pagination, showSizeChanger: true }}
       onChange={(pag) => fetchData(pag.current, pag.pageSize)}
       emptyText="暂无随访记录"
     />

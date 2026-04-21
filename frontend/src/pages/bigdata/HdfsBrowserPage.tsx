@@ -57,7 +57,7 @@ const HdfsBrowserPage: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
-  const pageSize = 50;
+  const pageSize = 30;
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewPath, setPreviewPath] = useState('');
@@ -367,6 +367,7 @@ const HdfsBrowserPage: React.FC = () => {
           current: page,
           pageSize,
           total: entries.length,
+          showSizeChanger: true,
           showTotal: (t) => `共 ${t} 项`,
         }}
         onChange={(pag) => {

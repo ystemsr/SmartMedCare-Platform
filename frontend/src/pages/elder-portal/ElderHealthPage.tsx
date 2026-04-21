@@ -42,7 +42,7 @@ const ElderHealthPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<AppTablePagination>({
     current: 1,
-    pageSize: 10,
+    pageSize: 30,
     total: 0,
     showSizeChanger: true,
   });

@@ -321,7 +321,7 @@ const FamilyElderHealthPage: React.FC = () => {
   const [healthPage, setHealthPage] = useState(1);
   const [alertsPage, setAlertsPage] = useState(1);
   const [tab, setTab] = useState<'health' | 'alerts'>('health');
-  const pageSize = 10;
+  const pageSize = 30;
 
   /* Latest record for vital cards */
   const latestRecord = healthRecords.length > 0 ? healthRecords[0] : null;
@@ -427,6 +427,7 @@ const FamilyElderHealthPage: React.FC = () => {
         current: healthPage,
         pageSize,
         total: healthTotal,
+        showSizeChanger: true,
         showTotal: (total) => `共 ${total} 条`,
       }}
       onChange={({ current }) => {
@@ -462,6 +463,7 @@ const FamilyElderHealthPage: React.FC = () => {
           current: alertsPage,
           pageSize,
           total: alertsTotal,
+          showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
         }}
         onChange={({ current }) => {

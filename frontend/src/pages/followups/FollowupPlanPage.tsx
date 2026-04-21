@@ -76,9 +76,9 @@ const FollowupPlanPage: React.FC = () => {
   // Records tab state
   const [recordsData, setRecordsData] = useState<Followup[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
-  const [recordsPagination, setRecordsPagination] = useState({ current: 1, pageSize: 20, total: 0 });
+  const [recordsPagination, setRecordsPagination] = useState({ current: 1, pageSize: 30, total: 0 });
 
-  const fetchRecords = useCallback(async (page = 1, pageSize = 20) => {
+  const fetchRecords = useCallback(async (page = 1, pageSize = 30) => {
     setRecordsLoading(true);
     try {
       const res = await getFollowups({
@@ -493,7 +493,7 @@ const FollowupPlanPage: React.FC = () => {
           columns={recordsColumns}
           dataSource={recordsData}
           loading={recordsLoading}
-          pagination={recordsPagination}
+          pagination={{ ...recordsPagination, showSizeChanger: true }}
           onChange={(pag) => fetchRecords(pag.current, pag.pageSize)}
           emptyText="暂无随访记录"
         />

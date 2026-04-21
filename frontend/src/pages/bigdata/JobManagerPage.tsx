@@ -57,7 +57,7 @@ const JobManagerPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(30);
 
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('');
   const [typeFilter, setTypeFilter] = useState<JobType | ''>('');

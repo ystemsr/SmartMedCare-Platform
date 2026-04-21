@@ -1,6 +1,6 @@
 /** Big data module types */
 
-export type JobType = 'mysql_to_hdfs' | 'build_marts' | 'batch_predict' | 'custom_hive';
+export type JobType = 'mysql_to_hdfs' | 'build_marts' | 'batch_predict';
 
 export type JobStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -38,7 +38,8 @@ export interface JobSubmitResponse {
 
 export interface HdfsEntry {
   name: string;
-  type: 'file' | 'directory';
+  /** WebHDFS returns FileStatus.type as "FILE" | "DIRECTORY" (upper-case). */
+  type: 'FILE' | 'DIRECTORY';
   size: number;
   modified: string;
 }

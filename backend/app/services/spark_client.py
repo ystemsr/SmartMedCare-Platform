@@ -28,7 +28,6 @@ JOB_TYPES = {
     "mysql_to_hdfs": "mysql_to_hdfs.py",
     "build_marts": "build_marts.py",
     "batch_predict": "batch_predict.py",
-    "custom_hive": "custom_hive.py",
 }
 
 

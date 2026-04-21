@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Play,
   Star,
@@ -7,6 +7,10 @@ import {
   Download,
   Trash2,
   ChevronRight,
+  Sparkles,
+  ChevronUp,
+  ChevronDown,
+  Code2,
 } from 'lucide-react';
 import PageHeader from '../../components/bigdata/PageHeader';
 import {
@@ -35,8 +39,9 @@ import type {
   HiveQueryHistoryEntry,
   HiveSavedQuery,
 } from '../../types/bigdata';
+import { HIVE_PRESETS, type HivePreset } from '../../constants/hivePresets';
 
-const DEFAULT_SQL = `-- 只支持 SELECT 查询\nSELECT *\nFROM smartmedcare.mart_overview\nLIMIT 20`;
+const DEFAULT_SQL = `SELECT *\nFROM smartmedcare.mart_elder_risk_summary\nLIMIT 20`;
 
 function formatCell(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -49,11 +54,13 @@ const HiveQueryPage: React.FC = () => {
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [limit, setLimit] = useState<number>(200);
   const [loading, setLoading] = useState(false);
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<unknown[][]>([]);
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sqlEditorOpen, setSqlEditorOpen] = useState(false);
 
   const [sideTab, setSideTab] = useState<'history' | 'saved'>('saved');
   const [history, setHistory] = useState<HiveQueryHistoryEntry[]>([]);
@@ -63,6 +70,8 @@ const HiveQueryPage: React.FC = () => {
   const [saveDesc, setSaveDesc] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  const resultsRef = useRef<HTMLDivElement | null>(null);
 
   const refreshSide = useCallback(async () => {
     try {
@@ -78,41 +87,66 @@ const HiveQueryPage: React.FC = () => {
     refreshSide();
   }, [refreshSide]);
 
-  const handleRun = async () => {
-    const trimmed = sql.trim();
-    if (!trimmed) {
-      message.warning('请输入 SQL 语句');
-      return;
-    }
-    const noComments = trimmed
-      .replace(/--.*$/gm, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .trim();
-    if (!/^\s*(select|with)/i.test(noComments)) {
-      message.warning('仅支持 SELECT 查询');
-      return;
-    }
+  const runSql = useCallback(
+    async (sqlText: string, limitValue: number) => {
+      const trimmed = sqlText.trim();
+      if (!trimmed) {
+        message.warning('请输入 SQL 语句');
+        return;
+      }
+      const noComments = trimmed
+        .replace(/--.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .trim();
+      if (!/^\s*(select|with)/i.test(noComments)) {
+        message.warning('仅支持 SELECT 查询');
+        return;
+      }
 
-    setLoading(true);
-    setError(null);
-    const started = performance.now();
-    try {
-      const res = await runHiveQuery({ sql: trimmed, limit });
-      setColumns(res.data.columns);
-      setRows(res.data.rows);
-      setTruncated(Boolean(res.data.truncated));
-      setElapsed(performance.now() - started);
-      refreshSide();
-    } catch (err) {
-      setColumns([]);
-      setRows([]);
-      setTruncated(false);
-      setElapsed(performance.now() - started);
-      setError(err instanceof Error ? err.message : '查询失败');
-      refreshSide();
-    } finally {
-      setLoading(false);
-    }
+      setLoading(true);
+      setError(null);
+      const started = performance.now();
+      try {
+        const res = await runHiveQuery({ sql: trimmed, limit: limitValue });
+        setColumns(res.data.columns);
+        setRows(res.data.rows);
+        setTruncated(Boolean(res.data.truncated));
+        setElapsed(performance.now() - started);
+        refreshSide();
+        // Scroll result into view so preset users see the answer immediately.
+        setTimeout(() => {
+          resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+      } catch (err) {
+        setColumns([]);
+        setRows([]);
+        setTruncated(false);
+        setElapsed(performance.now() - started);
+        setError(err instanceof Error ? err.message : '查询失败');
+        refreshSide();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [refreshSide],
+  );
+
+  const handleRun = () => runSql(sql, limit);
+
+  const handleRunPreset = async (preset: HivePreset) => {
+    const nextLimit = preset.defaultLimit ?? limit;
+    setSql(preset.sql);
+    setLimit(nextLimit);
+    setActivePresetId(preset.id);
+    await runSql(preset.sql, nextLimit);
+  };
+
+  const handleEditPreset = (preset: HivePreset) => {
+    setSql(preset.sql);
+    if (preset.defaultLimit) setLimit(preset.defaultLimit);
+    setActivePresetId(preset.id);
+    setSqlEditorOpen(true);
+    message.info('已把 SQL 填入编辑器，可修改后再执行');
   };
 
   const handleSave = async () => {
@@ -290,15 +324,173 @@ const HiveQueryPage: React.FC = () => {
         </Card>
 
         <div>
+          {/* Preset query operations — one-click, no SQL needed */}
           <Card style={{ marginBottom: 16 }}>
             <CardBody>
-              <Textarea
-                rows={7}
-                value={sql}
-                onChange={(event) => setSql(event.target.value)}
-                placeholder="SELECT * FROM mart_overview LIMIT 100"
-                style={{ fontFamily: 'monospace', fontSize: 14 }}
-              />
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  marginBottom: 6,
+                }}
+              >
+                <Sparkles size={18} color="var(--smc-primary)" />
+                <div style={{ fontSize: 'var(--smc-fs-lg)', fontWeight: 700 }}>
+                  预置查询方案
+                </div>
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--smc-text-2)',
+                  marginBottom: 14,
+                  lineHeight: 1.55,
+                }}
+              >
+                点击"立即执行"无需写 SQL 即可查看常用统计结果；"查看 SQL"会把语句填入下方编辑器供你修改。
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                }}
+              >
+                {HIVE_PRESETS.map((preset) => {
+                  const Icon = preset.icon;
+                  const active = activePresetId === preset.id;
+                  return (
+                    <div
+                      key={preset.id}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                        padding: 14,
+                        borderRadius: 10,
+                        border: active
+                          ? '1px solid var(--smc-primary)'
+                          : '1px solid var(--smc-border)',
+                        background: active
+                          ? 'color-mix(in oklab, var(--smc-primary) 6%, transparent)'
+                          : 'var(--smc-surface)',
+                        transition: 'all 160ms ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 8,
+                            background: 'color-mix(in oklab, var(--smc-primary) 12%, transparent)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--smc-primary)',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Icon size={18} />
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 'var(--smc-fs-md)',
+                              fontWeight: 600,
+                              color: 'var(--smc-text)',
+                            }}
+                          >
+                            {preset.title}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: 'var(--smc-text-2)',
+                              marginTop: 4,
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            {preset.description}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <Button
+                          size="sm"
+                          variant="text"
+                          startIcon={<Code2 size={13} />}
+                          onClick={() => handleEditPreset(preset)}
+                          disabled={loading}
+                        >
+                          查看 SQL
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          startIcon={<Play size={13} />}
+                          onClick={() => handleRunPreset(preset)}
+                          loading={loading && active}
+                          disabled={loading}
+                        >
+                          立即执行
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Advanced SQL editor — collapsed by default */}
+          <Card style={{ marginBottom: 16 }}>
+            <CardBody>
+              <button
+                type="button"
+                onClick={() => setSqlEditorOpen((v) => !v)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  border: 'none',
+                  background: 'transparent',
+                  padding: 0,
+                  cursor: 'pointer',
+                  color: 'var(--smc-text)',
+                  marginBottom: sqlEditorOpen ? 14 : 0,
+                }}
+                aria-expanded={sqlEditorOpen}
+              >
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 'var(--smc-fs-md)', fontWeight: 700 }}>
+                    SQL 模式（高级）
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--smc-text-2)',
+                      marginTop: 4,
+                    }}
+                  >
+                    手写 SELECT / WITH 查询。支持 CSV 导出和保存为模板。
+                  </div>
+                </div>
+                {sqlEditorOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+
+              {sqlEditorOpen && (
+                <>
+                  <Textarea
+                    rows={7}
+                    value={sql}
+                    onChange={(event) => setSql(event.target.value)}
+                    placeholder="SELECT * FROM mart_overview LIMIT 100"
+                    style={{ fontFamily: 'monospace', fontSize: 14 }}
+                  />
               <div
                 style={{
                   display: 'flex',
@@ -348,6 +540,8 @@ const HiveQueryPage: React.FC = () => {
                   {loading ? '执行中...' : '执行查询'}
                 </Button>
               </div>
+                </>
+              )}
             </CardBody>
           </Card>
 
@@ -362,6 +556,7 @@ const HiveQueryPage: React.FC = () => {
             </Alert>
           )}
 
+          <div ref={resultsRef}>
           <Card>
             <CardBody>
               <div
@@ -473,6 +668,7 @@ const HiveQueryPage: React.FC = () => {
               )}
             </CardBody>
           </Card>
+          </div>
         </div>
       </div>
 

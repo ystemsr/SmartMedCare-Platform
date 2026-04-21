@@ -185,3 +185,56 @@ class PredictionResultResponse(BaseModel):
     predicted_at: datetime
     created_at: datetime
     updated_at: datetime
+
+
+# ---- Pipeline freshness (business-facing wrapper over pipeline-health) ----
+
+
+class StageFreshness(BaseModel):
+    """Business-facing freshness summary for a single pipeline stage."""
+
+    stage: str
+    display_name: str
+    description: str
+    status: str
+    job_id: Optional[str] = None
+    finished_at: Optional[datetime] = None
+    duration_ms: Optional[int] = None
+    rows_processed: Optional[int] = None
+    freshness_seconds: Optional[int] = None
+    freshness_label: str
+    freshness_tone: str  # "fresh" | "aging" | "stale" | "never" | "running"
+
+
+class PipelineSchedule(BaseModel):
+    """Declarative config of the daily auto-run. Source of truth is UTC."""
+
+    enabled: bool
+    utc_time: str  # "HH:MM" in UTC
+    source: str  # "db" | "env"
+    next_run_at: Optional[datetime] = None  # UTC
+
+
+class PipelineScheduleUpdate(BaseModel):
+    """Admin PUT body. utc_time is HH:MM in UTC (24h)."""
+
+    enabled: bool
+    utc_time: str
+
+
+class PipelineFreshnessResponse(BaseModel):
+    """Aggregated freshness for the three-stage pipeline."""
+
+    stages: list[StageFreshness]
+    has_running_pipeline: bool
+    pipeline_run_id: Optional[str] = None
+    running_stage: Optional[str] = None
+    schedule: Optional[PipelineSchedule] = None
+
+
+class PipelineRunResponse(BaseModel):
+    """Result of submitting a one-click pipeline run."""
+
+    pipeline_run_id: str
+    job_ids: list[str]
+    reused: bool  # True when an existing running pipeline was returned

@@ -18,6 +18,10 @@ import type {
   JobSubmitRequest,
   JobSubmitResponse,
   MLFeaturePayload,
+  PipelineFreshness,
+  PipelineRunResult,
+  PipelineSchedule,
+  PipelineScheduleUpdate,
   Prediction,
   PredictionRecord,
 } from '../types/bigdata';
@@ -171,6 +175,22 @@ export function getPredictionTrend(
   days = 30,
 ): Promise<ApiResponse<AnalyticsPredictionTrend>> {
   return http.get('/bigdata/analytics/prediction-trend', { params: { days } });
+}
+
+// ---------- Pipeline (business-facing freshness) ----------
+
+export function getPipelineFreshness(): Promise<ApiResponse<PipelineFreshness>> {
+  return http.get('/bigdata/pipeline/freshness');
+}
+
+export function runPipeline(): Promise<ApiResponse<PipelineRunResult>> {
+  return http.post('/bigdata/pipeline/run');
+}
+
+export function updatePipelineSchedule(
+  body: PipelineScheduleUpdate,
+): Promise<ApiResponse<PipelineSchedule>> {
+  return http.put('/bigdata/pipeline/schedule', body);
 }
 
 export function getAnalyticsOverview(): Promise<

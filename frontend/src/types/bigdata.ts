@@ -189,3 +189,45 @@ export interface AnalyticsPredictionTrend {
   }[];
   days: number;
 }
+
+export type FreshnessTone = 'fresh' | 'aging' | 'stale' | 'never' | 'running';
+
+export interface StageFreshness {
+  stage: string;
+  display_name: string;
+  description: string;
+  status: string;
+  job_id?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  rows_processed?: number | null;
+  freshness_seconds?: number | null;
+  freshness_label: string;
+  freshness_tone: FreshnessTone;
+}
+
+export interface PipelineSchedule {
+  enabled: boolean;
+  utc_time: string; // "HH:MM" in UTC (source of truth for editing)
+  source: 'db' | 'env';
+  next_run_at?: string | null; // UTC ISO string
+}
+
+export interface PipelineScheduleUpdate {
+  enabled: boolean;
+  utc_time: string; // HH:MM in UTC
+}
+
+export interface PipelineFreshness {
+  stages: StageFreshness[];
+  has_running_pipeline: boolean;
+  pipeline_run_id?: string | null;
+  running_stage?: string | null;
+  schedule?: PipelineSchedule | null;
+}
+
+export interface PipelineRunResult {
+  pipeline_run_id: string;
+  job_ids: string[];
+  reused: boolean;
+}

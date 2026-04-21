@@ -87,6 +87,69 @@ class BigDataJobRepository:
         await db.refresh(job)
         return job
 
+    @staticmethod
+    async def latest_by_stage(
+        db: AsyncSession, job_type: str
+    ) -> Optional[BigDataJob]:
+        """Latest (non-deleted) job of a given type, regardless of status."""
+        stmt = (
+            select(BigDataJob)
+            .where(
+                BigDataJob.job_type == job_type,
+                BigDataJob.deleted_at.is_(None),
+            )
+            .order_by(desc(BigDataJob.created_at))
+            .limit(1)
+        )
+        return (await db.execute(stmt)).scalar_one_or_none()
+
+    @staticmethod
+    async def find_running_pipeline(
+        db: AsyncSession,
+    ) -> Optional[BigDataJob]:
+        """Return any job belonging to a pipeline_run_id and currently in flight.
+
+        Used for idempotent pipeline submission: if a pipeline is already
+        running (pending or running status), we reuse its run id instead of
+        starting a new chain.
+        """
+        from sqlalchemy import func
+
+        run_id_expr = func.json_unquote(
+            func.json_extract(BigDataJob.params, "$.pipeline_run_id")
+        )
+        stmt = (
+            select(BigDataJob)
+            .where(
+                BigDataJob.deleted_at.is_(None),
+                BigDataJob.status.in_(["pending", "running"]),
+                run_id_expr.isnot(None),
+            )
+            .order_by(desc(BigDataJob.created_at))
+            .limit(1)
+        )
+        return (await db.execute(stmt)).scalar_one_or_none()
+
+    @staticmethod
+    async def list_by_pipeline_run_id(
+        db: AsyncSession, pipeline_run_id: str
+    ) -> list[BigDataJob]:
+        """Return every job tagged with the given pipeline_run_id, oldest first."""
+        from sqlalchemy import func
+
+        run_id_expr = func.json_unquote(
+            func.json_extract(BigDataJob.params, "$.pipeline_run_id")
+        )
+        stmt = (
+            select(BigDataJob)
+            .where(
+                BigDataJob.deleted_at.is_(None),
+                run_id_expr == pipeline_run_id,
+            )
+            .order_by(BigDataJob.created_at.asc())
+        )
+        return list((await db.execute(stmt)).scalars().all())
+
 
 class PredictionResultRepository:
     """CRUD for prediction_results."""

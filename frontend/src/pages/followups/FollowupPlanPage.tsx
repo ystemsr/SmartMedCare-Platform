@@ -43,7 +43,13 @@ const formFields: FormFieldConfig[] = [
   { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
   { name: 'plan_type', label: '随访方式', type: 'select', required: true, options: FOLLOWUP_TYPE_OPTIONS },
   { name: 'planned_at', label: '计划时间', type: 'date', required: true },
-  { name: 'assigned_to', label: '负责人ID', type: 'number', required: true },
+  {
+    name: 'assigned_to',
+    label: '负责人',
+    type: 'doctor-picker',
+    required: true,
+    labelField: 'assigned_to_name',
+  },
   { name: 'alert_id', label: '关联预警ID', type: 'number' },
   { name: 'notes', label: '备注', type: 'textarea' },
 ];

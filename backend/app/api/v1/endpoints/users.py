@@ -4,10 +4,12 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db, require_permission
-from app.models.user import User
+from app.core.deps import get_current_user, get_db, require_permission
+from app.models.role import Role
+from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.user import UserService
 from app.utils.pagination import PaginationParams
@@ -21,6 +23,51 @@ from app.utils.response import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/doctors")
+async def search_doctors(
+    keyword: Optional[str] = Query(None, description="搜索姓名/用户名/手机号"),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Lightweight search for users with the doctor role.
+
+    Available to any authenticated user so assignment pickers (e.g. in
+    follow-up plans) can resolve doctors without requiring ``user:manage``.
+    """
+    stmt = (
+        select(User.id, User.username, User.real_name, User.phone)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .where(
+            Role.name == "doctor",
+            User.deleted_at.is_(None),
+            User.status == "active",
+        )
+    )
+    if keyword:
+        like = f"%{keyword}%"
+        stmt = stmt.where(
+            or_(
+                User.username.like(like),
+                User.real_name.like(like),
+                User.phone.like(like),
+            )
+        )
+    stmt = stmt.order_by(User.id.asc()).limit(limit)
+    rows = (await db.execute(stmt)).all()
+    items = [
+        {
+            "id": r[0],
+            "username": r[1],
+            "real_name": r[2],
+            "phone": r[3],
+        }
+        for r in rows
+    ]
+    return success_response(data=items)
 
 
 @router.get("")

@@ -1,12 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Plus,
-  Trash2,
-  Pencil,
-  RefreshCw,
   Search,
-  ToggleRight,
-  ShieldCheck,
   Eye,
   AlertTriangle,
 } from 'lucide-react';
@@ -24,6 +19,8 @@ import {
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
+import CredentialsModal from '../../components/CredentialsModal';
+import ElderDetailDrawer from '../../components/ElderDetailDrawer';
 import { useTable } from '../../hooks/useTable';
 import {
   activateElderAccount,
@@ -50,6 +47,13 @@ const formFields: FormFieldConfig[] = [
   { name: 'emergency_contact_phone', label: '紧急联系电话' },
 ];
 
+interface CredentialsState {
+  title: string;
+  description?: string;
+  username?: string;
+  password: string;
+}
+
 const ElderListPage: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'list' | 'archive'>('list');
@@ -57,6 +61,8 @@ const ElderListPage: React.FC = () => {
   const [formVisible, setFormVisible] = useState(false);
   const [editingElder, setEditingElder] = useState<Elder | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [credentials, setCredentials] = useState<CredentialsState | null>(null);
+  const [detailElder, setDetailElder] = useState<Elder | null>(null);
 
   const fetchFn = useCallback(
     (params: ElderListQuery & { page: number; page_size: number }) => getElders(params),
@@ -72,21 +78,23 @@ const ElderListPage: React.FC = () => {
   };
 
   const handleEdit = (record: Elder) => {
+    setDetailElder(null);
     setEditingElder(record);
     setFormVisible(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (record: Elder) => {
     const ok = await confirm({
       title: '删除老人档案',
-      content: '确定删除该老人档案？此操作不可撤销。',
+      content: `确定删除 ${record.name} 的档案？此操作不可撤销。`,
       intent: 'danger',
       okText: '删除',
     });
     if (!ok) return;
     try {
-      await deleteElder(id);
+      await deleteElder(record.id);
       message.success('删除成功');
+      setDetailElder(null);
       refresh();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败');
@@ -96,49 +104,68 @@ const ElderListPage: React.FC = () => {
   const handleActivateAccount = async (record: Elder) => {
     const ok = await confirm({
       title: '激活账户',
-      content: '确定为该老人激活登录账户？',
+      content: `确定为 ${record.name} 激活登录账户？`,
       intent: 'info',
     });
     if (!ok) return;
     try {
       const res = await activateElderAccount(record.id);
-      message.success(`账户已激活，用户名: ${res.data.username}，密码: ${res.data.password}`);
+      setDetailElder(null);
+      setCredentials({
+        title: '账户已激活',
+        description: `已为 ${record.name} 开通登录账户，请将以下凭据交付给本人。`,
+        username: res.data.username,
+        password: res.data.password,
+      });
       refresh();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '激活失败');
     }
   };
 
-  const handleResetPassword = async (id: number) => {
+  const handleResetPassword = async (record: Elder) => {
     const ok = await confirm({
       title: '重置密码',
-      content: '确定重置密码？',
+      content: `确定为 ${record.name} 重置登录密码？`,
       intent: 'warning',
     });
     if (!ok) return;
     try {
-      await resetElderPassword(id);
-      message.success('密码已重置');
+      const res = await resetElderPassword(record.id);
+      setDetailElder(null);
+      setCredentials({
+        title: '密码已重置',
+        description: `已为 ${record.name} 生成新密码，请交付给本人。`,
+        password: res.data.new_password,
+      });
     } catch (err) {
       message.error(err instanceof Error ? err.message : '重置失败');
     }
   };
 
-  const handleToggleStatus = async (id: number, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+  const handleToggleStatus = async (record: Elder) => {
+    const newStatus = record.account_status === 'active' ? 'disabled' : 'active';
     const ok = await confirm({
       title: newStatus === 'active' ? '启用账户' : '禁用账户',
-      content: `确定${newStatus === 'active' ? '启用' : '禁用'}该账户？`,
+      content: `确定${newStatus === 'active' ? '启用' : '禁用'} ${record.name} 的账户？`,
       intent: newStatus === 'active' ? 'info' : 'warning',
     });
     if (!ok) return;
     try {
-      await updateElderAccountStatus(id, newStatus);
+      await updateElderAccountStatus(record.id, newStatus);
       message.success(newStatus === 'active' ? '已启用' : '已禁用');
+      setDetailElder((prev) =>
+        prev && prev.id === record.id ? { ...prev, account_status: newStatus } : prev,
+      );
       refresh();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '操作失败');
     }
+  };
+
+  const handleOpenFullArchive = (record: Elder) => {
+    setDetailElder(null);
+    navigate(`/elders/${record.id}`);
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -261,75 +288,21 @@ const ElderListPage: React.FC = () => {
       {
         title: '操作',
         key: 'actions',
-        width: 380,
+        width: 110,
         fixed: 'right' as const,
         render: (_: unknown, record: Elder) => (
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <Button
-              size="sm"
-              variant="text"
-              startIcon={<Eye size={14} />}
-              onClick={() => navigate(`/elders/${record.id}`)}
-            >
-              查看
-            </Button>
-            <PermissionGuard permission="elder:update">
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<Pencil size={14} />}
-                onClick={() => handleEdit(record)}
-              >
-                编辑
-              </Button>
-            </PermissionGuard>
-            <PermissionGuard permission="elder:update">
-              {!record.username ? (
-                <Button
-                  size="sm"
-                  variant="text"
-                  startIcon={<ShieldCheck size={14} />}
-                  onClick={() => handleActivateAccount(record)}
-                >
-                  激活账户
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    variant="text"
-                    startIcon={<RefreshCw size={14} />}
-                    onClick={() => handleResetPassword(record.id)}
-                  >
-                    重置密码
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="text"
-                    startIcon={<ToggleRight size={14} />}
-                    onClick={() => handleToggleStatus(record.id, record.account_status)}
-                  >
-                    {record.account_status === 'active' ? '禁用' : '启用'}
-                  </Button>
-                </>
-              )}
-            </PermissionGuard>
-            <PermissionGuard permission="elder:delete">
-              <Button
-                size="sm"
-                variant="text"
-                danger
-                startIcon={<Trash2 size={14} />}
-                onClick={() => handleDelete(record.id)}
-              >
-                删除
-              </Button>
-            </PermissionGuard>
-          </div>
+          <Button
+            size="sm"
+            variant="text"
+            startIcon={<Eye size={14} />}
+            onClick={() => setDetailElder(record)}
+          >
+            查看
+          </Button>
         ),
       },
     ],
-    [navigate],
+    [],
   );
 
   const handleArchiveSearch = useCallback(() => {
@@ -415,6 +388,25 @@ const ElderListPage: React.FC = () => {
 
   return (
     <div>
+      <CredentialsModal
+        open={credentials !== null}
+        onClose={() => setCredentials(null)}
+        title={credentials?.title ?? ''}
+        description={credentials?.description}
+        username={credentials?.username}
+        password={credentials?.password ?? ''}
+      />
+      <ElderDetailDrawer
+        open={detailElder !== null}
+        elder={detailElder}
+        onClose={() => setDetailElder(null)}
+        onEdit={handleEdit}
+        onActivate={handleActivateAccount}
+        onResetPassword={handleResetPassword}
+        onToggleStatus={handleToggleStatus}
+        onDelete={handleDelete}
+        onOpenFullArchive={handleOpenFullArchive}
+      />
       <div style={{ marginBottom: 16 }}>
         <Tabs
           activeKey={activeTab}

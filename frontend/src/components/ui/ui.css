@@ -887,10 +887,33 @@
   color: var(--smc-text);
   font-size: var(--smc-fs-md);
 }
+.smc-date__title-btn {
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--smc-text);
+  font-size: var(--smc-fs-md);
+  padding: 4px 8px;
+  border-radius: var(--smc-r-sm);
+  cursor: pointer;
+}
+.smc-date__title-btn:hover {
+  background: var(--smc-surface-alt);
+}
 .smc-date__grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 2px;
+}
+.smc-date__grid--months,
+.smc-date__grid--years {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.smc-date__cell--lg {
+  height: 48px;
+  font-size: var(--smc-fs-md);
 }
 .smc-date__cell {
   display: inline-flex;

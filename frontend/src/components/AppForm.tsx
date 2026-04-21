@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, DatePicker, Input, Modal, Select, Textarea } from './ui';
 import ElderPicker from './ElderPicker';
+import DoctorPicker from './DoctorPicker';
 import { message } from '../utils/message';
 
 export interface FormFieldRule {
@@ -14,12 +15,20 @@ export interface FormFieldRule {
 export interface FormFieldConfig {
   name: string;
   label: string;
-  type?: 'input' | 'textarea' | 'number' | 'select' | 'date' | 'password' | 'elder-picker';
+  type?:
+    | 'input'
+    | 'textarea'
+    | 'number'
+    | 'select'
+    | 'date'
+    | 'password'
+    | 'elder-picker'
+    | 'doctor-picker';
   required?: boolean;
   options?: { label: string; value: string | number }[];
   placeholder?: string;
   rules?: FormFieldRule[];
-  /** For 'elder-picker': name of a sibling field in initialValues holding the elder's display name (e.g. 'elder_name') */
+  /** For 'elder-picker' / 'doctor-picker': name of a sibling field in initialValues holding a prefilled display label (e.g. 'elder_name', 'assigned_to_name') */
   labelField?: string;
 }
 
@@ -162,6 +171,24 @@ const AppForm: React.FC<AppFormProps> = ({
                 : undefined;
             return (
               <ElderPicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as number | '' | null) ?? ''}
+                onChange={(v) => updateValue(field.name, v)}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'doctor-picker') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            return (
+              <DoctorPicker
                 key={field.name}
                 label={field.label}
                 required={field.required}

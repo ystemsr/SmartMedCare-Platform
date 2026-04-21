@@ -38,7 +38,9 @@ export function deleteElder(id: number): Promise<ApiResponse<null>> {
 
 // --- Elder account operations ---
 
-export function resetElderPassword(elderId: number): Promise<ApiResponse<null>> {
+export function resetElderPassword(
+  elderId: number,
+): Promise<ApiResponse<{ new_password: string }>> {
   return http.post(`/elders/${elderId}/reset-password`);
 }
 

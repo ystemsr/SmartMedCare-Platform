@@ -1,15 +1,25 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { RefreshCw, Power } from 'lucide-react';
 import { Button, Chip, confirm } from '../../components/ui';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PermissionGuard from '../../components/PermissionGuard';
+import CredentialsModal from '../../components/CredentialsModal';
 import { useTable } from '../../hooks/useTable';
 import { getElders, resetElderPassword, updateElderAccountStatus } from '../../api/elders';
 import { formatGender } from '../../utils/formatter';
 import type { Elder, ElderListQuery } from '../../types/elder';
 import { message } from '../../utils/message';
 
+interface CredentialsState {
+  title: string;
+  description?: string;
+  username?: string;
+  password: string;
+}
+
 const ElderAccountPage: React.FC = () => {
+  const [credentials, setCredentials] = useState<CredentialsState | null>(null);
+
   const fetchFn = useCallback(
     (params: ElderListQuery & { page: number; page_size: number }) => getElders(params),
     [],
@@ -18,17 +28,21 @@ const ElderAccountPage: React.FC = () => {
   const { data, loading, pagination, handleTableChange, refresh, handleSearch } =
     useTable<Elder, ElderListQuery>(fetchFn);
 
-  const handleResetPassword = async (elderId: number) => {
+  const handleResetPassword = async (elder: Elder) => {
     const ok = await confirm({
       title: '重置密码',
-      content: '确定重置密码？',
+      content: `确定为 ${elder.name} 重置登录密码？`,
       intent: 'warning',
     });
     if (!ok) return;
 
     try {
-      await resetElderPassword(elderId);
-      message.success('密码重置成功');
+      const res = await resetElderPassword(elder.id);
+      setCredentials({
+        title: '密码已重置',
+        description: `已为 ${elder.name} 生成新密码，请交付给本人。`,
+        password: res.data.new_password,
+      });
     } catch (err) {
       message.error(err instanceof Error ? err.message : '操作失败');
     }
@@ -87,7 +101,7 @@ const ElderAccountPage: React.FC = () => {
               size="sm"
               variant="text"
               startIcon={<RefreshCw size={14} />}
-              onClick={() => handleResetPassword(record.id)}
+              onClick={() => handleResetPassword(record)}
             >
               重置密码
             </Button>
@@ -107,15 +121,25 @@ const ElderAccountPage: React.FC = () => {
   ];
 
   return (
-    <AppTable<Elder>
-      columns={columns}
-      dataSource={data}
-      loading={loading}
-      pagination={pagination}
-      onChange={handleTableChange}
-      onSearch={handleSearch}
-      searchPlaceholder="搜索姓名/手机号/身份证"
-    />
+    <>
+      <AppTable<Elder>
+        columns={columns}
+        dataSource={data}
+        loading={loading}
+        pagination={pagination}
+        onChange={handleTableChange}
+        onSearch={handleSearch}
+        searchPlaceholder="搜索姓名/手机号/身份证"
+      />
+      <CredentialsModal
+        open={credentials !== null}
+        onClose={() => setCredentials(null)}
+        title={credentials?.title ?? ''}
+        description={credentials?.description}
+        username={credentials?.username}
+        password={credentials?.password ?? ''}
+      />
+    </>
   );
 };
 

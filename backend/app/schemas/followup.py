@@ -56,11 +56,13 @@ class FollowupResponse(BaseModel):
 
     id: int
     elder_id: int
+    elder_name: Optional[str] = None
     alert_id: Optional[int] = None
     plan_type: str
     planned_at: Optional[datetime] = None
     status: str
     assigned_to: Optional[int] = None
+    assigned_to_name: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime
     records: Optional[list[FollowupRecordResponse]] = None

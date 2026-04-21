@@ -35,7 +35,7 @@ export interface AlertStatusUpdate {
 /** Batch update alert status request */
 export interface AlertBatchStatus {
   ids: number[];
-  status: 'resolved' | 'ignored';
+  status: 'processing' | 'resolved' | 'ignored';
   remark?: string;
 }
 
@@ -48,4 +48,8 @@ export interface AlertListQuery extends PaginationParams {
   source?: string;
   date_start?: string;
   date_end?: string;
+  /** Fuzzy match on alert title */
+  title?: string;
+  /** Alias populated by the table search box; mapped to `title` on the API layer. */
+  keyword?: string;
 }

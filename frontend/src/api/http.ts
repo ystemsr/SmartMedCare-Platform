@@ -21,13 +21,32 @@ http.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
+interface BackendFieldError {
+  field?: string;
+  reason?: string;
+}
+
+function extractErrorMessage(
+  body: { message?: string; errors?: BackendFieldError[] } | undefined,
+  fallback: string,
+): string {
+  if (!body) return fallback;
+  const errors = body.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    const first = errors[0];
+    if (first?.reason) {
+      return first.reason;
+    }
+  }
+  return body.message || fallback;
+}
+
 // Unwrap unified response and handle errors
 http.interceptors.response.use(
   (response) => {
     const res = response.data;
     if (res.code !== 0) {
-      const errorMsg = res.message || '请求失败';
-      return Promise.reject(new Error(errorMsg));
+      return Promise.reject(new Error(extractErrorMessage(res, '请求失败')));
     }
     return res;
   },
@@ -37,7 +56,7 @@ http.interceptors.response.use(
       window.location.href = '/login';
       return Promise.reject(new Error('登录已过期，请重新登录'));
     }
-    const msg = error.response?.data?.message || error.message || '网络错误';
+    const msg = extractErrorMessage(error.response?.data, error.message || '网络错误');
     return Promise.reject(new Error(msg));
   },
 );

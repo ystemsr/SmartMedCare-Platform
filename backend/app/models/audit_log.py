@@ -10,7 +10,7 @@ from typing import Any, Optional
 from sqlalchemy import BigInteger, DateTime, ForeignKey, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base
+from app.models.base import Base, _utcnow
 
 
 class AuditLog(Base):
@@ -32,6 +32,7 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
+        default=_utcnow,
         server_default=func.now(),
     )
 
@@ -55,6 +56,7 @@ class LoginLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
+        default=_utcnow,
         server_default=func.now(),
     )
 
@@ -70,11 +72,13 @@ class SystemConfig(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
+        default=_utcnow,
         server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
+        default=_utcnow,
+        onupdate=_utcnow,
         server_default=func.now(),
-        onupdate=func.now(),
     )

@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.repositories.followup import FollowupRepository
 from app.repositories.intervention import InterventionRepository
 from app.schemas.intervention import InterventionResponse
 from app.utils.pagination import PaginationParams
@@ -12,12 +13,27 @@ from app.utils.pagination import PaginationParams
 logger = logging.getLogger(__name__)
 
 
+class InterventionValidationError(Exception):
+    """Raised when intervention input fails business validation."""
+
+
 class InterventionService:
     """Business logic for interventions."""
 
     @staticmethod
     async def create(db: AsyncSession, data: dict) -> InterventionResponse:
-        """Create a new intervention."""
+        """Create a new intervention.
+
+        Validates the optional `followup_id` points to an existing followup so
+        the FK constraint doesn't surface as an opaque 500 error.
+        """
+        followup_id = data.get("followup_id")
+        if followup_id is not None:
+            followup = await FollowupRepository.get_by_id(db, followup_id)
+            if followup is None:
+                raise InterventionValidationError(
+                    f"关联的随访记录不存在 (followup_id={followup_id})"
+                )
         intervention = await InterventionRepository.create(db, data)
         await db.commit()
         return InterventionResponse.model_validate(intervention)

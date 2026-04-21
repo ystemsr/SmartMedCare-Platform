@@ -12,9 +12,14 @@ from app.schemas.intervention import (
     InterventionStatusUpdate,
     InterventionUpdate,
 )
-from app.services.intervention import InterventionService
+from app.services.intervention import InterventionService, InterventionValidationError
 from app.utils.pagination import PaginationParams
-from app.utils.response import NOT_FOUND, error_response, success_response
+from app.utils.response import (
+    BUSINESS_VALIDATION_FAILED,
+    NOT_FOUND,
+    error_response,
+    success_response,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,7 +32,10 @@ async def create_intervention(
     _user=Depends(require_permission("intervention:create")),
 ):
     """Create a new intervention."""
-    intervention = await InterventionService.create(db, body.model_dump())
+    try:
+        intervention = await InterventionService.create(db, body.model_dump())
+    except InterventionValidationError as exc:
+        return error_response(BUSINESS_VALIDATION_FAILED, str(exc))
     return success_response(data=intervention.model_dump())
 
 

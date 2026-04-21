@@ -1,5 +1,6 @@
-import React from 'react';
-import { Input, Select, Textarea } from '@/components/ui';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { Input } from '@/components/ui';
 import type { JobType } from '../../types/bigdata';
 
 interface Props {
@@ -8,137 +9,112 @@ interface Props {
   onChange: (next: Record<string, unknown>) => void;
 }
 
-const MART_OPTIONS = [
-  { label: 'mart_overview （总体指标）', value: 'mart_overview' },
-  { label: 'mart_risk_region （地域风险）', value: 'mart_risk_region' },
-  { label: 'mart_followup_completion （随访完成）', value: 'mart_followup_completion' },
-  { label: 'mart_alert_summary （预警摘要）', value: 'mart_alert_summary' },
-];
+const DEFAULT_MODEL_PATH = '/opt/spark-apps/models/multitask_health_model.pt';
 
-const TABLE_OPTIONS = [
-  { value: 'elders' },
-  { value: 'health_records' },
-  { value: 'medical_records' },
-  { value: 'care_records' },
-  { value: 'alerts' },
-  { value: 'followups' },
-];
+const InfoPanel: React.FC<{ title: string; lines: string[] }> = ({ title, lines }) => (
+  <div
+    style={{
+      display: 'flex',
+      gap: 10,
+      padding: 14,
+      borderRadius: 10,
+      background: 'color-mix(in oklab, var(--smc-primary) 8%, transparent)',
+      border: '1px solid color-mix(in oklab, var(--smc-primary) 22%, transparent)',
+    }}
+  >
+    <Info size={18} color="var(--smc-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
+    <div style={{ minWidth: 0, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--smc-text)' }}>{title}</div>
+      <ul
+        style={{
+          margin: '6px 0 0',
+          paddingLeft: 18,
+          fontSize: 12,
+          color: 'var(--smc-text-2)',
+        }}
+      >
+        {lines.map((line, i) => (
+          <li key={i} style={{ marginTop: i === 0 ? 0 : 4 }}>
+            {line}
+          </li>
+        ))}
+      </ul>
+    </div>
+  </div>
+);
 
 const JobParamsForm: React.FC<Props> = ({ jobType, params, onChange }) => {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const set = (key: string, value: unknown) => {
     onChange({ ...params, [key]: value });
   };
 
   if (jobType === 'mysql_to_hdfs') {
-    const tablesValue = String(params.tables || '');
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Textarea
-          label="要抽取的表 (逗号分隔)"
-          rows={3}
-          value={tablesValue}
-          onChange={(e) => set('tables', e.target.value)}
-          placeholder={TABLE_OPTIONS.map((t) => t.value).join(',')}
-          helperText="留空则使用脚本默认的全量表列表"
-        />
-        <Input
-          label="输出路径 (HDFS)"
-          value={String(params.output_path || '')}
-          onChange={(e) => set('output_path', e.target.value)}
-          placeholder="/data/raw"
-        />
-      </div>
+      <InfoPanel
+        title="业务库快照（MySQL → HDFS）"
+        lines={[
+          '将 elders、health_records、medical_records、alerts、followups、interventions 六张业务表完整导出到 HDFS。',
+          '输出路径：/warehouse/raw/<table>/dt=<今天>/（Parquet / Snappy 压缩）',
+          '此作业按系统默认配置运行，无需输入任何参数。点击"提交"即可。',
+        ]}
+      />
     );
   }
 
   if (jobType === 'build_marts') {
-    const selected = String(params.marts || '').split(',').filter(Boolean);
-    const toggle = (m: string) => {
-      const next = selected.includes(m)
-        ? selected.filter((x) => x !== m)
-        : [...selected, m];
-      set('marts', next.join(','));
-    };
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>
-          选择要刷新的数据集市（默认全部）
-        </div>
-        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-          {MART_OPTIONS.map((m) => {
-            const on = selected.length === 0 || selected.includes(m.value);
-            return (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => toggle(m.value)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  border: 'none',
-                  background: on
-                    ? 'color-mix(in oklab, var(--smc-primary) 12%, transparent)'
-                    : 'var(--smc-surface-alt)',
-                  fontSize: 13,
-                }}
-              >
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <InfoPanel
+        title="构建统计数据集市"
+        lines={[
+          '基于最新的 HDFS 快照，刷新所有集市宽表：mart_elder_risk_summary、mart_daily_alerts、mart_intervention_effectiveness、mart_followup_completion。',
+          '依赖：需要先跑过"业务库快照"，否则会读不到 dt=<今天> 分区。',
+          '此作业无参数。点击"提交"即可。',
+        ]}
+      />
     );
   }
 
   if (jobType === 'batch_predict') {
+    const modelPath = String(params.model_path || '');
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Input
-          label="输入 Parquet 路径"
-          value={String(params.input_path || '')}
-          onChange={(e) => set('input_path', e.target.value)}
-          placeholder="/data/raw/elders"
-          helperText="含特征数据的 HDFS 路径（留空使用脚本默认值）"
-        />
-        <Input
-          label="输出路径"
-          value={String(params.output_path || '')}
-          onChange={(e) => set('output_path', e.target.value)}
-          placeholder="/data/predictions/latest"
-        />
-        <Input
-          label="模型路径 (可选)"
-          value={String(params.model_path || '')}
-          onChange={(e) => set('model_path', e.target.value)}
-          placeholder="/opt/spark-apps/models/multitask_health_model.pt"
-        />
-      </div>
-    );
-  }
-
-  if (jobType === 'custom_hive') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Textarea
-          label="Hive SQL / HQL"
-          rows={8}
-          value={String(params.sql || '')}
-          onChange={(e) => set('sql', e.target.value)}
-          placeholder="INSERT OVERWRITE TABLE ... SELECT ..."
-          style={{ fontFamily: 'monospace', fontSize: 13 }}
-        />
-        <Select<string>
-          label="Hive 数据库"
-          value={String(params.database || 'smartmedcare')}
-          onChange={(v) => set('database', v)}
-          options={[
-            { label: 'smartmedcare', value: 'smartmedcare' },
-            { label: 'default', value: 'default' },
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <InfoPanel
+          title="智能风险预测（批量）"
+          lines={[
+            '对全量老人运行多任务健康风险模型，产出高风险概率、随访必要性、综合健康分。',
+            '依赖：需要先跑过"业务库快照"（读取 raw_elders / raw_health_records）。',
+            '默认使用内置模型，无需输入任何参数。如需换模型，展开下方"高级设置"。',
           ]}
         />
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--smc-text-2)',
+            cursor: 'pointer',
+            fontSize: 12,
+            padding: 0,
+            alignSelf: 'flex-start',
+          }}
+        >
+          {advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          高级设置
+        </button>
+        {advancedOpen && (
+          <Input
+            label="模型路径"
+            value={modelPath}
+            onChange={(e) => set('model_path', e.target.value)}
+            placeholder={DEFAULT_MODEL_PATH}
+            helperText={`留空使用默认：${DEFAULT_MODEL_PATH}`}
+          />
+        )}
       </div>
     );
   }

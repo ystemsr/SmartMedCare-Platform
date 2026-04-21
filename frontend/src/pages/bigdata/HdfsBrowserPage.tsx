@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PageHeader from '../../components/bigdata/PageHeader';
-import { Button, Card, Chip, Drawer, Select } from '@/components/ui';
+import { Alert, Button, Card, Chip, Drawer, Select } from '@/components/ui';
 import { listHdfs, previewHdfs } from '../../api/bigdata';
 import { formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
@@ -49,8 +49,10 @@ const crumbLinkStyle: React.CSSProperties = {
 type SortKey = 'name' | 'size' | 'modified';
 type SortDir = 'asc' | 'desc';
 
+const DEFAULT_PATH = '/warehouse/raw';
+
 const HdfsBrowserPage: React.FC = () => {
-  const [path, setPath] = useState('/');
+  const [path, setPath] = useState(DEFAULT_PATH);
   const [entries, setEntries] = useState<HdfsEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -74,6 +76,17 @@ const HdfsBrowserPage: React.FC = () => {
       setPage(1);
     } catch (err) {
       setEntries([]);
+      // Landing path may not exist on a fresh cluster; fall back to root silently.
+      if (target === DEFAULT_PATH) {
+        try {
+          const fallback = await listHdfs('/');
+          setEntries(fallback.data.entries);
+          setPath('/');
+          return;
+        } catch {
+          // fall through to the error message below
+        }
+      }
       message.error(err instanceof Error ? err.message : '加载目录失败');
     } finally {
       setLoading(false);
@@ -88,7 +101,7 @@ const HdfsBrowserPage: React.FC = () => {
     const copy = [...entries];
     copy.sort((a, b) => {
       // Directories always come first regardless of sort
-      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+      if (a.type !== b.type) return a.type === 'DIRECTORY' ? -1 : 1;
       let cmp = 0;
       if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
       else if (sortKey === 'size') cmp = (a.size || 0) - (b.size || 0);
@@ -164,7 +177,7 @@ const HdfsBrowserPage: React.FC = () => {
       dataIndex: 'name',
       render: (_, record) => (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {record.type === 'directory' ? (
+          {record.type === 'DIRECTORY' ? (
             <Folder size={16} color="var(--smc-warning)" />
           ) : (
             <FileIcon size={16} color="var(--smc-text-2)" />
@@ -181,7 +194,7 @@ const HdfsBrowserPage: React.FC = () => {
             }}
             onClick={() => {
               const next = joinPath(path, record.name);
-              if (record.type === 'directory') setPath(next);
+              if (record.type === 'DIRECTORY') setPath(next);
               else openPreview(next);
             }}
           >
@@ -208,8 +221,8 @@ const HdfsBrowserPage: React.FC = () => {
       dataIndex: 'type',
       width: 100,
       render: (value) => (
-        <Chip tone={value === 'directory' ? 'warning' : 'default'} outlined>
-          {value === 'directory' ? '目录' : '文件'}
+        <Chip tone={value === 'DIRECTORY' ? 'warning' : 'default'} outlined>
+          {value === 'DIRECTORY' ? '目录' : '文件'}
         </Chip>
       ),
     },
@@ -227,7 +240,7 @@ const HdfsBrowserPage: React.FC = () => {
       dataIndex: 'size',
       width: 120,
       render: (value, record) =>
-        record.type === 'directory' ? '—' : formatSize(Number(value ?? 0)),
+        record.type === 'DIRECTORY' ? '—' : formatSize(Number(value ?? 0)),
     },
     {
       title: (
@@ -254,6 +267,10 @@ const HdfsBrowserPage: React.FC = () => {
         title="HDFS 浏览"
         description="浏览 HDFS 文件系统，支持排序、面包屑导航与文件预览"
       />
+
+      <Alert severity="info" style={{ marginBottom: 16 }}>
+        此页面用于运维/排障，确认数据刷新任务是否真的写出了文件。普通用户一般不需要进入；触发数据刷新请到「大数据总览」。默认打开业务数据目录 <code style={{ fontFamily: 'monospace' }}>/warehouse/raw</code>，点击目录可层层深入，点击文件可预览前若干行。
+      </Alert>
 
       <Card style={{ padding: 16, marginBottom: 16 }}>
         <div
@@ -353,8 +370,8 @@ const HdfsBrowserPage: React.FC = () => {
           }}
         >
           <ArrowUpDown size={12} />
-          共 {entries.length} 项（{entries.filter((e) => e.type === 'directory').length}{' '}
-          目录 / {entries.filter((e) => e.type !== 'directory').length} 文件）
+          共 {entries.length} 项（{entries.filter((e) => e.type === 'DIRECTORY').length}{' '}
+          目录 / {entries.filter((e) => e.type !== 'DIRECTORY').length} 文件）
         </div>
       </Card>
 

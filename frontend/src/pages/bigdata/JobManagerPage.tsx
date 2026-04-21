@@ -28,10 +28,9 @@ import { message } from '../../utils/message';
 import type { Job, JobDetail, JobStatus, JobType } from '../../types/bigdata';
 
 const JOB_TYPE_OPTIONS: { label: string; value: JobType }[] = [
-  { label: 'MySQL 导入 HDFS', value: 'mysql_to_hdfs' },
-  { label: '构建数据集市', value: 'build_marts' },
-  { label: '批量预测', value: 'batch_predict' },
-  { label: '自定义 Hive', value: 'custom_hive' },
+  { label: '业务库快照（MySQL → HDFS）', value: 'mysql_to_hdfs' },
+  { label: '构建统计数据集市', value: 'build_marts' },
+  { label: '智能风险预测（批量）', value: 'batch_predict' },
 ];
 
 const STATUS_FILTER_OPTIONS: { label: string; value: JobStatus | '' }[] = [

@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     WEATHER_DEFAULT_CITY: str = "Beijing"
     WEATHER_REFRESH_SECONDS: int = 1800  # 30 minutes
 
+    # Big data pipeline scheduler — bootstrap defaults when no DB config exists.
+    # After an admin saves a schedule through the UI, the DB value overrides these.
+    PIPELINE_SCHEDULE_ENABLED: bool = True
+    # Fallback trigger time in UTC, HH:MM (24h). 19:00 UTC = 03:00 Asia/Shanghai.
+    PIPELINE_SCHEDULE_UTC_TIME: str = "19:00"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: object) -> list:

@@ -28,7 +28,6 @@ JOB_TYPES = {
     "mysql_to_hdfs": "mysql_to_hdfs.py",
     "build_marts": "build_marts.py",
     "batch_predict": "batch_predict.py",
-    "custom_hive": "custom_hive.py",
 }
 
 
@@ -219,6 +218,102 @@ async def cancel_job(db: AsyncSession, job_id: str) -> bool:
     job.finished_at = datetime.now(timezone.utc)
     await db.flush()
     return True
+
+
+PIPELINE_STAGES: list[str] = ["mysql_to_hdfs", "build_marts", "batch_predict"]
+
+
+def new_pipeline_run_id() -> str:
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    return f"plr_{ts}_{uuid.uuid4().hex[:8]}"
+
+
+async def _submit_stage(
+    pipeline_run_id: str,
+    stage_index: int,
+    job_type: str,
+    submitted_by: Optional[int],
+) -> BigDataJob:
+    """Create a BigDataJob row for one stage inside a pipeline run."""
+    async with AsyncSessionLocal() as db:
+        from app.repositories.bigdata import BigDataJobRepository
+
+        job_id = new_job_id()
+        log_path = str(_log_dir() / f"{job_id}.log")
+        job = await BigDataJobRepository.create(
+            db,
+            {
+                "job_id": job_id,
+                "job_type": job_type,
+                "status": "pending",
+                "params": {
+                    "pipeline_run_id": pipeline_run_id,
+                    "pipeline_stage_index": stage_index,
+                },
+                "log_path": log_path,
+                "submitted_by": submitted_by,
+            },
+        )
+        await db.commit()
+        return job
+
+
+async def _run_pipeline_chain(
+    pipeline_run_id: str, submitted_by: Optional[int]
+) -> None:
+    """Run the three pipeline stages sequentially. Abort chain on first failure."""
+    logger.info("Pipeline %s starting", pipeline_run_id)
+    for idx, stage in enumerate(PIPELINE_STAGES):
+        job = await _submit_stage(pipeline_run_id, idx, stage, submitted_by)
+        cmd = _build_command(stage, None)
+        logger.info(
+            "Pipeline %s stage %s job=%s cmd=%s",
+            pipeline_run_id,
+            stage,
+            job.job_id,
+            " ".join(cmd),
+        )
+        await _run_and_track(job.job_id, cmd, job.log_path)
+
+        # Re-read to check final status; abort chain if this stage did not succeed.
+        async with AsyncSessionLocal() as db:
+            from app.repositories.bigdata import BigDataJobRepository
+
+            refreshed = await BigDataJobRepository.get_by_job_id(db, job.job_id)
+            final_status = refreshed.status if refreshed else "failed"
+
+        if final_status != "succeeded":
+            logger.warning(
+                "Pipeline %s aborted at stage %s (status=%s)",
+                pipeline_run_id,
+                stage,
+                final_status,
+            )
+            return
+    logger.info("Pipeline %s completed", pipeline_run_id)
+
+
+async def submit_pipeline(
+    db: AsyncSession, submitted_by: Optional[int]
+) -> tuple[str, bool]:
+    """Kick off the full three-stage pipeline.
+
+    Idempotent: if any stage is already `pending`/`running` and belongs to a
+    pipeline_run_id, that run is returned instead of starting a new chain.
+    Returns (pipeline_run_id, reused).
+    """
+    from app.repositories.bigdata import BigDataJobRepository
+
+    existing = await BigDataJobRepository.find_running_pipeline(db)
+    if existing is not None:
+        run_id = (existing.params or {}).get("pipeline_run_id")
+        if run_id:
+            logger.info("Reusing running pipeline run %s", run_id)
+            return run_id, True
+
+    pipeline_run_id = new_pipeline_run_id()
+    asyncio.create_task(_run_pipeline_chain(pipeline_run_id, submitted_by))
+    return pipeline_run_id, False
 
 
 def read_log_tail(log_path: str, max_lines: int = 500) -> list[str]:

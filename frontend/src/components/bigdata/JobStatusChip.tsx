@@ -29,10 +29,9 @@ const JobStatusChip: React.FC<JobStatusChipProps> = ({ status }) => (
 );
 
 export const JOB_TYPE_LABEL: Record<string, string> = {
-  mysql_to_hdfs: 'MySQL 导入 HDFS',
-  build_marts: '构建数据集市',
-  batch_predict: '批量预测',
-  custom_hive: '自定义 Hive',
+  mysql_to_hdfs: '业务库快照',
+  build_marts: '构建统计数据集市',
+  batch_predict: '智能风险预测',
 };
 
 export const JOB_STATUS_LABEL = STATUS_LABEL;

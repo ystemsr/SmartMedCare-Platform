@@ -35,7 +35,18 @@ from app.schemas.bigdata import (
     HiveSavedQueryResponse,
     HiveSavedQueryUpdate,
     MLFeaturePayload,
+    PipelineFreshnessResponse,
+    PipelineRunResponse,
+    PipelineSchedule,
+    PipelineScheduleUpdate,
+    StageFreshness,
 )
+from app.tasks.pipeline_scheduler import (
+    CFG_KEY_ENABLED,
+    CFG_KEY_UTC_TIME,
+    PipelineScheduler,
+)
+from app.models.audit_log import SystemConfig
 from app.services import hdfs_client, hive_client, spark_client
 from app.services.analytics import AnalyticsService
 from app.services.feature_catalog import (
@@ -154,6 +165,183 @@ async def cancel_job(
     if not ok:
         return error_response(NOT_FOUND, "Job not cancellable or not found")
     return success_response(data={"job_id": job_id, "status": "cancelled"})
+
+
+# ---------------------------------------------------------------------------
+# Pipeline — business-facing freshness and one-click run
+# ---------------------------------------------------------------------------
+
+
+_STAGE_META: dict[str, tuple[str, str]] = {
+    "mysql_to_hdfs": (
+        "业务库快照",
+        "将老人、健康记录、医护记录、告警、随访、干预等业务数据同步到大数据存储",
+    ),
+    "build_marts": (
+        "统计数据集市",
+        "基于快照生成风险汇总、告警统计、随访完成率等宽表，给看板使用",
+    ),
+    "batch_predict": (
+        "智能风险预测",
+        "对所有老人批量运行 AI 模型，更新健康风险分数和建议",
+    ),
+}
+
+
+def _format_freshness(seconds: Optional[int]) -> str:
+    if seconds is None:
+        return "从未运行"
+    if seconds < 0:
+        seconds = 0
+    if seconds < 60:
+        return "刚刚"
+    if seconds < 3600:
+        return f"{seconds // 60} 分钟前"
+    if seconds < 86400:
+        return f"{seconds // 3600} 小时前"
+    return f"{seconds // 86400} 天前"
+
+
+def _freshness_tone(status: str, seconds: Optional[int]) -> str:
+    if status in {"running", "pending"}:
+        return "running"
+    if status == "failed":
+        return "stale"
+    if seconds is None:
+        return "never"
+    if seconds < 6 * 3600:
+        return "fresh"
+    if seconds < 24 * 3600:
+        return "aging"
+    return "stale"
+
+
+@router.get("/pipeline/freshness")
+async def pipeline_freshness(
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("bigdata:read")),
+):
+    """Business-facing snapshot freshness for the three-stage pipeline."""
+    now = datetime.now(timezone.utc)
+    stages: list[StageFreshness] = []
+    has_running = False
+    running_stage: Optional[str] = None
+    running_run_id: Optional[str] = None
+
+    for stage in spark_client.PIPELINE_STAGES:
+        latest = await BigDataJobRepository.latest_by_stage(db, stage)
+        display_name, description = _STAGE_META[stage]
+
+        if latest is None:
+            stages.append(
+                StageFreshness(
+                    stage=stage,
+                    display_name=display_name,
+                    description=description,
+                    status="missing",
+                    freshness_label="从未运行",
+                    freshness_tone="never",
+                )
+            )
+            continue
+
+        # Use finished_at for succeeded jobs; otherwise started_at/created_at to
+        # reflect in-flight work.
+        ref_ts = latest.finished_at or latest.started_at or latest.created_at
+        seconds: Optional[int] = None
+        if ref_ts is not None and latest.status == "succeeded":
+            ref_aware = ref_ts if ref_ts.tzinfo else ref_ts.replace(tzinfo=timezone.utc)
+            seconds = max(0, int((now - ref_aware).total_seconds()))
+
+        if latest.status in {"pending", "running"}:
+            has_running = True
+            running_stage = stage
+            rid = (latest.params or {}).get("pipeline_run_id")
+            if rid:
+                running_run_id = rid
+
+        label = (
+            "运行中"
+            if latest.status in {"pending", "running"}
+            else _format_freshness(seconds)
+        )
+        tone = _freshness_tone(latest.status, seconds)
+
+        stages.append(
+            StageFreshness(
+                stage=stage,
+                display_name=display_name,
+                description=description,
+                status=latest.status,
+                job_id=latest.job_id,
+                finished_at=latest.finished_at,
+                duration_ms=latest.duration_ms,
+                rows_processed=latest.rows_processed,
+                freshness_seconds=seconds,
+                freshness_label=label,
+                freshness_tone=tone,
+            )
+        )
+
+    schedule = PipelineSchedule(**PipelineScheduler.config_snapshot())
+    payload = PipelineFreshnessResponse(
+        stages=stages,
+        has_running_pipeline=has_running,
+        pipeline_run_id=running_run_id,
+        running_stage=running_stage,
+        schedule=schedule,
+    )
+    return success_response(data=payload.model_dump(mode="json"))
+
+
+_UTC_TIME_RE = __import__("re").compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+@router.put("/pipeline/schedule")
+async def update_pipeline_schedule(
+    body: PipelineScheduleUpdate,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("system:config")),
+):
+    """Admin-only: update the daily pipeline schedule.
+
+    `utc_time` is HH:MM in UTC. The frontend is expected to convert the admin's
+    device-local selection to UTC before sending.
+    """
+    if not _UTC_TIME_RE.match(body.utc_time or ""):
+        return error_response(PARAM_ERROR, "utc_time must match HH:MM in 24h UTC")
+
+    async def _upsert(key: str, value: str) -> None:
+        existing = (
+            await db.execute(select(SystemConfig).where(SystemConfig.config_key == key))
+        ).scalar_one_or_none()
+        if existing is None:
+            db.add(SystemConfig(config_key=key, config_value=value))
+        else:
+            existing.config_value = value
+
+    await _upsert(CFG_KEY_ENABLED, "true" if body.enabled else "false")
+    await _upsert(CFG_KEY_UTC_TIME, body.utc_time)
+    await db.commit()
+
+    await PipelineScheduler.reload()
+    return success_response(data=PipelineScheduler.config_snapshot())
+
+
+@router.post("/pipeline/run")
+async def pipeline_run(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_permission("bigdata:run")),
+):
+    """Trigger the full three-stage pipeline. Idempotent while a run is in flight."""
+    run_id, reused = await spark_client.submit_pipeline(db, submitted_by=current_user.id)
+    jobs = await BigDataJobRepository.list_by_pipeline_run_id(db, run_id)
+    payload = PipelineRunResponse(
+        pipeline_run_id=run_id,
+        job_ids=[j.job_id for j in jobs],
+        reused=reused,
+    )
+    return success_response(data=payload.model_dump(mode="json"))
 
 
 # ---------------------------------------------------------------------------

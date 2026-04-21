@@ -41,6 +41,10 @@ async def list_followups(
     plan_type: Optional[str] = Query(None),
     date_start: Optional[str] = Query(None),
     date_end: Optional[str] = Query(None),
+    active_only: bool = Query(
+        False,
+        description="When true, restrict to actionable statuses (todo / in_progress / overdue)",
+    ),
     db: AsyncSession = Depends(get_db),
     _user=Depends(require_permission("followup:create")),
 ):
@@ -48,6 +52,7 @@ async def list_followups(
     result = await FollowupService.get_list(
         db, pagination, elder_id, assigned_to, status,
         plan_type, date_start, date_end,
+        active_only=active_only,
     )
     return success_response(data=result.model_dump())
 

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { ChevronDown, Search, X } from 'lucide-react';
 import http from '../api/http';
+import { useAnchoredPopover } from '../hooks/useAnchoredPopover';
 import type { ApiResponse } from '../types/common';
 
 export interface DoctorOption {
@@ -49,11 +51,13 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
   const [options, setOptions] = useState<DoctorOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<string>('');
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const elId = React.useId();
   const hasError = Boolean(error);
   const hasValue = value !== undefined && value !== null && value !== '';
+  const anchor = useAnchoredPopover(open, triggerRef);
 
   useEffect(() => {
     if (!hasValue) {
@@ -64,14 +68,20 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
       setSelectedLabel(initialLabel);
       return;
     }
-    // Fall back to showing #id until the user opens the dropdown and selects.
     setSelectedLabel((prev) => prev || `#${value}`);
   }, [value, initialLabel, hasValue]);
 
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        popoverRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
     };
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -133,50 +143,25 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
     <span className="smc-select__placeholder">{placeholder}</span>
   );
 
-  return (
-    <div className="smc-field" style={fullWidth ? undefined : { width: 'auto' }}>
-      {label && (
-        <label
-          className={`smc-field__label ${required ? 'smc-field__label--required' : ''}`}
-          htmlFor={elId}
-        >
-          {label}
-        </label>
-      )}
-      <div className={`smc-select ${open ? 'smc-select--open' : ''}`} ref={wrapRef}>
-        <button
-          id={elId}
-          type="button"
-          className="smc-select__trigger"
-          onClick={handleOpen}
-          disabled={disabled}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          style={hasError ? { borderColor: 'var(--smc-error)' } : undefined}
-        >
-          <span
+  const popover =
+    open && anchor
+      ? ReactDOM.createPortal(
+          <div
+            ref={popoverRef}
+            className="smc-select__popover"
+            role="listbox"
             style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              flex: 1,
+              position: 'fixed',
+              top: anchor.flipUp ? undefined : anchor.top,
+              bottom: anchor.flipUp ? window.innerHeight - anchor.top : undefined,
+              left: anchor.left,
+              width: anchor.width,
+              maxHeight: anchor.maxHeight,
+              padding: 0,
+              // Sit above .smc-modal-overlay (1300) when rendered via portal.
+              zIndex: 1500,
             }}
           >
-            {displayText}
-          </span>
-          {hasValue && !disabled ? (
-            <X
-              size={14}
-              aria-label="清除"
-              style={{ color: 'var(--smc-text-3)', cursor: 'pointer' }}
-              onClick={handleClear}
-            />
-          ) : (
-            <ChevronDown size={16} className="smc-select__caret" aria-hidden />
-          )}
-        </button>
-        {open && (
-          <div className="smc-select__popover" role="listbox" style={{ padding: 0 }}>
             <div
               style={{
                 display: 'flex',
@@ -196,7 +181,13 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
                 onChange={(e) => setKeyword(e.target.value)}
               />
             </div>
-            <div style={{ maxHeight: 220, overflowY: 'auto', padding: 4 }}>
+            <div
+              style={{
+                maxHeight: Math.max(160, anchor.maxHeight - 48),
+                overflowY: 'auto',
+                padding: 4,
+              }}
+            >
               {loading ? (
                 <div className="smc-select__empty">搜索中...</div>
               ) : options.length === 0 ? (
@@ -227,8 +218,55 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
                 ))
               )}
             </div>
-          </div>
-        )}
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <div className="smc-field" style={fullWidth ? undefined : { width: 'auto' }}>
+      {label && (
+        <label
+          className={`smc-field__label ${required ? 'smc-field__label--required' : ''}`}
+          htmlFor={elId}
+        >
+          {label}
+        </label>
+      )}
+      <div className={`smc-select ${open ? 'smc-select--open' : ''}`}>
+        <button
+          ref={triggerRef}
+          id={elId}
+          type="button"
+          className="smc-select__trigger"
+          onClick={handleOpen}
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          style={hasError ? { borderColor: 'var(--smc-error)' } : undefined}
+        >
+          <span
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: 1,
+            }}
+          >
+            {displayText}
+          </span>
+          {hasValue && !disabled ? (
+            <X
+              size={14}
+              aria-label="清除"
+              style={{ color: 'var(--smc-text-3)', cursor: 'pointer' }}
+              onClick={handleClear}
+            />
+          ) : (
+            <ChevronDown size={16} className="smc-select__caret" aria-hidden />
+          )}
+        </button>
+        {popover}
       </div>
       {(error || helperText) && (
         <div

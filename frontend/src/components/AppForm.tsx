@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, DatePicker, Input, Modal, Select, Textarea } from './ui';
 import ElderPicker from './ElderPicker';
 import DoctorPicker from './DoctorPicker';
+import AlertPicker, { type AlertSummary } from './AlertPicker';
+import FollowupPicker from './FollowupPicker';
 import { message } from '../utils/message';
 
 export interface FormFieldRule {
@@ -23,13 +25,24 @@ export interface FormFieldConfig {
     | 'date'
     | 'password'
     | 'elder-picker'
-    | 'doctor-picker';
+    | 'doctor-picker'
+    | 'alert-picker'
+    | 'followup-picker';
   required?: boolean;
   options?: { label: string; value: string | number }[];
   placeholder?: string;
   rules?: FormFieldRule[];
-  /** For 'elder-picker' / 'doctor-picker': name of a sibling field in initialValues holding a prefilled display label (e.g. 'elder_name', 'assigned_to_name') */
+  /** For 'elder-picker' / 'doctor-picker' / 'alert-picker' / 'followup-picker': name of a sibling field in initialValues holding a prefilled display label (e.g. 'elder_name', 'assigned_to_name') */
   labelField?: string;
+  /** For 'alert-picker' / 'followup-picker': name of a sibling field whose value scopes the options shown (e.g. 'elder_id'). */
+  dependsOn?: string;
+  /** For 'alert-picker': enable multi-select. The form value becomes number[]. */
+  multi?: boolean;
+  /** For 'alert-picker': hide alerts already linked to a todo/in-progress followup. */
+  excludeLinked?: boolean;
+  /** For 'alert-picker': name of a sibling field in initialValues holding the
+   * already-linked alert summaries (so chips render before any fetch). */
+  initialAlertsField?: string;
 }
 
 interface AppFormProps<T = any> {
@@ -83,7 +96,12 @@ const AppForm: React.FC<AppFormProps> = ({
   const validate = () => {
     const nextErrors = fields.reduce<Record<string, string>>((result, field) => {
       const value = values[field.name];
-      if (field.required && (value === '' || value === null || value === undefined)) {
+      const isEmpty =
+        value === '' ||
+        value === null ||
+        value === undefined ||
+        (Array.isArray(value) && value.length === 0);
+      if (field.required && isEmpty) {
         result[field.name] = `请输入${field.label}`;
         return result;
       }
@@ -194,6 +212,73 @@ const AppForm: React.FC<AppFormProps> = ({
                 required={field.required}
                 value={(value as number | '' | null) ?? ''}
                 onChange={(v) => updateValue(field.name, v)}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'followup-picker') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            const dependsOn = field.dependsOn ?? 'elder_id';
+            const elderId = values[dependsOn] as number | '' | null | undefined;
+            return (
+              <FollowupPicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as number | '' | null) ?? ''}
+                onChange={(v) => updateValue(field.name, v)}
+                elderId={elderId ?? ''}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'alert-picker') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            const initialAlerts =
+              field.initialAlertsField && initialValues
+                ? ((initialValues as Record<string, unknown>)[
+                    field.initialAlertsField
+                  ] as AlertSummary[] | undefined)
+                : undefined;
+            const dependsOn = field.dependsOn ?? 'elder_id';
+            const elderId = values[dependsOn] as number | '' | null | undefined;
+            const isMulti = Boolean(field.multi);
+            const fallbackValue: unknown = isMulti ? [] : '';
+            const currentValue = value === '' || value === null || value === undefined
+              ? fallbackValue
+              : value;
+            // When excludeLinked is on, the current selection (edit mode) must
+            // stay visible even though those alerts are linked to this very
+            // followup, so feed them back through keep_ids.
+            const keepIds = isMulti
+              ? Array.isArray(currentValue)
+                ? (currentValue as number[])
+                : []
+              : typeof currentValue === 'number'
+                ? [currentValue]
+                : [];
+            return (
+              <AlertPicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                multi={isMulti}
+                value={currentValue as number | number[] | '' | null}
+                onChange={(v) => updateValue(field.name, v)}
+                elderId={elderId ?? ''}
+                excludeLinked={field.excludeLinked}
+                keepIds={field.excludeLinked ? keepIds : undefined}
+                initialAlerts={initialAlerts}
                 initialLabel={initialLabel}
                 placeholder={field.placeholder}
                 error={errors[field.name]}

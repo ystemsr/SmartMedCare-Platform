@@ -50,7 +50,16 @@ const formFields: FormFieldConfig[] = [
     required: true,
     labelField: 'assigned_to_name',
   },
-  { name: 'alert_id', label: '关联预警ID', type: 'number' },
+  {
+    name: 'alert_ids',
+    label: '关联预警',
+    type: 'alert-picker',
+    dependsOn: 'elder_id',
+    multi: true,
+    excludeLinked: true,
+    initialAlertsField: 'alerts',
+    placeholder: '可选 · 从该老人未被占用的预警中选择',
+  },
   { name: 'notes', label: '备注', type: 'textarea' },
 ];
 

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { ChevronDown, Search, X } from 'lucide-react';
 import { getElders, getElderDetail } from '../api/elders';
+import { useAnchoredPopover } from '../hooks/useAnchoredPopover';
 import type { Elder } from '../types/elder';
 
 export interface ElderPickerProps {
@@ -53,13 +55,14 @@ const ElderPicker: React.FC<ElderPickerProps> = ({
   const [options, setOptions] = useState<ElderOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<string>('');
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const elId = React.useId();
   const hasError = Boolean(error);
   const hasValue = value !== undefined && value !== null && value !== '';
+  const anchor = useAnchoredPopover(open, triggerRef);
 
-  // Resolve display label from initialLabel or by fetching the elder
   useEffect(() => {
     if (!hasValue) {
       setSelectedLabel('');
@@ -74,9 +77,7 @@ const ElderPicker: React.FC<ElderPickerProps> = ({
       .then((res) => {
         if (cancelled) return;
         const elder = res.data as Elder | undefined;
-        if (elder) {
-          setSelectedLabel(formatOption(elder));
-        }
+        if (elder) setSelectedLabel(formatOption(elder));
       })
       .catch(() => {
         if (!cancelled) setSelectedLabel(`#${value}`);
@@ -86,13 +87,17 @@ const ElderPicker: React.FC<ElderPickerProps> = ({
     };
   }, [value, initialLabel, hasValue]);
 
-  // Close on outside click / Esc
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
+      const target = e.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        popoverRef.current?.contains(target)
+      ) {
+        return;
       }
+      setOpen(false);
     };
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -105,7 +110,6 @@ const ElderPicker: React.FC<ElderPickerProps> = ({
     };
   }, [open]);
 
-  // Debounced search
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -155,6 +159,83 @@ const ElderPicker: React.FC<ElderPickerProps> = ({
     <span className="smc-select__placeholder">{placeholder}</span>
   );
 
+  const popover =
+    open && anchor
+      ? ReactDOM.createPortal(
+          <div
+            ref={popoverRef}
+            className="smc-select__popover"
+            role="listbox"
+            style={{
+              position: 'fixed',
+              top: anchor.flipUp ? undefined : anchor.top,
+              bottom: anchor.flipUp ? window.innerHeight - anchor.top : undefined,
+              left: anchor.left,
+              width: anchor.width,
+              maxHeight: anchor.maxHeight,
+              padding: 0,
+              // Sit above .smc-modal-overlay (1300) when rendered via portal.
+              zIndex: 1500,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 10px',
+                borderBottom: '1px solid var(--smc-border)',
+              }}
+            >
+              <Search size={14} style={{ color: 'var(--smc-text-3)' }} aria-hidden />
+              <input
+                ref={inputRef}
+                className="smc-input"
+                style={{ border: 'none', height: 28, padding: 0, background: 'transparent' }}
+                placeholder={placeholder}
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+            </div>
+            <div
+              style={{
+                maxHeight: Math.max(160, anchor.maxHeight - 48),
+                overflowY: 'auto',
+                padding: 4,
+              }}
+            >
+              {loading ? (
+                <div className="smc-select__empty">搜索中...</div>
+              ) : options.length === 0 ? (
+                <div className="smc-select__empty">无匹配老人</div>
+              ) : (
+                options.map((elder) => (
+                  <div
+                    key={elder.id}
+                    role="option"
+                    aria-selected={elder.id === value}
+                    className={[
+                      'smc-select__option',
+                      elder.id === value && 'smc-select__option--active',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={() => handleSelect(elder)}
+                    style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{elder.name}</span>
+                    <span style={{ fontSize: 'var(--smc-fs-sm)', color: 'var(--smc-text-3)' }}>
+                      {elder.phone || '无手机号'} · {maskIdCard(elder.id_card) || '无身份证'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div className="smc-field" style={fullWidth ? undefined : { width: 'auto' }}>
       {label && (
@@ -165,8 +246,9 @@ const ElderPicker: React.FC<ElderPickerProps> = ({
           {label}
         </label>
       )}
-      <div className={`smc-select ${open ? 'smc-select--open' : ''}`} ref={wrapRef}>
+      <div className={`smc-select ${open ? 'smc-select--open' : ''}`}>
         <button
+          ref={triggerRef}
           id={elId}
           type="button"
           className="smc-select__trigger"
@@ -197,57 +279,7 @@ const ElderPicker: React.FC<ElderPickerProps> = ({
             <ChevronDown size={16} className="smc-select__caret" aria-hidden />
           )}
         </button>
-        {open && (
-          <div className="smc-select__popover" role="listbox" style={{ padding: 0 }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '8px 10px',
-                borderBottom: '1px solid var(--smc-border)',
-              }}
-            >
-              <Search size={14} style={{ color: 'var(--smc-text-3)' }} aria-hidden />
-              <input
-                ref={inputRef}
-                className="smc-input"
-                style={{ border: 'none', height: 28, padding: 0, background: 'transparent' }}
-                placeholder={placeholder}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-              />
-            </div>
-            <div style={{ maxHeight: 220, overflowY: 'auto', padding: 4 }}>
-              {loading ? (
-                <div className="smc-select__empty">搜索中...</div>
-              ) : options.length === 0 ? (
-                <div className="smc-select__empty">无匹配老人</div>
-              ) : (
-                options.map((elder) => (
-                  <div
-                    key={elder.id}
-                    role="option"
-                    aria-selected={elder.id === value}
-                    className={[
-                      'smc-select__option',
-                      elder.id === value && 'smc-select__option--active',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    onClick={() => handleSelect(elder)}
-                    style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}
-                  >
-                    <span style={{ fontWeight: 600 }}>{elder.name}</span>
-                    <span style={{ fontSize: 'var(--smc-fs-sm)', color: 'var(--smc-text-3)' }}>
-                      {elder.phone || '无手机号'} · {maskIdCard(elder.id_card) || '无身份证'}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
+        {popover}
       </div>
       {(error || helperText) && (
         <div

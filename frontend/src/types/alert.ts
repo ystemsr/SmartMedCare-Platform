@@ -52,4 +52,8 @@ export interface AlertListQuery extends PaginationParams {
   title?: string;
   /** Alias populated by the table search box; mapped to `title` on the API layer. */
   keyword?: string;
+  /** Hide alerts already attached to a todo/in_progress followup. */
+  exclude_linked?: boolean;
+  /** Alert IDs always kept visible even when exclude_linked is true. */
+  keep_ids?: number[];
 }

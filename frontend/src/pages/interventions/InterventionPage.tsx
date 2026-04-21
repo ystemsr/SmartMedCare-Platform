@@ -39,9 +39,10 @@ const formFields: FormFieldConfig[] = [
   { name: 'content', label: '干预内容', type: 'textarea', required: true },
   {
     name: 'followup_id',
-    label: '关联随访ID',
-    type: 'number',
-    placeholder: '选填，需填入已存在的随访记录 ID',
+    label: '关联随访',
+    type: 'followup-picker',
+    dependsOn: 'elder_id',
+    placeholder: '可选 · 从该老人的随访中选择',
   },
   { name: 'planned_at', label: '计划时间', type: 'date' },
 ];

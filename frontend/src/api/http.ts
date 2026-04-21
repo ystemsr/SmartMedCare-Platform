@@ -7,6 +7,10 @@ const http = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Serialize array params as repeated keys (`a=1&a=2`) so FastAPI's
+  // `List[int] = Query(...)` binding receives them as a list rather than the
+  // bracketed `a[]=1&a[]=2` form axios uses by default.
+  paramsSerializer: { indexes: null },
 });
 
 // Attach bearer token to every request

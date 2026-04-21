@@ -38,6 +38,14 @@ async def list_alerts(
     date_end: Optional[str] = Query(None),
     title: Optional[str] = Query(None, description="Fuzzy match on alert title"),
     keyword: Optional[str] = Query(None, description="Alias for title search"),
+    exclude_linked: bool = Query(
+        False,
+        description="Exclude alerts already linked to a todo/in_progress followup",
+    ),
+    keep_ids: Optional[list[int]] = Query(
+        None,
+        description="Alert IDs to keep visible even when exclude_linked is true",
+    ),
     db: AsyncSession = Depends(get_db),
     _user=Depends(require_permission("alert:read")),
 ):
@@ -48,6 +56,7 @@ async def list_alerts(
     result = await AlertService.get_list(
         db, pagination, elder_id, type, status, risk_level,
         date_start, date_end, source=source, title=effective_title,
+        exclude_linked=exclude_linked, keep_ids=keep_ids,
     )
     return success_response(data=result.model_dump())
 

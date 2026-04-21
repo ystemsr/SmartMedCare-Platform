@@ -8,6 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alert import Alert
+from app.models.followup import Followup, followup_alerts
 from app.schemas.alert import AlertResponse
 from app.utils.pagination import PaginationParams, paginate
 
@@ -47,8 +48,17 @@ class AlertRepository:
         date_end: Optional[str] = None,
         source: Optional[str] = None,
         title: Optional[str] = None,
+        exclude_linked: bool = False,
+        keep_ids: Optional[list[int]] = None,
     ):
-        """Get paginated list of alerts with filters."""
+        """Get paginated list of alerts with filters.
+
+        When exclude_linked is true, alerts already attached to a followup
+        whose status is "todo" or "in_progress" are filtered out so they
+        cannot be double-booked. The optional keep_ids list bypasses this
+        exclusion for the given alert IDs (used when editing a followup so
+        its currently linked alerts remain visible in the picker).
+        """
         query = select(Alert).where(Alert.deleted_at.is_(None))
 
         if elder_id is not None:
@@ -69,6 +79,23 @@ class AlertRepository:
             keyword = title.strip()
             if keyword:
                 query = query.where(Alert.title.ilike(f"%{keyword}%"))
+
+        if exclude_linked:
+            linked_subq = (
+                select(followup_alerts.c.alert_id)
+                .join(Followup, Followup.id == followup_alerts.c.followup_id)
+                .where(
+                    Followup.deleted_at.is_(None),
+                    Followup.status.in_(("todo", "in_progress")),
+                )
+            )
+            kept = [i for i in (keep_ids or []) if i is not None]
+            if kept:
+                query = query.where(
+                    (~Alert.id.in_(linked_subq)) | Alert.id.in_(kept)
+                )
+            else:
+                query = query.where(~Alert.id.in_(linked_subq))
 
         return await paginate(query, db, pagination, AlertResponse)
 

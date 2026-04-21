@@ -96,7 +96,7 @@ async def run_and_dispatch(
                 session,
                 {
                     "elder_id": elder_id,
-                    "alert_id": alert_id,
+                    "alert_ids": [alert_id] if alert_id is not None else [],
                     "plan_type": "ai_suggested",
                     "planned_at": now + timedelta(days=2),
                     "status": "todo",

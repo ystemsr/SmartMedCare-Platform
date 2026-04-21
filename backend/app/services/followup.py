@@ -41,6 +41,8 @@ class FollowupService:
         """Create a new followup plan."""
         followup = await FollowupRepository.create(db, data)
         await db.commit()
+        # Re-fetch so selectinload populates alerts/records for the response.
+        followup = await FollowupRepository.get_by_id(db, followup.id)
         response = FollowupResponse.model_validate(followup)
         return await _enrich_one(db, response)
 
@@ -65,32 +67,16 @@ class FollowupService:
         plan_type: Optional[str] = None,
         date_start: Optional[str] = None,
         date_end: Optional[str] = None,
+        active_only: bool = False,
     ):
-        """Get paginated list of followups, enriched with alert.source.
-
-        Looks up Alert.source for rows with a non-null alert_id so the UI
-        can badge AI-originated followups without an extra request.
-        """
+        """Get paginated list of followups, with elder/assignee names attached."""
         page = await FollowupRepository.get_list(
             db, pagination, elder_id, assigned_to, status,
             plan_type, date_start, date_end,
+            active_only=active_only,
         )
 
         from sqlalchemy import select as sa_select
-
-        alert_ids = [
-            item.alert_id for item in page.items if item.alert_id is not None
-        ]
-        if alert_ids:
-            from app.models.alert import Alert
-
-            stmt = sa_select(Alert.id, Alert.source).where(Alert.id.in_(alert_ids))
-            rows = await db.execute(stmt)
-            source_map = {r[0]: r[1] for r in rows.all()}
-
-            for item in page.items:
-                if item.alert_id is not None:
-                    item.alert_source = source_map.get(item.alert_id)
 
         elder_ids = {item.elder_id for item in page.items if item.elder_id is not None}
         if elder_ids:
@@ -131,6 +117,7 @@ class FollowupService:
         if followup is None:
             return None
         await db.commit()
+        followup = await FollowupRepository.get_by_id(db, followup.id)
         response = FollowupResponse.model_validate(followup)
         return await _enrich_one(db, response)
 
@@ -143,6 +130,8 @@ class FollowupService:
         if followup is None:
             return None
         await db.commit()
+        # Re-fetch so the relationship eager-loads for the response.
+        followup = await FollowupRepository.get_by_id(db, followup.id)
         response = FollowupResponse.model_validate(followup)
         return await _enrich_one(db, response)
 

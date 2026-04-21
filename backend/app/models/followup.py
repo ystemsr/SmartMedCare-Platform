@@ -3,10 +3,39 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    DateTime,
+    ForeignKey,
+    String,
+    Table,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import BaseModel
+from app.models.base import Base, BaseModel
+
+
+# Association table linking a followup plan to the alerts that prompted it.
+# Business-free join table — no id/created_at/deleted_at per CLAUDE.md.
+followup_alerts = Table(
+    "followup_alerts",
+    Base.metadata,
+    Column(
+        "followup_id",
+        BigInteger,
+        ForeignKey("followups.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "alert_id",
+        BigInteger,
+        ForeignKey("alerts.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    ),
+)
 
 
 class Followup(BaseModel):
@@ -16,9 +45,6 @@ class Followup(BaseModel):
 
     elder_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("elders.id"), nullable=False, index=True
-    )
-    alert_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, ForeignKey("alerts.id"), nullable=True
     )
     plan_type: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     planned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -30,6 +56,11 @@ class Followup(BaseModel):
 
     records: Mapped[list["FollowupRecord"]] = relationship(
         "FollowupRecord", back_populates="followup", lazy="selectin"
+    )
+    alerts: Mapped[list["Alert"]] = relationship(  # type: ignore[name-defined]
+        "Alert",
+        secondary=followup_alerts,
+        lazy="selectin",
     )
 
 

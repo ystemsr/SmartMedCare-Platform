@@ -89,11 +89,14 @@ class AlertService:
         date_end: Optional[str] = None,
         source: Optional[str] = None,
         title: Optional[str] = None,
+        exclude_linked: bool = False,
+        keep_ids: Optional[list[int]] = None,
     ):
         """Get paginated list of alerts."""
         return await AlertRepository.get_list(
             db, pagination, elder_id, type_, status, risk_level,
             date_start, date_end, source=source, title=title,
+            exclude_linked=exclude_linked, keep_ids=keep_ids,
         )
 
     @staticmethod

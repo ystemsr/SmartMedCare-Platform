@@ -8,16 +8,18 @@ export interface AnchoredRect {
   /** Maximum height for the popover, clamped to the chosen side. */
   maxHeight: number;
   /**
-   * CSS `top` for the popover (viewport-relative) when `flipUp === false`.
-   * Undefined when flipped up — consumers should use `bottom` instead.
+   * CSS `top` for the popover (viewport-relative). Set to `'auto'` when
+   * flipped up so the inline style overrides any cascaded `top` rule (e.g.
+   * `.smc-select__popover` sets `top: calc(100% + 6px)` which would otherwise
+   * push a fixed-positioned popover off-screen).
    */
-  top?: number;
+  top: number | 'auto';
   /**
-   * CSS `bottom` for the popover (distance from viewport bottom) when
-   * `flipUp === true`. Undefined when placed below — consumers should use
-   * `top` instead.
+   * CSS `bottom` (distance from viewport bottom). Set to `'auto'` when the
+   * popover is placed below the trigger, for the same override reason as
+   * `top` above.
    */
-  bottom?: number;
+  bottom: number | 'auto';
 }
 
 const VIEWPORT_MARGIN = 12;
@@ -69,6 +71,7 @@ export function useAnchoredPopover(
         // Pin the popover's bottom just above the trigger. The element grows
         // upward to fit content, capped by `maxHeight`.
         setRect({
+          top: 'auto',
           bottom: vh - (r.top - GAP),
           left: r.left,
           width: r.width,
@@ -78,6 +81,7 @@ export function useAnchoredPopover(
       } else {
         setRect({
           top: r.bottom + GAP,
+          bottom: 'auto',
           left: r.left,
           width: r.width,
           flipUp,

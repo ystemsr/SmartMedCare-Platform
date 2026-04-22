@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, DatePicker, Input, Modal, Select, Textarea } from './ui';
 import ElderPicker from './ElderPicker';
 import DoctorPicker from './DoctorPicker';
+import DoctorComboBox from './DoctorComboBox';
 import AlertPicker, { type AlertSummary } from './AlertPicker';
 import FollowupPicker from './FollowupPicker';
+import TagsInput from './TagsInput';
 import { message } from '../utils/message';
 
 export interface FormFieldRule {
@@ -26,8 +28,10 @@ export interface FormFieldConfig {
     | 'password'
     | 'elder-picker'
     | 'doctor-picker'
+    | 'doctor-combo'
     | 'alert-picker'
-    | 'followup-picker';
+    | 'followup-picker'
+    | 'tags';
   required?: boolean;
   options?: { label: string; value: string | number }[];
   placeholder?: string;
@@ -58,7 +62,13 @@ interface AppFormProps<T = any> {
 
 function createDefaultValues(fields: FormFieldConfig[]) {
   return fields.reduce<Record<string, unknown>>((result, field) => {
-    result[field.name] = '';
+    if (field.type === 'tags') {
+      result[field.name] = [];
+    } else if (field.type === 'alert-picker' && field.multi) {
+      result[field.name] = [];
+    } else {
+      result[field.name] = '';
+    }
     return result;
   }, {});
 }
@@ -218,6 +228,24 @@ const AppForm: React.FC<AppFormProps> = ({
               />
             );
           }
+          if (field.type === 'doctor-combo') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            return (
+              <DoctorComboBox
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as number | '' | null) ?? ''}
+                onChange={(v) => updateValue(field.name, v)}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
           if (field.type === 'followup-picker') {
             const initialLabel =
               field.labelField && initialValues
@@ -280,6 +308,20 @@ const AppForm: React.FC<AppFormProps> = ({
                 keepIds={field.excludeLinked ? keepIds : undefined}
                 initialAlerts={initialAlerts}
                 initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'tags') {
+            const current = Array.isArray(value) ? (value as string[]) : [];
+            return (
+              <TagsInput
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={current}
+                onChange={(tags) => updateValue(field.name, tags)}
                 placeholder={field.placeholder}
                 error={errors[field.name]}
               />

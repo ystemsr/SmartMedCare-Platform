@@ -21,6 +21,7 @@ import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
 import CredentialsModal from '../../components/CredentialsModal';
 import ElderDetailDrawer from '../../components/ElderDetailDrawer';
+import InlineDoctorSwitcher from '../../components/InlineDoctorSwitcher';
 import { useTable } from '../../hooks/useTable';
 import {
   activateElderAccount,
@@ -32,11 +33,12 @@ import {
   updateElderAccountStatus,
 } from '../../api/elders';
 import { formatDate, formatGender } from '../../utils/formatter';
-import { ACCOUNT_STATUS_OPTIONS, GENDER_OPTIONS, RISK_LEVEL_OPTIONS } from '../../utils/constants';
+import { ACCOUNT_STATUS_OPTIONS, AI_RISK_OPTIONS, GENDER_OPTIONS } from '../../utils/constants';
+import { useAuthStore } from '../../store/auth';
 import { message } from '../../utils/message';
 import type { Elder, ElderListQuery } from '../../types/elder';
 
-const formFields: FormFieldConfig[] = [
+const BASE_FORM_FIELDS: FormFieldConfig[] = [
   { name: 'name', label: '姓名', required: true },
   { name: 'gender', label: '性别', type: 'select', required: true, options: GENDER_OPTIONS },
   { name: 'birth_date', label: '出生日期', type: 'date', required: true },
@@ -46,6 +48,21 @@ const formFields: FormFieldConfig[] = [
   { name: 'emergency_contact_name', label: '紧急联系人' },
   { name: 'emergency_contact_phone', label: '紧急联系电话' },
 ];
+
+const DOCTOR_FIELD: FormFieldConfig = {
+  name: 'primary_doctor_id',
+  label: '负责医生',
+  type: 'doctor-combo',
+  labelField: 'primary_doctor_name',
+  placeholder: '输入医生姓名 / 账号 / 手机号',
+};
+
+const TAGS_FIELD: FormFieldConfig = {
+  name: 'tags',
+  label: '标签',
+  type: 'tags',
+  placeholder: '输入标签后按回车',
+};
 
 interface CredentialsState {
   title: string;
@@ -63,6 +80,20 @@ const ElderListPage: React.FC = () => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [credentials, setCredentials] = useState<CredentialsState | null>(null);
   const [detailElder, setDetailElder] = useState<Elder | null>(null);
+  const userRoles = useAuthStore((state) => state.user?.roles ?? []);
+  const isAdmin = userRoles.includes('admin');
+
+  // Admins can assign/switch the primary doctor freely, in both create and
+  // edit flows. Non-admin doctors never see the picker: on create the backend
+  // auto-assigns them; on edit they can't reassign their own elders anyway.
+  const formFields = useMemo<FormFieldConfig[]>(() => {
+    const fields = [...BASE_FORM_FIELDS];
+    if (isAdmin) {
+      fields.push(DOCTOR_FIELD);
+    }
+    fields.push(TAGS_FIELD);
+    return fields;
+  }, [isAdmin]);
 
   const fetchFn = useCallback(
     (params: ElderListQuery & { page: number; page_size: number }) => getElders(params),
@@ -172,11 +203,27 @@ const ElderListPage: React.FC = () => {
   const handleSubmit = async (values: any) => {
     setSubmitLoading(true);
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload: any = {
+        ...values,
+        tags: Array.isArray(values.tags) ? values.tags : [],
+      };
+      // Only admins are allowed to pick/change the primary doctor. Non-admin
+      // doctors get auto-assigned on create and can't reassign on edit, so
+      // strip the field entirely for them.
+      if (isAdmin) {
+        payload.primary_doctor_id =
+          values.primary_doctor_id === '' || values.primary_doctor_id === undefined
+            ? null
+            : values.primary_doctor_id;
+      } else {
+        delete payload.primary_doctor_id;
+      }
       if (editingElder) {
-        await updateElder(editingElder.id, values);
+        await updateElder(editingElder.id, payload);
         message.success('更新成功');
       } else {
-        await createElder(values);
+        await createElder(payload);
         message.success('创建成功');
       }
       setFormVisible(false);
@@ -206,21 +253,34 @@ const ElderListPage: React.FC = () => {
       { title: '联系电话', dataIndex: 'phone', width: 130 },
       { title: '地址', dataIndex: 'address', width: 200, ellipsis: true },
       {
-        title: '标签',
-        dataIndex: 'tags',
-        width: 220,
-        render: (value: unknown) => {
-          const tags = value as string[] | undefined;
-          return tags?.length ? (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {tags.map((tag) => (
-                <Chip key={tag} tone="primary" outlined>
-                  {tag}
-                </Chip>
-              ))}
-            </div>
-          ) : (
-            '-'
+        title: '负责医生',
+        key: 'primary_doctor',
+        width: 160,
+        render: (_: unknown, record: Elder) => {
+          if (!isAdmin) {
+            return record.primary_doctor_name ? (
+              record.primary_doctor_name
+            ) : (
+              <Chip outlined>未指派</Chip>
+            );
+          }
+          return (
+            <InlineDoctorSwitcher
+              currentDoctorId={record.primary_doctor_id ?? null}
+              currentDoctorName={record.primary_doctor_name ?? null}
+              onSelect={async (doctorId) => {
+                try {
+                  await updateElder(record.id, { primary_doctor_id: doctorId });
+                  message.success(
+                    doctorId === null ? '已清除指派' : '已切换负责医生',
+                  );
+                  refresh();
+                } catch (err) {
+                  message.error(err instanceof Error ? err.message : '操作失败');
+                  throw err;
+                }
+              }}
+            />
           );
         },
       },
@@ -302,7 +362,7 @@ const ElderListPage: React.FC = () => {
         ),
       },
     ],
-    [],
+    [isAdmin, refresh],
   );
 
   const handleArchiveSearch = useCallback(() => {
@@ -360,12 +420,12 @@ const ElderListPage: React.FC = () => {
       </div>
       <div style={{ minWidth: 140 }}>
         <Select
-          label="风险等级"
+          label="AI 风险"
           value={query.risk_level || ''}
           onChange={(v) =>
             setQuery((prev) => ({ ...prev, risk_level: v ? String(v) : undefined }))
           }
-          options={[{ label: '全部', value: '' }, ...RISK_LEVEL_OPTIONS]}
+          options={[{ label: '全部', value: '' }, ...AI_RISK_OPTIONS]}
         />
       </div>
       <div style={{ minWidth: 140 }}>

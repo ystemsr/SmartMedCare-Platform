@@ -21,6 +21,9 @@ class Elder(BaseModel):
     user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, unique=True
     )
+    primary_doctor_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     gender: Mapped[str] = mapped_column(String(16), nullable=False, default="unknown")
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
@@ -50,6 +53,9 @@ class Elder(BaseModel):
         lazy="selectin",
     )
     user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id], lazy="selectin")
+    primary_doctor: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[primary_doctor_id], lazy="noload"
+    )
     invite_codes: Mapped[list["ElderInviteCode"]] = relationship(
         "ElderInviteCode",
         back_populates="elder",

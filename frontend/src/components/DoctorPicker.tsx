@@ -54,6 +54,9 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Tracks the `value` we've already labelled, so a subsequent pick doesn't
+  // get clobbered by `initialLabel` firing on the next render.
+  const labelledValue = useRef<number | '' | null | undefined>(undefined);
   const elId = React.useId();
   const hasError = Boolean(error);
   const hasValue = value !== undefined && value !== null && value !== '';
@@ -62,8 +65,13 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
   useEffect(() => {
     if (!hasValue) {
       setSelectedLabel('');
+      labelledValue.current = undefined;
       return;
     }
+    if (labelledValue.current === value) {
+      return;
+    }
+    labelledValue.current = value;
     if (initialLabel) {
       setSelectedLabel(initialLabel);
       return;
@@ -128,6 +136,7 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
     (doctor: DoctorOption) => {
       onChange?.(doctor.id);
       setSelectedLabel(formatOption(doctor));
+      labelledValue.current = doctor.id;
       setOpen(false);
     },
     [onChange],
@@ -137,6 +146,7 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
     e.stopPropagation();
     onChange?.('');
     setSelectedLabel('');
+    labelledValue.current = undefined;
   };
 
   const displayText = selectedLabel || (
@@ -152,10 +162,13 @@ const DoctorPicker: React.FC<DoctorPickerProps> = ({
             role="listbox"
             style={{
               position: 'fixed',
-              top: anchor.flipUp ? undefined : anchor.top,
-              bottom: anchor.flipUp ? window.innerHeight - anchor.top : undefined,
+              top: anchor.top,
+              bottom: anchor.bottom,
               left: anchor.left,
-              width: anchor.width,
+              // Explicitly clear CSS `right: 0` so the width from the inline
+              // style actually wins on browsers that honour both left+right.
+              right: 'auto',
+              width: Math.max(260, anchor.width),
               maxHeight: anchor.maxHeight,
               padding: 0,
               // Sit above .smc-modal-overlay (1300) when rendered via portal.

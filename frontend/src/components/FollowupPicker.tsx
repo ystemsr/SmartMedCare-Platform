@@ -194,10 +194,11 @@ const FollowupPicker: React.FC<FollowupPickerProps> = ({
             role="listbox"
             style={{
               position: 'fixed',
-              top: anchor.flipUp ? undefined : anchor.top,
-              bottom: anchor.flipUp ? window.innerHeight - anchor.top : undefined,
+              top: anchor.top,
+              bottom: anchor.bottom,
               left: anchor.left,
-              width: anchor.width,
+              right: 'auto',
+              width: Math.max(260, anchor.width),
               maxHeight: anchor.maxHeight,
               padding: 0,
               zIndex: 1500,

@@ -18,6 +18,7 @@ class ElderCreate(BaseModel):
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     tags: Optional[list[str]] = None
+    primary_doctor_id: Optional[int] = None
 
 
 class ElderUpdate(BaseModel):
@@ -31,6 +32,7 @@ class ElderUpdate(BaseModel):
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     tags: Optional[list[str]] = None
+    primary_doctor_id: Optional[int] = None
 
 
 class ElderSelfUpdate(BaseModel):
@@ -70,6 +72,8 @@ class ElderResponse(BaseModel):
     username: Optional[str] = None
     family_count: int = 0
     tags: list[str] = []
+    primary_doctor_id: Optional[int] = None
+    primary_doctor_name: Optional[str] = None
     created_at: Optional[datetime] = None
     latest_risk_score: Optional[float] = None
     latest_high_risk: Optional[bool] = None

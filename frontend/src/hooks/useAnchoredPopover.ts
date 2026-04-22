@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
 
 export interface AnchoredRect {
-  top: number;
   left: number;
   width: number;
-  /** Whether the popover should be flipped above the anchor (preferred direction is below). */
+  /** Whether the popover is sitting above the trigger rather than below. */
   flipUp: boolean;
-  /** Vertical space available in the chosen direction, in pixels (minus a small margin). */
+  /** Maximum height for the popover, clamped to the chosen side. */
   maxHeight: number;
+  /**
+   * CSS `top` for the popover (viewport-relative) when `flipUp === false`.
+   * Undefined when flipped up — consumers should use `bottom` instead.
+   */
+  top?: number;
+  /**
+   * CSS `bottom` for the popover (distance from viewport bottom) when
+   * `flipUp === true`. Undefined when placed below — consumers should use
+   * `top` instead.
+   */
+  bottom?: number;
 }
 
 const VIEWPORT_MARGIN = 12;
@@ -16,8 +26,9 @@ const GAP = 6;
 /**
  * Track a trigger element's viewport rect so a fixed-position popover rendered
  * in a portal can stay anchored to it. Returns null while closed; otherwise
- * returns the latest anchored geometry and auto-flips upward when there isn't
- * enough room below.
+ * returns viewport-relative geometry, flipping upward automatically when the
+ * trigger sits in the lower half of the viewport so the popover always stays
+ * on-screen regardless of browser zoom.
  */
 export function useAnchoredPopover(
   open: boolean,
@@ -32,27 +43,57 @@ export function useAnchoredPopover(
       return;
     }
 
+    let rafId: number | null = null;
     const compute = () => {
       const el = triggerRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - r.bottom - VIEWPORT_MARGIN;
+      // If the trigger hasn't settled into a real box yet (e.g. the modal
+      // animation is still in its first frame), retry next rAF instead of
+      // pinning the popover to (0, 0) with zero width.
+      if (r.width === 0 && r.height === 0) {
+        rafId = window.requestAnimationFrame(compute);
+        return;
+      }
+      const vh = window.innerHeight;
+      const spaceBelow = vh - r.bottom - VIEWPORT_MARGIN;
       const spaceAbove = r.top - VIEWPORT_MARGIN;
-      const flipUp = spaceBelow < Math.min(desiredHeight, 220) && spaceAbove > spaceBelow;
-      const maxHeight = Math.max(160, flipUp ? spaceAbove - GAP : spaceBelow - GAP);
-      setRect({
-        top: flipUp ? Math.max(VIEWPORT_MARGIN, r.top - GAP) : r.bottom + GAP,
-        left: r.left,
-        width: r.width,
-        flipUp,
-        maxHeight,
-      });
+
+      // Prefer the side with more room — no hard-coded threshold. Keeps the
+      // popover on-screen regardless of browser zoom or modal scroll state.
+      const flipUp = spaceAbove > spaceBelow;
+      const available = flipUp ? spaceAbove : spaceBelow;
+      const maxHeight = Math.max(160, available - GAP);
+
+      if (flipUp) {
+        // Pin the popover's bottom just above the trigger. The element grows
+        // upward to fit content, capped by `maxHeight`.
+        setRect({
+          bottom: vh - (r.top - GAP),
+          left: r.left,
+          width: r.width,
+          flipUp,
+          maxHeight,
+        });
+      } else {
+        setRect({
+          top: r.bottom + GAP,
+          left: r.left,
+          width: r.width,
+          flipUp,
+          maxHeight,
+        });
+      }
+      // Only desiredHeight is used implicitly above — keep the param so the
+      // caller can ask for a tighter available side if needed.
+      void desiredHeight;
     };
 
     compute();
     window.addEventListener('scroll', compute, true);
     window.addEventListener('resize', compute);
     return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
       window.removeEventListener('scroll', compute, true);
       window.removeEventListener('resize', compute);
     };

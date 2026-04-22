@@ -25,9 +25,43 @@ function InlineStatCard({
 }) {
   return (
     <Card>
-      <div style={{ padding: 20 }}>
-        <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 4 }}>{label}</div>
-        <div style={{ fontSize: 28, fontWeight: 700, color }}>{value}</div>
+      <div style={{ padding: '20px 22px', position: 'relative' }}>
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 22,
+            right: 22,
+            width: 18,
+            height: 1,
+            background: color,
+            opacity: 0.7,
+          }}
+        />
+        <div
+          style={{
+            fontFamily: 'var(--smc-font-ui)',
+            fontSize: 10,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: 'var(--smc-text-3)',
+            marginBottom: 8,
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--smc-font-display)',
+            fontSize: 30,
+            fontWeight: 500,
+            letterSpacing: '-0.01em',
+            color: 'var(--smc-text)',
+            lineHeight: 1.05,
+          }}
+        >
+          {value}
+        </div>
       </div>
     </Card>
   );
@@ -101,9 +135,9 @@ const ElderArchivePage: React.FC = () => {
 
   const typeColorMap = useMemo<Record<string, string>>(
     () => ({
-      health: '#1f6feb',
-      medical: '#1f9d63',
-      care: '#d9822b',
+      health: '#D97757',
+      medical: '#788C5D',
+      care: '#C08A2E',
     }),
     [],
   );
@@ -123,84 +157,144 @@ const ElderArchivePage: React.FC = () => {
     );
   }
 
+  const initial = (elder?.name || '老').slice(0, 1);
+
+  const profileField = (label: string, value: React.ReactNode) => (
+    <div>
+      <div
+        style={{
+          fontFamily: 'var(--smc-font-ui)',
+          fontSize: 10,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          color: 'var(--smc-text-3)',
+          fontWeight: 500,
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 15, color: 'var(--smc-text)', lineHeight: 1.5 }}>
+        {value}
+      </div>
+    </div>
+  );
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
-        <Button variant="text" startIcon={<ArrowLeft size={14} />} onClick={() => navigate(-1)}>
+        <Button
+          variant="text"
+          startIcon={<ArrowLeft size={14} />}
+          onClick={() => navigate(-1)}
+        >
           返回
         </Button>
       </div>
 
+      <div className="smc-page-hero" style={{ marginBottom: 0 }}>
+        <div style={{ display: 'flex', gap: 18, minWidth: 0, flex: 1 }}>
+          <span
+            aria-hidden
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background:
+                'color-mix(in oklab, var(--smc-primary) 14%, transparent)',
+              color: 'var(--smc-primary-700)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: 'var(--smc-font-display)',
+              fontSize: 28,
+              fontWeight: 500,
+              flexShrink: 0,
+            }}
+          >
+            {initial}
+          </span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="smc-page-hero__kicker">档案 · Health Archive</div>
+            <h1 className="smc-page-hero__title">
+              {elder?.name || '老人档案'}
+            </h1>
+            <p className="smc-page-hero__sub">
+              时间线视角的健康档案，汇总体征、就诊与照护记录，按时间倒序。
+            </p>
+          </div>
+        </div>
+      </div>
+
       <Card>
         <div style={{ padding: 24 }}>
-          <h2 style={{ margin: '0 0 16px', fontSize: 22, fontWeight: 700 }}>
-            {elder?.name || ''} - 健康档案
-          </h2>
+          <div
+            style={{
+              fontFamily: 'var(--smc-font-ui)',
+              fontSize: 10,
+              letterSpacing: '0.16em',
+              textTransform: 'uppercase',
+              color: 'var(--smc-text-3)',
+              marginBottom: 18,
+            }}
+          >
+            基础信息
+          </div>
           <div
             style={{
               display: 'grid',
-              gap: 16,
+              gap: 20,
               gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             }}
           >
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>姓名</div>
-              <div style={{ fontSize: 14 }}>{elder?.name || '-'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>性别</div>
-              <div style={{ fontSize: 14 }}>{formatGender(elder?.gender)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>出生日期</div>
-              <div style={{ fontSize: 14 }}>{formatDate(elder?.birth_date)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>联系电话</div>
-              <div style={{ fontSize: 14 }}>{elder?.phone || '-'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>地址</div>
-              <div style={{ fontSize: 14 }}>{elder?.address || '-'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>标签</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                {elder?.tags?.length ? (
-                  elder.tags.map((tag) => (
+            {profileField('性别', formatGender(elder?.gender))}
+            {profileField('出生日期', formatDate(elder?.birth_date))}
+            {profileField('联系电话', elder?.phone || '-')}
+            {profileField('地址', elder?.address || '-')}
+            {profileField(
+              '标签',
+              elder?.tags?.length ? (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {elder.tags.map((tag) => (
                     <Chip key={tag} tone="primary" outlined>
                       {tag}
                     </Chip>
-                  ))
-                ) : (
-                  <span style={{ fontSize: 14 }}>-</span>
-                )}
-              </div>
-            </div>
+                  ))}
+                </div>
+              ) : (
+                '-'
+              ),
+            )}
           </div>
         </div>
       </Card>
 
+      <div
+        style={{
+          display: 'grid',
+          gap: 16,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        }}
+      >
+        <InlineStatCard label="健康记录数" value={stats.health} color="#D97757" />
+        <InlineStatCard label="医疗记录数" value={stats.medical} color="#788C5D" />
+        <InlineStatCard label="照护记录数" value={stats.care} color="#C08A2E" />
+      </div>
+
       <Card>
         <div style={{ padding: 24 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>统计概览</h3>
           <div
             style={{
-              display: 'grid',
-              gap: 16,
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              fontFamily: 'var(--smc-font-ui)',
+              fontSize: 10,
+              letterSpacing: '0.16em',
+              textTransform: 'uppercase',
+              color: 'var(--smc-text-3)',
+              marginBottom: 18,
             }}
           >
-            <InlineStatCard label="健康记录数" value={stats.health} color="#1f6feb" />
-            <InlineStatCard label="医疗记录数" value={stats.medical} color="#1f9d63" />
-            <InlineStatCard label="照护记录数" value={stats.care} color="#d9822b" />
+            时间线
           </div>
-        </div>
-      </Card>
-
-      <Card>
-        <div style={{ padding: 24 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>时间线</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {timeline.length ? (
               timeline.map((entry, index) => (

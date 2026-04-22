@@ -371,38 +371,113 @@ const ElderListPage: React.FC = () => {
 
   const archiveCards = useMemo(
     () =>
-      data.map((elder) => (
-        <div
-          key={elder.id}
-          style={{ flex: '1 1 240px', minWidth: 240, maxWidth: 320 }}
-        >
-          <Card
-            hoverable
-            style={{ height: '100%', cursor: 'pointer' }}
-            onClick={() => navigate(`/elders/${elder.id}/archive`)}
+      data.map((elder) => {
+        const initial = (elder.name || '老').slice(0, 1);
+        return (
+          <div
+            key={elder.id}
+            style={{ flex: '1 1 260px', minWidth: 260, maxWidth: 340 }}
           >
-            <div style={{ padding: 20 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{elder.name}</div>
-              <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 12 }}>
-                {formatGender(elder.gender)} · {elder.phone || '-'}
+            <Card
+              hoverable
+              style={{ height: '100%', cursor: 'pointer' }}
+              onClick={() => navigate(`/elders/${elder.id}/archive`)}
+            >
+              <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background:
+                        'color-mix(in oklab, var(--smc-primary) 14%, transparent)',
+                      color: 'var(--smc-primary-700)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontFamily: 'var(--smc-font-display)',
+                      fontSize: 20,
+                      fontWeight: 500,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {initial}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontFamily: 'var(--smc-font-display)',
+                        fontSize: 20,
+                        fontWeight: 500,
+                        letterSpacing: '-0.01em',
+                        color: 'var(--smc-text)',
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      {elder.name}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 2,
+                        fontSize: 13,
+                        color: 'var(--smc-text-2)',
+                      }}
+                    >
+                      {formatGender(elder.gender)} · {elder.phone || '-'}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontFamily: 'var(--smc-font-ui)',
+                      fontSize: 10,
+                      letterSpacing: '0.16em',
+                      textTransform: 'uppercase',
+                      color: 'var(--smc-text-3)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    标签
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {elder.tags?.length ? (
+                      elder.tags.map((tag) => (
+                        <Chip key={tag} tone="primary" outlined>
+                          {tag}
+                        </Chip>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: 13, color: 'var(--smc-text-3)' }}>
+                        暂无标签
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingTop: 10,
+                    borderTop: '1px solid var(--smc-divider)',
+                    fontSize: 12,
+                    color: 'var(--smc-text-3)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  <span>点击查看健康档案</span>
+                  <span style={{ color: 'var(--smc-primary-700)', fontWeight: 500 }}>
+                    →
+                  </span>
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--smc-text-2)', marginBottom: 6 }}>标签</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                {elder.tags?.length ? (
-                  elder.tags.map((tag) => (
-                    <Chip key={tag} tone="primary" outlined>
-                      {tag}
-                    </Chip>
-                  ))
-                ) : (
-                  <span style={{ fontSize: 13, color: 'var(--smc-text-3)' }}>暂无标签</span>
-                )}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>点击查看健康档案</div>
-            </div>
-          </Card>
-        </div>
-      )),
+            </Card>
+          </div>
+        );
+      }),
     [data, navigate],
   );
 
@@ -438,11 +513,6 @@ const ElderListPage: React.FC = () => {
           options={[{ label: '全部', value: '' }, ...ACCOUNT_STATUS_OPTIONS]}
         />
       </div>
-      <PermissionGuard permission="elder:create">
-        <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
-          新增老人
-        </Button>
-      </PermissionGuard>
     </div>
   );
 
@@ -467,6 +537,23 @@ const ElderListPage: React.FC = () => {
         onDelete={handleDelete}
         onOpenFullArchive={handleOpenFullArchive}
       />
+      <div className="smc-page-hero">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="smc-page-hero__kicker">老人 · Residents</div>
+          <h1 className="smc-page-hero__title">老人管理</h1>
+          <p className="smc-page-hero__sub">
+            维护老人基础档案、家属关系与账户凭证。切换「健康档案」进入以卡片形式浏览的档案视图。
+          </p>
+        </div>
+        <div className="smc-page-hero__actions">
+          <PermissionGuard permission="elder:create">
+            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
+              新增老人
+            </Button>
+          </PermissionGuard>
+        </div>
+      </div>
+
       <div style={{ marginBottom: 16 }}>
         <Tabs
           activeKey={activeTab}
@@ -513,11 +600,15 @@ const ElderListPage: React.FC = () => {
               flexWrap: 'wrap',
             }}
           >
-            <div>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>老人健康档案</h2>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--smc-text-2)' }}>
-                查看并进入单个老人的健康档案详情
-              </p>
+            <div
+              style={{
+                fontFamily: 'var(--smc-font-ui)',
+                fontSize: 12,
+                color: 'var(--smc-text-3)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {loading ? '加载档案中…' : `共 ${data.length} 位老人`}
             </div>
 
             <div style={{ width: 340, maxWidth: '100%' }}>
@@ -527,7 +618,7 @@ const ElderListPage: React.FC = () => {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') handleArchiveSearch();
                 }}
-                placeholder="搜索姓名/手机号/身份证"
+                placeholder="搜索姓名 / 手机号 / 身份证"
                 endAdornment={<Search size={14} />}
               />
             </div>

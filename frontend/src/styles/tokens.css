@@ -1,55 +1,71 @@
+/* ============================================================
+   SmartMedCare — Anthropic-style design tokens.
+   Warm beige surface + single orange accent; serif headings
+   paired with Poppins UI type. Chinese uses Noto Sans SC,
+   routed automatically via font-stack order + unicode-range.
+   ============================================================ */
+
 :root {
-  /* Brand & functional palette (flat, calm, Anthropic-leaning) */
-  --smc-primary: #1f6feb;
-  --smc-primary-600: #1f6feb;
-  --smc-primary-700: #174fb6;
-  --smc-primary-50: #eef4ff;
-  --smc-primary-100: #dbe7ff;
+  /* ---- Core palette -------------------------------------------------- */
+  /* Orange is the ONLY accent; used sparingly for primary CTA / active state. */
+  --smc-primary: #d97757;
+  --smc-primary-600: #d97757;
+  --smc-primary-700: #bf5c3d;
+  --smc-primary-50: #f6e7df;
+  --smc-primary-100: #efd3c4;
 
-  --smc-secondary: #0f9d8f;
-  --smc-secondary-700: #0b6f65;
-  --smc-secondary-50: #e6f6f4;
+  /* Secondary is a calm clay tone; used for "info" accents, not CTA. */
+  --smc-secondary: #788c5d;
+  --smc-secondary-700: #5c6d46;
+  --smc-secondary-50: #e7ecdc;
 
-  --smc-success: #1f9d63;
-  --smc-success-50: #e7f6ed;
-  --smc-warning: #d9822b;
-  --smc-warning-50: #fdf1e2;
-  --smc-error: #d14343;
-  --smc-error-50: #fdecec;
-  --smc-info: #1f6feb;
-  --smc-info-50: #eef4ff;
+  /* Status colors — pulled toward earth tones so they coexist with orange. */
+  --smc-success: #5c8d5d;
+  --smc-success-50: #e4ede1;
+  --smc-warning: #c08a2e;
+  --smc-warning-50: #f5e9cf;
+  --smc-error: #c0453a;
+  --smc-error-50: #f4dcd8;
+  --smc-info: #6a9bcc;
+  --smc-info-50: #e3ecf5;
 
-  /* Surface */
-  --smc-bg: #f3f7fb;
-  --smc-surface: #ffffff;
-  --smc-surface-alt: #f8fafc;
-  --smc-overlay: rgba(15, 23, 42, 0.42);
+  /* ---- Surfaces ------------------------------------------------------ */
+  /* Never pure white. Paler warm beige base, card surface slightly warmer. */
+  --smc-bg: #f3f0e8;
+  --smc-bg-soft: #f6f3ec;
+  --smc-surface: #faf8f1;
+  --smc-surface-alt: #efece3;
+  --smc-surface-inverted: #141413;
+  --smc-overlay: rgba(20, 20, 19, 0.46);
 
-  /* Text */
-  --smc-text: #0f172a;
-  --smc-text-2: #475569;
-  --smc-text-3: #94a3b8;
-  --smc-text-inverse: #ffffff;
+  /* ---- Text ---------------------------------------------------------- */
+  --smc-text: #141413;
+  --smc-text-2: #55534c;
+  --smc-text-3: #8a877d;
+  --smc-text-inverse: #f5f3ec;
 
-  /* Border */
-  --smc-border: #e2e8f0;
-  --smc-border-strong: #cbd5e1;
-  --smc-divider: #eef2f7;
+  /* ---- Borders ------------------------------------------------------- */
+  --smc-border: #dedbd2;
+  --smc-border-strong: #bdb8aa;
+  --smc-divider: #e7e4da;
 
-  /* Radius (flat card) */
+  /* ---- Radii --------------------------------------------------------- */
   --smc-r-sm: 6px;
   --smc-r-md: 10px;
   --smc-r-lg: 14px;
-  --smc-r-xl: 18px;
+  --smc-r-xl: 20px;
   --smc-r-full: 999px;
 
-  /* Shadow (subtle, flat) */
-  --smc-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --smc-shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.05);
-  --smc-shadow-md: 0 6px 20px rgba(15, 23, 42, 0.08);
-  --smc-shadow-lg: 0 18px 52px rgba(15, 23, 42, 0.18);
+  /* ---- Shadow (warm, low contrast) ---------------------------------- */
+  --smc-shadow-xs: 0 1px 2px rgba(66, 44, 28, 0.04);
+  --smc-shadow-sm: 0 2px 8px rgba(66, 44, 28, 0.06);
+  --smc-shadow-md: 0 8px 26px rgba(66, 44, 28, 0.08);
+  --smc-shadow-lg: 0 22px 60px rgba(66, 44, 28, 0.18);
 
-  /* Spacing scale */
+  /* ---- Focus ring (orange, never browser blue) ---------------------- */
+  --smc-focus-ring: 0 0 0 3px rgba(217, 119, 87, 0.28);
+
+  /* ---- Spacing scale (4px grid) ------------------------------------- */
   --smc-s-1: 4px;
   --smc-s-2: 8px;
   --smc-s-3: 12px;
@@ -57,31 +73,60 @@
   --smc-s-5: 20px;
   --smc-s-6: 24px;
   --smc-s-8: 32px;
+  --smc-s-10: 40px;
+  --smc-s-16: 64px;
 
-  /* Typography */
-  --smc-font:
-    "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue",
+  /* ---- Typography ---------------------------------------------------- */
+  /* Poppins drives UI / labels / buttons / nav — the "sans" side.
+     Lora is the editorial serif for display + body.
+     Noto Sans SC picks up CJK via unicode-range (listed last on purpose). */
+  --smc-font-ui:
+    "Poppins", "DM Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei",
     system-ui, sans-serif;
+  --smc-font-display:
+    "Lora", "DM Serif Display", "Source Han Serif SC", "Songti SC",
+    "Noto Serif SC", serif;
+  --smc-font-body:
+    "Lora", "DM Serif Text", "Noto Sans SC", "PingFang SC", "Microsoft YaHei",
+    system-ui, serif;
+  --smc-font-mono:
+    "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Default app font is UI-sans; surfaces override to --smc-font-display
+     for large titles and to --smc-font-body for prose. */
+  --smc-font: var(--smc-font-ui);
+
   --smc-fs-xs: 12px;
   --smc-fs-sm: 13px;
   --smc-fs-md: 14px;
   --smc-fs-lg: 16px;
   --smc-fs-xl: 18px;
   --smc-fs-2xl: 22px;
-  --smc-fs-3xl: 28px;
+  --smc-fs-3xl: 30px;
+  --smc-fs-4xl: 40px;
 
-  /* Motion */
-  --smc-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --smc-dur-fast: 120ms;
-  --smc-dur-md: 180ms;
-  --smc-dur-slow: 260ms;
+  --smc-leading-tight: 1.2;
+  --smc-leading-normal: 1.55;
+  --smc-leading-cn: 1.75;
 
-  /* Layout */
+  --smc-tracking-tight: -0.01em;
+  --smc-tracking-ui: 0.002em;
+  --smc-tracking-wide: 0.08em;
+
+  /* ---- Motion -------------------------------------------------------- */
+  --smc-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --smc-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --smc-dur-fast: 150ms;
+  --smc-dur-md: 250ms;
+  --smc-dur-slow: 400ms;
+
+  /* ---- Layout -------------------------------------------------------- */
   --smc-header-h: 72px;
   --smc-sidebar-w: 264px;
-  --smc-sidebar-w-mini: 64px;
+  --smc-sidebar-w-mini: 72px;
+  --smc-content-max: 1520px;
 
-  /* Z */
+  /* ---- Z-index ------------------------------------------------------- */
   --smc-z-drawer: 1200;
   --smc-z-modal: 1300;
   --smc-z-toast: 1400;
@@ -101,8 +146,24 @@ body {
   font-size: var(--smc-fs-md);
   color: var(--smc-text);
   background: var(--smc-bg);
+  letter-spacing: var(--smc-tracking-ui);
+  /* Warm radial vignette — adds atmosphere, not noise.
+     Kept faint enough to stay readable in dense admin layouts. */
+  background-image:
+    radial-gradient(
+      ellipse 70% 60% at 12% 0%,
+      rgba(217, 119, 87, 0.06) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 88% 8%,
+      rgba(120, 140, 93, 0.04) 0%,
+      transparent 60%
+    );
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 *,
@@ -112,12 +173,22 @@ body {
 }
 
 a {
-  color: var(--smc-primary);
+  color: var(--smc-primary-700);
   text-decoration: none;
+  transition: color var(--smc-dur-fast) var(--smc-ease);
+}
+a:hover {
+  color: var(--smc-primary);
 }
 
 button {
   font-family: inherit;
+}
+
+/* Selection in warm orange, not browser blue. */
+::selection {
+  background: rgba(217, 119, 87, 0.22);
+  color: var(--smc-text);
 }
 
 /* Global keyframes used by UI components */
@@ -163,10 +234,21 @@ button {
   }
 }
 
+@keyframes smc-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes smc-modal-in {
   from {
     opacity: 0;
-    transform: scale(0.94) translateY(6px);
+    transform: scale(0.94) translateY(8px);
   }
   to {
     opacity: 1;
@@ -211,5 +293,16 @@ button {
   }
   75% {
     transform: translateX(-3px);
+  }
+}
+
+/* Reduced motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

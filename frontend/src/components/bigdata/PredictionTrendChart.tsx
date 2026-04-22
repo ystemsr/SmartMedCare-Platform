@@ -46,8 +46,8 @@ const PredictionTrendChart: React.FC<Props> = ({ records, loading }) => {
         type: 'line',
         data: scores,
         smooth: true,
-        lineStyle: { width: 3, color: '#0f9d8f' },
-        itemStyle: { color: '#0f9d8f' },
+        lineStyle: { width: 3, color: '#788C5D' },
+        itemStyle: { color: '#788C5D' },
         areaStyle: {
           color: {
             type: 'linear',
@@ -56,8 +56,8 @@ const PredictionTrendChart: React.FC<Props> = ({ records, loading }) => {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(15,157,143,0.25)' },
-              { offset: 1, color: 'rgba(15,157,143,0)' },
+              { offset: 0, color: 'rgba(120,140,93,0.24)' },
+              { offset: 1, color: 'rgba(120,140,93,0)' },
             ],
           },
         },

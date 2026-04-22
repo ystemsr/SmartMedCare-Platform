@@ -378,8 +378,8 @@ const PredictionTrendCard: React.FC<{
         type: 'line',
         smooth: true,
         data: items.map((d) => d.avg_health_score),
-        lineStyle: { width: 3, color: '#0f9d8f' },
-        itemStyle: { color: '#0f9d8f' },
+        lineStyle: { width: 3, color: '#788C5D' },
+        itemStyle: { color: '#788C5D' },
       },
       {
         name: '高风险人数',
@@ -442,7 +442,7 @@ const RegionalCard: React.FC<{
       {
         type: 'bar',
         data: items.map((d) => d.count),
-        itemStyle: { color: '#1f6feb', borderRadius: [0, 6, 6, 0] },
+        itemStyle: { color: '#D97757', borderRadius: [0, 6, 6, 0] },
       },
     ],
   };

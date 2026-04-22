@@ -3,7 +3,7 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Users,
+  Stethoscope,
   CheckCircle2,
   Ban,
 } from 'lucide-react';
@@ -30,7 +30,7 @@ const createFields: FormFieldConfig[] = [
   { name: 'real_name', label: '姓名', required: true, placeholder: '请输入真实姓名' },
   { name: 'phone', label: '手机号', required: true, placeholder: '请输入手机号' },
   { name: 'email', label: '邮箱', placeholder: '选填，例如 name@example.com' },
-  { name: 'password', label: '密码', type: 'password', required: true, placeholder: '至少6位' },
+  { name: 'password', label: '密码', type: 'password', required: true, placeholder: '至少 6 位' },
 ];
 
 const editFields: FormFieldConfig[] = [
@@ -130,11 +130,7 @@ const DoctorPage: React.FC = () => {
           <Chip
             tone={status === 'active' ? 'success' : 'error'}
             icon={
-              status === 'active' ? (
-                <CheckCircle2 size={12} />
-              ) : (
-                <Ban size={12} />
-              )
+              status === 'active' ? <CheckCircle2 size={12} /> : <Ban size={12} />
             }
           >
             {status === 'active' ? '正常' : '禁用'}
@@ -185,28 +181,37 @@ const DoctorPage: React.FC = () => {
   ];
 
   return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 700 }}>医生管理</h2>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--smc-text-2)' }}>
-          管理平台中的医生账号，包括创建、编辑、停用等操作
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="smc-page-hero">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="smc-page-hero__kicker">人员 · Clinicians</div>
+          <h1 className="smc-page-hero__title">医生管理</h1>
+          <p className="smc-page-hero__sub">
+            管理平台中的医生账号，包括创建、编辑、停用等操作。停用后医生将无法登录并处理随访。
+          </p>
+        </div>
+        <div className="smc-page-hero__actions">
+          <PermissionGuard permission="user:manage">
+            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
+              新增医生
+            </Button>
+          </PermissionGuard>
+        </div>
       </div>
 
       <div
         style={{
           display: 'grid',
-          gap: 20,
+          gap: 16,
           gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          marginBottom: 24,
         }}
       >
         <StatCard
           title="医生总数"
           value={stats.total}
           suffix="人"
-          icon={<Users size={20} />}
-          color="#1677ff"
+          icon={<Stethoscope size={20} />}
+          color="var(--smc-text)"
           loading={loading}
         />
         <StatCard
@@ -214,7 +219,8 @@ const DoctorPage: React.FC = () => {
           value={stats.active}
           suffix="人"
           icon={<CheckCircle2 size={20} />}
-          color="#52c41a"
+          color="var(--smc-success)"
+          hint="可接收随访与预警"
           loading={loading}
         />
         <StatCard
@@ -222,7 +228,8 @@ const DoctorPage: React.FC = () => {
           value={stats.disabled}
           suffix="人"
           icon={<Ban size={20} />}
-          color="#ff4d4f"
+          color="var(--smc-error)"
+          hint="暂不可登录"
           loading={loading}
         />
       </div>
@@ -234,14 +241,7 @@ const DoctorPage: React.FC = () => {
         pagination={pagination}
         onChange={handleTableChange}
         onSearch={handleSearch}
-        searchPlaceholder="搜索用户名/姓名/手机号"
-        toolbar={
-          <PermissionGuard permission="user:manage">
-            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
-              新增医生
-            </Button>
-          </PermissionGuard>
-        }
+        searchPlaceholder="搜索用户名 / 姓名 / 手机号"
       />
 
       <AppForm

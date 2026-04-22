@@ -133,6 +133,10 @@ const ElderDetailDrawer: React.FC<ElderDetailDrawerProps> = ({
             <DetailItem label="身份证号" value={elder.id_card || '-'} />
             <DetailItem label="联系电话" value={elder.phone || '-'} />
             <DetailItem label="家属数" value={elder.family_count ?? 0} />
+            <DetailItem
+              label="负责医生"
+              value={elder.primary_doctor_name || '未指派'}
+            />
             <DetailItem label="地址" value={elder.address || '-'} full />
             <DetailItem label="紧急联系人" value={elder.emergency_contact_name || '-'} />
             <DetailItem

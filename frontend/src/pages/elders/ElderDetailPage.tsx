@@ -404,6 +404,7 @@ const ElderDetailPage: React.FC = () => {
             <DetailItem label="地址" value={elder?.address || '-'} />
             <DetailItem label="紧急联系人" value={elder?.emergency_contact_name || '-'} />
             <DetailItem label="紧急联系电话" value={elder?.emergency_contact_phone || '-'} />
+            <DetailItem label="负责医生" value={elder?.primary_doctor_name || '未指派'} />
             <DetailItem
               label="标签"
               value={

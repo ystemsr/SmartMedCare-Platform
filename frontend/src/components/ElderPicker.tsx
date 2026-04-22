@@ -168,10 +168,11 @@ const ElderPicker: React.FC<ElderPickerProps> = ({
             role="listbox"
             style={{
               position: 'fixed',
-              top: anchor.flipUp ? undefined : anchor.top,
-              bottom: anchor.flipUp ? window.innerHeight - anchor.top : undefined,
+              top: anchor.top,
+              bottom: anchor.bottom,
               left: anchor.left,
-              width: anchor.width,
+              right: 'auto',
+              width: Math.max(260, anchor.width),
               maxHeight: anchor.maxHeight,
               padding: 0,
               // Sit above .smc-modal-overlay (1300) when rendered via portal.

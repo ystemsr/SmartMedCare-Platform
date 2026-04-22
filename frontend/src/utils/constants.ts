@@ -5,12 +5,20 @@ export const GENDER_OPTIONS = [
   { label: '未知', value: 'unknown' },
 ];
 
-/** Risk level options */
+/** Risk level options (used by alerts / manual assessments) */
 export const RISK_LEVEL_OPTIONS = [
   { label: '低风险', value: 'low' },
   { label: '中风险', value: 'medium' },
   { label: '高风险', value: 'high' },
   { label: '极高风险', value: 'critical' },
+];
+
+/** AI risk bucket options — mirrors the elder list's AI 风险 column. */
+export const AI_RISK_OPTIONS = [
+  { label: '未评估', value: 'unassessed' },
+  { label: '高风险', value: 'high' },
+  { label: '关注', value: 'watch' },
+  { label: '正常', value: 'normal' },
 ];
 
 /** Alert status options */

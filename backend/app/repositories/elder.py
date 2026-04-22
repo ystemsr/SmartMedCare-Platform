@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -47,6 +47,7 @@ class ElderRepository:
         tag: Optional[str] = None,
         account_status: Optional[str] = None,
         risk_level: Optional[str] = None,
+        primary_doctor_id: Optional[int] = None,
     ):
         """Get paginated list of elders with optional filters."""
         stmt = (
@@ -70,6 +71,9 @@ class ElderRepository:
         if account_status:
             stmt = stmt.where(Elder.account_status == account_status)
 
+        if primary_doctor_id is not None:
+            stmt = stmt.where(Elder.primary_doctor_id == primary_doctor_id)
+
         if tag:
             stmt = stmt.where(
                 Elder.id.in_(
@@ -80,8 +84,54 @@ class ElderRepository:
                 )
             )
 
-        # risk_level filtering would require joining assessments;
-        # skip for now as it adds cross-module complexity
+        if risk_level:
+            # Match the four buckets the frontend list renders (未评估/高风险/
+            # 关注/正常). Uses a latest-per-elder join against prediction_results.
+            from app.models.bigdata import PredictionResult
+
+            latest_subq = (
+                select(
+                    PredictionResult.elder_id.label("eid"),
+                    func.max(PredictionResult.predicted_at).label("max_at"),
+                )
+                .where(PredictionResult.deleted_at.is_(None))
+                .group_by(PredictionResult.elder_id)
+                .subquery()
+            )
+
+            if risk_level == "unassessed":
+                stmt = stmt.where(
+                    Elder.id.notin_(select(latest_subq.c.eid))
+                )
+            else:
+                latest_join = (
+                    select(PredictionResult.elder_id)
+                    .join(
+                        latest_subq,
+                        and_(
+                            PredictionResult.elder_id == latest_subq.c.eid,
+                            PredictionResult.predicted_at == latest_subq.c.max_at,
+                        ),
+                    )
+                    .where(PredictionResult.deleted_at.is_(None))
+                )
+                if risk_level == "high":
+                    matched = latest_join.where(PredictionResult.high_risk.is_(True))
+                elif risk_level == "normal":
+                    matched = latest_join.where(
+                        PredictionResult.high_risk.is_(False),
+                        PredictionResult.health_score >= 70,
+                    )
+                elif risk_level == "watch":
+                    matched = latest_join.where(
+                        PredictionResult.high_risk.is_(False),
+                        PredictionResult.health_score < 70,
+                    )
+                else:
+                    matched = None
+                if matched is not None:
+                    stmt = stmt.where(Elder.id.in_(matched))
+
         return await paginate(stmt, db, pagination, ElderResponse)
 
     @staticmethod
@@ -100,6 +150,7 @@ class ElderRepository:
             address=data.address,
             emergency_contact_name=data.emergency_contact_name,
             emergency_contact_phone=data.emergency_contact_phone,
+            primary_doctor_id=data.primary_doctor_id,
         )
         if tags:
             elder.tags = [ElderTag(tag_name=t) for t in tags]

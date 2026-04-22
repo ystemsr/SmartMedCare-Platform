@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class FollowupAlertSummary(BaseModel):
@@ -27,6 +27,13 @@ class FollowupCreate(BaseModel):
     planned_at: datetime
     assigned_to: Optional[int] = None
     notes: Optional[str] = None
+
+    @field_validator("alert_ids", mode="before")
+    @classmethod
+    def _coerce_alert_ids(cls, v):
+        # Accept None / missing as "no linked alerts" so clients that send an
+        # explicit null (or omit the key entirely) still get through.
+        return [] if v is None else v
 
 
 class FollowupUpdate(BaseModel):

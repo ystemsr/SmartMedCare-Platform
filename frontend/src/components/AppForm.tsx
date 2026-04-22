@@ -143,9 +143,20 @@ const AppForm: React.FC<AppFormProps> = ({
     return true;
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = async () => {
     if (!validate()) return;
-    await onSubmit(values);
+    setSubmitting(true);
+    try {
+      await onSubmit(values);
+    } catch (err) {
+      // Surface backend / network errors as a toast so the modal never fails
+      // silently when a caller's onSubmit lets the promise reject.
+      message.error(err instanceof Error ? err.message : '提交失败');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -157,8 +168,8 @@ const AppForm: React.FC<AppFormProps> = ({
       footer={
         <>
           <Button variant="outlined" onClick={onCancel}>取消</Button>
-          <Button onClick={handleSubmit} loading={confirmLoading}>
-            {confirmLoading ? '提交中...' : '确定'}
+          <Button onClick={handleSubmit} loading={confirmLoading || submitting}>
+            {confirmLoading || submitting ? '提交中...' : '确定'}
           </Button>
         </>
       }

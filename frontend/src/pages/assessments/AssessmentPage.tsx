@@ -6,8 +6,8 @@ import {
   DatePicker,
   IconButton,
   Modal,
-  Select,
   Spinner,
+  Tabs,
   Tooltip,
   confirm,
 } from '../../components/ui';
@@ -35,19 +35,11 @@ import type {
   AssessmentListQuery,
 } from '../../types/assessment';
 import type { FeatureCatalogEntry } from '../../types/survey';
-import { RefPageHead, RefGrid, RefCard } from '../../components/ref';
-
-const ASSESSMENT_TYPE_OPTIONS = [
-  { label: '综合评估', value: 'comprehensive' },
-  { label: '血压评估', value: 'blood_pressure' },
-  { label: '血糖评估', value: 'blood_glucose' },
-  { label: '心理评估', value: 'mental' },
-];
+import { RefPageHead } from '../../components/ref';
 
 // Edit flow stays manual — doctors can correct score / risk_level / summary
 // after the AI run if needed.
 const editFormFields: FormFieldConfig[] = [
-  { name: 'assessment_type', label: '评估类型', type: 'select', options: ASSESSMENT_TYPE_OPTIONS },
   { name: 'score', label: '评估分数', type: 'number', required: true },
   { name: 'risk_level', label: '风险等级', type: 'select', required: true, options: RISK_LEVEL_OPTIONS },
   { name: 'summary', label: '评估摘要', type: 'textarea', required: true },
@@ -283,7 +275,6 @@ const AssessmentPage: React.FC = () => {
       width: 120,
       render: (value) => (value ? String(value) : '-'),
     },
-    { title: '评估类型', dataIndex: 'assessment_type', width: 120 },
     { title: '评分', dataIndex: 'score', width: 80 },
     {
       title: '风险等级',
@@ -350,26 +341,6 @@ const AssessmentPage: React.FC = () => {
         )
       : 0;
   const highRisk = data.filter((a) => a.risk_level === 'high').length;
-  const totalByType = ASSESSMENT_TYPE_OPTIONS.map((t) => ({
-    label: t.label,
-    count: data.filter((d) => d.assessment_type === t.value).length,
-    avg: (() => {
-      const pool = data.filter((d) => d.assessment_type === t.value);
-      return pool.length
-        ? Math.round(
-            pool.reduce((sum, a) => sum + (a.score || 0), 0) / pool.length,
-          )
-        : 0;
-    })(),
-    color:
-      t.value === 'comprehensive'
-        ? 'var(--smc-primary)'
-        : t.value === 'blood_pressure'
-          ? 'var(--smc-error)'
-          : t.value === 'blood_glucose'
-            ? 'var(--smc-warning)'
-            : '#6e4fc9',
-  }));
 
   const renderSection = (key: SectionKey, entries: FeatureCatalogEntry[]) => {
     if (entries.length === 0) return null;
@@ -457,43 +428,24 @@ const AssessmentPage: React.FC = () => {
         }
       />
 
-      <RefGrid cols={4} style={{ marginBottom: 16 }}>
-        {totalByType.map((t) => (
-          <RefCard key={t.label}>
-            <div style={{ fontSize: 12, color: 'var(--smc-text-3)' }}>{t.label}</div>
-            <div
-              style={{
-                fontSize: 28,
-                fontWeight: 500,
-                fontFamily: 'var(--smc-font-display)',
-                marginTop: 4,
-              }}
-            >
-              {t.count}{' '}
-              <span style={{ fontSize: 13, color: 'var(--smc-text-3)', fontWeight: 400 }}>
-                份
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: 'var(--smc-text-3)',
-                marginTop: 4,
-              }}
-            >
-              平均 {t.avg} 分
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <div className="ref-bar-track">
-                <div
-                  className="ref-bar-fill"
-                  style={{ width: `${Math.min(100, t.avg)}%`, background: t.color }}
-                />
-              </div>
-            </div>
-          </RefCard>
-        ))}
-      </RefGrid>
+      <div style={{ marginBottom: 16 }}>
+        <Tabs
+          activeKey={query.risk_level || 'all'}
+          onChange={(k) =>
+            setQuery((prev) => ({
+              ...prev,
+              risk_level: k === 'all' ? undefined : k,
+            }))
+          }
+          items={[
+            { key: 'all', label: '全部' },
+            ...RISK_LEVEL_OPTIONS.map((o) => ({
+              key: o.value,
+              label: o.label,
+            })),
+          ]}
+        />
+      </div>
 
       <AppTable<Assessment>
         columns={columns}
@@ -505,26 +457,6 @@ const AssessmentPage: React.FC = () => {
         searchPlaceholder="搜索评估"
         toolbar={
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ minWidth: 120 }}>
-              <Select
-                label="风险等级"
-                value={query.risk_level || ''}
-                onChange={(v) =>
-                  setQuery((prev) => ({ ...prev, risk_level: v ? String(v) : undefined }))
-                }
-                options={[{ label: '全部', value: '' }, ...RISK_LEVEL_OPTIONS]}
-              />
-            </div>
-            <div style={{ minWidth: 140 }}>
-              <Select
-                label="评估类型"
-                value={query.assessment_type || ''}
-                onChange={(v) =>
-                  setQuery((prev) => ({ ...prev, assessment_type: v ? String(v) : undefined }))
-                }
-                options={[{ label: '全部', value: '' }, ...ASSESSMENT_TYPE_OPTIONS]}
-              />
-            </div>
             <div style={{ minWidth: 160 }}>
               <DatePicker
                 label="开始日期"
@@ -543,18 +475,6 @@ const AssessmentPage: React.FC = () => {
                 }
               />
             </div>
-            <PermissionGuard permission="assessment:create">
-              <Button
-                variant="outlined"
-                startIcon={<Zap size={14} />}
-                onClick={() => setGenerateModalVisible(true)}
-              >
-                自动生成评估
-              </Button>
-              <Button startIcon={<Plus size={14} />} onClick={openCreate}>
-                发起 AI 评估
-              </Button>
-            </PermissionGuard>
           </div>
         }
       />

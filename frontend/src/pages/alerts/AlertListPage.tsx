@@ -4,11 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import {
   Button,
   Chip,
-  DatePicker,
   Divider,
   Drawer,
   Select,
   Spinner,
+  Tabs,
   confirm,
 } from '../../components/ui';
 import type { AppTableColumn } from '../../components/AppTable';
@@ -52,11 +52,41 @@ const SOURCE_COLORS: Record<string, string> = {
   manual: '#8c8c8c',
   ml: '#722ed1',
   rule: '#1677ff',
+  rule_engine: '#1677ff',
+  community_clinic: '#13a8a8',
+  spark_job: '#6e4fc9',
+  family_app: '#faad14',
+  sensor: '#52c41a',
 };
 const SOURCE_LABELS: Record<string, string> = {
   manual: '人工',
-  ml: 'AI',
-  rule: '规则',
+  ml: 'AI 模型',
+  rule: '规则引擎',
+  rule_engine: '规则引擎',
+  community_clinic: '社区卫生院',
+  spark_job: '数据分析',
+  family_app: '家属端',
+  sensor: '传感器',
+};
+
+const ALERT_TYPE_LABELS: Record<string, string> = {
+  blood_pressure: '血压异常',
+  blood_pressure_abnormal: '血压异常',
+  blood_glucose: '血糖异常',
+  blood_glucose_abnormal: '血糖异常',
+  heart_rate: '心率异常',
+  heart_rate_abnormal: '心率异常',
+  temperature: '体温异常',
+  temperature_abnormal: '体温异常',
+  medication: '用药异常',
+  risk_model: '风险模型',
+  manual: '人工上报',
+};
+
+const formatAlertType = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '-';
+  const key = String(value);
+  return ALERT_TYPE_LABELS[key] || key;
 };
 
 function DrawerField({
@@ -167,7 +197,12 @@ const AlertListPage: React.FC = () => {
 
   const columns: AppTableColumn<Alert>[] = [
     { title: '预警标题', dataIndex: 'title', width: 220 },
-    { title: '类型', dataIndex: 'type', width: 150 },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      width: 150,
+      render: (value) => formatAlertType(value),
+    },
     {
       title: '来源',
       dataIndex: 'source',
@@ -290,7 +325,7 @@ const AlertListPage: React.FC = () => {
           }}
         >
           <DrawerField label="预警标题" value={drawerAlert.title} fullWidth />
-          <DrawerField label="预警类型" value={drawerAlert.type} />
+          <DrawerField label="预警类型" value={formatAlertType(drawerAlert.type)} />
           <DrawerField label="老人" value={drawerAlert.elder_name || `#${drawerAlert.elder_id}`} />
           <DrawerField label="触发时间" value={formatDateTime(drawerAlert.triggered_at)} />
           {drawerAlert.resolved_at && (
@@ -403,6 +438,25 @@ const AlertListPage: React.FC = () => {
         />
       </RefGrid>
 
+      <div style={{ marginBottom: 16 }}>
+        <Tabs
+          activeKey={query.status || 'all'}
+          onChange={(k) =>
+            setQuery((prev) => ({
+              ...prev,
+              status: k === 'all' ? undefined : k,
+            }))
+          }
+          items={[
+            { key: 'all', label: '全部' },
+            ...ALERT_STATUS_OPTIONS.map((o) => ({
+              key: o.value,
+              label: o.label,
+            })),
+          ]}
+        />
+      </div>
+
       <AppTable<Alert>
         columns={columns}
         dataSource={data}
@@ -417,16 +471,6 @@ const AlertListPage: React.FC = () => {
         }}
         toolbar={
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ minWidth: 120 }}>
-              <Select
-                label="状态"
-                value={query.status || ''}
-                onChange={(v) =>
-                  setQuery((prev) => ({ ...prev, status: v ? String(v) : undefined }))
-                }
-                options={[{ label: '全部', value: '' }, ...ALERT_STATUS_OPTIONS]}
-              />
-            </div>
             <div style={{ minWidth: 120 }}>
               <Select
                 label="风险等级"
@@ -446,28 +490,10 @@ const AlertListPage: React.FC = () => {
                 }
                 options={[
                   { label: '全部', value: '' },
-                  { label: '人工', value: 'manual' },
-                  { label: 'AI', value: 'ml' },
-                  { label: '规则', value: 'rule' },
+                  ...Object.entries(SOURCE_LABELS)
+                    .filter(([v]) => v !== 'rule_engine')
+                    .map(([value, label]) => ({ label, value })),
                 ]}
-              />
-            </div>
-            <div style={{ minWidth: 160 }}>
-              <DatePicker
-                label="开始日期"
-                value={query.date_start || null}
-                onChange={(v) =>
-                  setQuery((prev) => ({ ...prev, date_start: v || undefined }))
-                }
-              />
-            </div>
-            <div style={{ minWidth: 160 }}>
-              <DatePicker
-                label="结束日期"
-                value={query.date_end || null}
-                onChange={(v) =>
-                  setQuery((prev) => ({ ...prev, date_end: v || undefined }))
-                }
               />
             </div>
             <Button
@@ -491,11 +517,6 @@ const AlertListPage: React.FC = () => {
             >
               批量忽略
             </Button>
-            <PermissionGuard permission="alert:update">
-              <Button startIcon={<Plus size={14} />} onClick={() => setFormVisible(true)}>
-                手动创建
-              </Button>
-            </PermissionGuard>
           </div>
         }
       />

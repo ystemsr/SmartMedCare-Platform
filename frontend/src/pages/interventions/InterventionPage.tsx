@@ -6,6 +6,7 @@ import {
   IconButton,
   Modal,
   Select,
+  Tabs,
   Textarea,
   Tooltip,
   confirm,
@@ -60,13 +61,36 @@ const INTERVENTION_ALLOWED_NEXT: Record<string, string[]> = {
   stopped: [],
 };
 
+// Values match what the backend stores on the interventions table.
 const INTERVENTION_TYPE_OPTIONS = [
-  { label: '用药指导', value: 'medication_guidance' },
-  { label: '饮食建议', value: 'diet_advice' },
-  { label: '运动指导', value: 'exercise_guidance' },
-  { label: '心理干预', value: 'mental_intervention' },
-  { label: '其他', value: 'other' },
+  { label: '用药调整', value: 'medication_adjust' },
+  { label: '康复训练', value: 'rehab' },
+  { label: '心理支持', value: 'psych_support' },
+  { label: '健康教育', value: 'education' },
+  { label: '医院转诊', value: 'hospital_referral' },
+  { label: '生活方式', value: 'lifestyle' },
+  { label: '上门访视', value: 'home_visit' },
 ];
+
+const INTERVENTION_TYPE_COLORS: Record<string, string> = {
+  medication_adjust: 'var(--smc-primary)',
+  rehab: 'var(--smc-success)',
+  psych_support: '#6e4fc9',
+  education: '#1677ff',
+  hospital_referral: 'var(--smc-error)',
+  lifestyle: 'var(--smc-warning)',
+  home_visit: 'var(--smc-text-3)',
+};
+
+const INTERVENTION_TYPE_LABEL: Record<string, string> = Object.fromEntries(
+  INTERVENTION_TYPE_OPTIONS.map((o) => [o.value, o.label]),
+);
+
+const formatInterventionType = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '-';
+  const key = String(value);
+  return INTERVENTION_TYPE_LABEL[key] || key;
+};
 
 const formFields: FormFieldConfig[] = [
   { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
@@ -196,7 +220,12 @@ const InterventionPage: React.FC = () => {
       width: 120,
       render: (value) => (value ? String(value) : '-'),
     },
-    { title: '干预类型', dataIndex: 'type', width: 120 },
+    {
+      title: '干预类型',
+      dataIndex: 'type',
+      width: 120,
+      render: (value) => formatInterventionType(value),
+    },
     {
       title: '状态',
       dataIndex: 'status',
@@ -275,16 +304,7 @@ const InterventionPage: React.FC = () => {
   const byType = INTERVENTION_TYPE_OPTIONS.map((t) => ({
     label: t.label,
     count: data.filter((d) => d.type === t.value).length,
-    color:
-      t.value === 'medication_guidance'
-        ? 'var(--smc-primary)'
-        : t.value === 'diet_advice'
-          ? 'var(--smc-success)'
-          : t.value === 'exercise_guidance'
-            ? 'var(--smc-warning)'
-            : t.value === 'mental_intervention'
-              ? '#6e4fc9'
-              : 'var(--smc-text-3)',
+    color: INTERVENTION_TYPE_COLORS[t.value] || 'var(--smc-text-3)',
   }));
   const maxBy = Math.max(1, ...byType.map((b) => b.count));
   const pending = data.filter((d) => d.status === 'planned').length;
@@ -376,6 +396,25 @@ const InterventionPage: React.FC = () => {
         </RefGrid>
       </div>
 
+      <div style={{ marginBottom: 16 }}>
+        <Tabs
+          activeKey={query.status || 'all'}
+          onChange={(k) =>
+            setQuery((prev) => ({
+              ...prev,
+              status: k === 'all' ? undefined : k,
+            }))
+          }
+          items={[
+            { key: 'all', label: '全部' },
+            ...INTERVENTION_STATUS_OPTIONS.map((o) => ({
+              key: o.value,
+              label: o.label,
+            })),
+          ]}
+        />
+      </div>
+
       <AppTable<Intervention>
         columns={columns}
         dataSource={data}
@@ -386,17 +425,7 @@ const InterventionPage: React.FC = () => {
         searchPlaceholder="搜索干预记录"
         toolbar={
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ minWidth: 120 }}>
-              <Select
-                label="状态"
-                value={query.status || ''}
-                onChange={(v) =>
-                  setQuery((prev) => ({ ...prev, status: v ? String(v) : undefined }))
-                }
-                options={[{ label: '全部', value: '' }, ...INTERVENTION_STATUS_OPTIONS]}
-              />
-            </div>
-            <div style={{ minWidth: 120 }}>
+            <div style={{ minWidth: 140 }}>
               <Select
                 label="干预类型"
                 value={query.type || ''}
@@ -406,11 +435,6 @@ const InterventionPage: React.FC = () => {
                 options={[{ label: '全部', value: '' }, ...INTERVENTION_TYPE_OPTIONS]}
               />
             </div>
-            <PermissionGuard permission="intervention:create">
-              <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
-                新建干预
-              </Button>
-            </PermissionGuard>
           </div>
         }
       />

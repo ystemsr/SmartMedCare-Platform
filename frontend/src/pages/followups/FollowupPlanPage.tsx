@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import {
   Button,
@@ -93,86 +93,12 @@ const formFields: FormFieldConfig[] = [
 ];
 
 const FollowupPlanPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'plan' | 'record'>('plan');
   const [formVisible, setFormVisible] = useState(false);
   const [editingFollowup, setEditingFollowup] = useState<Followup | null>(null);
   const [recordModalVisible, setRecordModalVisible] = useState(false);
   const [recordFollowupId, setRecordFollowupId] = useState<number | null>(null);
   const [recordResult, setRecordResult] = useState('');
   const [recordNextAction, setRecordNextAction] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'ai' | 'manual'>('all');
-
-  // Records tab state
-  const [recordsData, setRecordsData] = useState<Followup[]>([]);
-  const [recordsLoading, setRecordsLoading] = useState(false);
-  const [recordsPagination, setRecordsPagination] = useState({ current: 1, pageSize: 30, total: 0 });
-
-  const fetchRecords = useCallback(async (page = 1, pageSize = 30) => {
-    setRecordsLoading(true);
-    try {
-      const res = await getFollowups({
-        page,
-        page_size: pageSize,
-        status: 'completed',
-      });
-      setRecordsData(res.data.items);
-      setRecordsPagination({ current: res.data.page, pageSize: res.data.page_size, total: res.data.total });
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '加载失败');
-    } finally {
-      setRecordsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'record') {
-      fetchRecords();
-    }
-  }, [activeTab, fetchRecords]);
-
-  const recordsColumns: AppTableColumn<Followup>[] = [
-    { title: '老人ID', dataIndex: 'elder_id', width: 80 },
-    { title: '老人姓名', dataIndex: 'elder_name', width: 100 },
-    {
-      title: '随访方式',
-      dataIndex: 'plan_type',
-      width: 100,
-      render: (value) => formatPlanType(value as string | null | undefined),
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      width: 100,
-      render: (status: unknown) => {
-        const followupStatus = String(status ?? '');
-        return (
-          <Chip
-            outlined
-            style={{
-              color: FOLLOWUP_STATUS_COLORS[followupStatus] || 'var(--smc-text)',
-              borderColor: FOLLOWUP_STATUS_COLORS[followupStatus] || 'var(--smc-divider)',
-            }}
-          >
-            {formatFollowupStatus(followupStatus)}
-          </Chip>
-        );
-      },
-    },
-    {
-      title: '计划时间',
-      dataIndex: 'planned_at',
-      render: (value) => formatDateTime(value as string | null | undefined),
-      width: 170,
-    },
-    { title: '负责人', dataIndex: 'assigned_to_name', width: 100 },
-    { title: '备注', dataIndex: 'notes', ellipsis: true },
-    {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      render: (value) => formatDateTime(value as string | null | undefined),
-      width: 170,
-    },
-  ];
 
   const fetchFn = useCallback(
     (params: FollowupListQuery & { page: number; page_size: number }) => getFollowups(params),
@@ -181,16 +107,6 @@ const FollowupPlanPage: React.FC = () => {
 
   const { data, loading, pagination, handleTableChange, refresh, handleSearch, query, setQuery } =
     useTable<Followup, FollowupListQuery>(fetchFn);
-
-  const filteredData = useMemo(() => {
-    if (sourceFilter === 'all') {
-      return data;
-    }
-    return data.filter((item) => {
-      const isAi = item.plan_type === 'ai_suggested' || item.alert_source === 'ml';
-      return sourceFilter === 'ai' ? isAi : !isAi;
-    });
-  }, [data, sourceFilter]);
 
   const handleEdit = (record: Followup) => {
     setEditingFollowup(record);
@@ -411,154 +327,127 @@ const FollowupPlanPage: React.FC = () => {
 
       <div style={{ marginBottom: 16 }}>
         <Tabs
-          activeKey={activeTab}
-          onChange={(k) => setActiveTab(k as 'plan' | 'record')}
+          activeKey={query.status || 'all'}
+          onChange={(k) =>
+            setQuery((prev) => ({
+              ...prev,
+              status: k === 'all' ? undefined : k,
+            }))
+          }
           items={[
-            { key: 'plan', label: '随访计划' },
-            { key: 'record', label: '随访记录' },
+            { key: 'all', label: '全部' },
+            ...FOLLOWUP_STATUS_OPTIONS.map((o) => ({
+              key: o.value,
+              label: o.label,
+            })),
           ]}
         />
       </div>
 
-      {activeTab === 'plan' ? (
-        <>
-          <AppTable<Followup>
-            columns={columns}
-            dataSource={filteredData}
-            loading={loading}
-            pagination={pagination}
-            onChange={handleTableChange}
-            onSearch={handleSearch}
-            searchPlaceholder="搜索随访计划"
-            toolbar={
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <div style={{ minWidth: 120 }}>
-                  <Select
-                    label="状态"
-                    value={query.status || ''}
-                    onChange={(v) =>
-                      setQuery((prev) => ({ ...prev, status: v ? String(v) : undefined }))
-                    }
-                    options={[{ label: '全部', value: '' }, ...FOLLOWUP_STATUS_OPTIONS]}
-                  />
-                </div>
-                <div style={{ minWidth: 120 }}>
-                  <Select
-                    label="随访方式"
-                    value={query.plan_type || ''}
-                    onChange={(v) =>
-                      setQuery((prev) => ({ ...prev, plan_type: v ? String(v) : undefined }))
-                    }
-                    options={[{ label: '全部', value: '' }, ...FOLLOWUP_TYPE_OPTIONS]}
-                  />
-                </div>
-                <div style={{ minWidth: 120 }}>
-                  <Select
-                    label="来源"
-                    value={sourceFilter}
-                    onChange={(v) => setSourceFilter(String(v) as 'all' | 'ai' | 'manual')}
-                    options={[
-                      { label: '全部', value: 'all' },
-                      { label: 'AI 推荐', value: 'ai' },
-                      { label: '人工', value: 'manual' },
-                    ]}
-                  />
-                </div>
-                <div style={{ minWidth: 160 }}>
-                  <DatePicker
-                    label="开始日期"
-                    value={query.date_start || null}
-                    onChange={(v) =>
-                      setQuery((prev) => ({ ...prev, date_start: v || undefined }))
-                    }
-                  />
-                </div>
-                <div style={{ minWidth: 160 }}>
-                  <DatePicker
-                    label="结束日期"
-                    value={query.date_end || null}
-                    onChange={(v) =>
-                      setQuery((prev) => ({ ...prev, date_end: v || undefined }))
-                    }
-                  />
-                </div>
-                <PermissionGuard permission="followup:create">
-                  <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
-                    新建随访计划
-                  </Button>
-                </PermissionGuard>
-              </div>
-            }
-          />
-
-          <AppForm
-            title={editingFollowup ? '编辑随访计划' : '新建随访计划'}
-            visible={formVisible}
-            fields={formFields}
-            initialValues={editingFollowup || undefined}
-            onSubmit={async (values) => {
-              if (editingFollowup) {
-                await updateFollowup(editingFollowup.id, values as Parameters<typeof updateFollowup>[1]);
-              } else {
-                await createFollowup(values as Parameters<typeof createFollowup>[0]);
-              }
-              message.success(editingFollowup ? '更新成功' : '创建成功');
-              setFormVisible(false);
-              refresh();
-            }}
-            onCancel={() => setFormVisible(false)}
-          />
-
-          <Modal
-            open={recordModalVisible}
-            onClose={() => {
-              setRecordModalVisible(false);
-              setRecordFollowupId(null);
-            }}
-            title="记录随访结果"
-            width={520}
-            footer={
-              <>
-                <Button
-                  variant="outlined"
-                  onClick={() => {
-                    setRecordModalVisible(false);
-                    setRecordFollowupId(null);
-                  }}
-                >
-                  取消
-                </Button>
-                <Button onClick={handleRecordSubmit}>保存</Button>
-              </>
-            }
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <Textarea
-                label="随访结果"
-                required
-                value={recordResult}
-                onChange={(event) => setRecordResult(event.target.value)}
-                rows={4}
-              />
-              <Textarea
-                label="后续行动"
-                value={recordNextAction}
-                onChange={(event) => setRecordNextAction(event.target.value)}
-                rows={3}
+      <AppTable<Followup>
+        columns={columns}
+        dataSource={data}
+        loading={loading}
+        pagination={pagination}
+        onChange={handleTableChange}
+        onSearch={handleSearch}
+        searchPlaceholder="搜索随访"
+        toolbar={
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ minWidth: 120 }}>
+              <Select
+                label="随访方式"
+                value={query.plan_type || ''}
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, plan_type: v ? String(v) : undefined }))
+                }
+                options={[{ label: '全部', value: '' }, ...FOLLOWUP_TYPE_OPTIONS]}
               />
             </div>
-          </Modal>
-        </>
-      ) : (
-        <AppTable<Followup>
-          columns={recordsColumns}
-          dataSource={recordsData}
-          loading={recordsLoading}
-          pagination={{ ...recordsPagination, showSizeChanger: true }}
-          onChange={(pag) => fetchRecords(pag.current, pag.pageSize)}
-          emptyText="暂无随访记录"
-        />
-      )}
+            <div style={{ minWidth: 160 }}>
+              <DatePicker
+                label="开始日期"
+                value={query.date_start || null}
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, date_start: v || undefined }))
+                }
+              />
+            </div>
+            <div style={{ minWidth: 160 }}>
+              <DatePicker
+                label="结束日期"
+                value={query.date_end || null}
+                onChange={(v) =>
+                  setQuery((prev) => ({ ...prev, date_end: v || undefined }))
+                }
+              />
+            </div>
+            <PermissionGuard permission="followup:create">
+              <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
+                新建随访
+              </Button>
+            </PermissionGuard>
+          </div>
+        }
+      />
+
+      <AppForm
+        title={editingFollowup ? '编辑随访' : '新建随访'}
+        visible={formVisible}
+        fields={formFields}
+        initialValues={editingFollowup || undefined}
+        onSubmit={async (values) => {
+          if (editingFollowup) {
+            await updateFollowup(editingFollowup.id, values as Parameters<typeof updateFollowup>[1]);
+          } else {
+            await createFollowup(values as Parameters<typeof createFollowup>[0]);
+          }
+          message.success(editingFollowup ? '更新成功' : '创建成功');
+          setFormVisible(false);
+          refresh();
+        }}
+        onCancel={() => setFormVisible(false)}
+      />
+
+      <Modal
+        open={recordModalVisible}
+        onClose={() => {
+          setRecordModalVisible(false);
+          setRecordFollowupId(null);
+        }}
+        title="记录随访结果"
+        width={520}
+        footer={
+          <>
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setRecordModalVisible(false);
+                setRecordFollowupId(null);
+              }}
+            >
+              取消
+            </Button>
+            <Button onClick={handleRecordSubmit}>保存</Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Textarea
+            label="随访结果"
+            required
+            value={recordResult}
+            onChange={(event) => setRecordResult(event.target.value)}
+            rows={4}
+          />
+          <Textarea
+            label="后续行动"
+            value={recordNextAction}
+            onChange={(event) => setRecordNextAction(event.target.value)}
+            rows={3}
+          />
+        </div>
+      </Modal>
     </div>
   );
 };

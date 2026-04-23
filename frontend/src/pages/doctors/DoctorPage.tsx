@@ -147,13 +147,21 @@ const DoctorPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 160,
+      width: 120,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => {
         const isActive = record.status === 'active';
         return (
-          <div style={{ display: 'flex', gap: 4 }}>
-            <PermissionGuard permission="user:manage">
+          <PermissionGuard permission="user:manage">
+            <div
+              style={{
+                display: 'flex',
+                gap: 4,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
               <Tooltip title="编辑">
                 <IconButton size="sm" onClick={() => handleEdit(record)}>
                   <Pencil size={14} />
@@ -173,8 +181,8 @@ const DoctorPage: React.FC = () => {
                   <Trash2 size={14} color="var(--smc-error)" />
                 </IconButton>
               </Tooltip>
-            </PermissionGuard>
-          </div>
+            </div>
+          </PermissionGuard>
         );
       },
     },

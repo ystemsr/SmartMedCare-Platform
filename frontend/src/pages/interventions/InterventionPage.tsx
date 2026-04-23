@@ -1,17 +1,20 @@
 import React, { useState, useCallback } from 'react';
-import { Plus, Pencil, Play, CheckCircle2, Square, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import {
   Button,
   Chip,
+  IconButton,
   Modal,
   Select,
   Textarea,
+  Tooltip,
   confirm,
 } from '../../components/ui';
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
+import StatusSwitcher from '../../components/StatusSwitcher';
 import { useTable } from '../../hooks/useTable';
 import {
   getInterventions,
@@ -25,6 +28,37 @@ import { INTERVENTION_STATUS_OPTIONS, INTERVENTION_STATUS_COLORS } from '../../u
 import { message } from '../../utils/message';
 import type { Intervention, InterventionListQuery } from '../../types/intervention';
 import { RefPageHead, RefGrid, RefStat, RefCard } from '../../components/ref';
+
+type InterventionStatus = Intervention['status'];
+
+const INTERVENTION_STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  INTERVENTION_STATUS_OPTIONS.map((o) => [o.value, o.label]),
+);
+
+const buildStatusOption = (value: string) => ({
+  value,
+  label: INTERVENTION_STATUS_LABEL[value] || value,
+  color: INTERVENTION_STATUS_COLORS[value] || 'var(--smc-text)',
+});
+
+// 2x2 grid — laid out in natural progression order:
+//   [已计划]   [进行中]
+//   [已停止]   [已完成]
+const INTERVENTION_STATUS_GRID: [
+  [ReturnType<typeof buildStatusOption>, ReturnType<typeof buildStatusOption>],
+  [ReturnType<typeof buildStatusOption>, ReturnType<typeof buildStatusOption>],
+] = [
+  [buildStatusOption('planned'), buildStatusOption('ongoing')],
+  [buildStatusOption('stopped'), buildStatusOption('completed')],
+];
+
+// Forward-only transitions. Terminal states (completed / stopped) cannot move.
+const INTERVENTION_ALLOWED_NEXT: Record<string, string[]> = {
+  planned: ['ongoing', 'stopped'],
+  ongoing: ['completed', 'stopped'],
+  completed: [],
+  stopped: [],
+};
 
 const INTERVENTION_TYPE_OPTIONS = [
   { label: '用药指导', value: 'medication_guidance' },
@@ -97,6 +131,37 @@ const InterventionPage: React.FC = () => {
     setStatusModalVisible(true);
   };
 
+  const handleDirectStatusUpdate = async (
+    id: number,
+    status: InterventionStatus,
+  ) => {
+    const ok = await confirm({
+      title: '更新干预状态',
+      content: `确认将该干预标记为${formatInterventionStatus(status)}？`,
+      intent: 'info',
+    });
+    if (!ok) return;
+    try {
+      await updateInterventionStatus(id, { status });
+      message.success('状态更新成功');
+      refresh();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '操作失败');
+    }
+  };
+
+  const handleStatusSwitch = (
+    record: Intervention,
+    next: InterventionStatus,
+  ) => {
+    // ongoing → completed must go through the result modal
+    if (record.status === 'ongoing' && next === 'completed') {
+      openStatusModal(record.id, next);
+      return;
+    }
+    handleDirectStatusUpdate(record.id, next);
+  };
+
   const handleStatusSubmit = async () => {
     if (!statusTarget) {
       return;
@@ -135,20 +200,36 @@ const InterventionPage: React.FC = () => {
     {
       title: '状态',
       dataIndex: 'status',
-      width: 100,
-      render: (status: unknown) => {
+      width: 120,
+      render: (status: unknown, record) => {
         const interventionStatus = String(status ?? '');
+        const inGrid = INTERVENTION_STATUS_GRID.flat().some(
+          (o) => o.value === interventionStatus,
+        );
+        if (!inGrid) {
+          return (
+            <Chip
+              outlined
+              style={{
+                color:
+                  INTERVENTION_STATUS_COLORS[interventionStatus] || 'var(--smc-text)',
+                borderColor:
+                  INTERVENTION_STATUS_COLORS[interventionStatus] || 'var(--smc-divider)',
+              }}
+            >
+              {formatInterventionStatus(interventionStatus)}
+            </Chip>
+          );
+        }
         return (
-          <Chip
-            outlined
-            style={{
-              color: INTERVENTION_STATUS_COLORS[interventionStatus] || 'var(--smc-text)',
-              borderColor:
-                INTERVENTION_STATUS_COLORS[interventionStatus] || 'var(--smc-divider)',
-            }}
-          >
-            {formatInterventionStatus(interventionStatus)}
-          </Chip>
+          <StatusSwitcher
+            current={interventionStatus}
+            grid={INTERVENTION_STATUS_GRID}
+            allowedNext={INTERVENTION_ALLOWED_NEXT[interventionStatus] || []}
+            onChange={(next) =>
+              handleStatusSwitch(record, next as InterventionStatus)
+            }
+          />
         );
       },
     },
@@ -162,60 +243,31 @@ const InterventionPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 320,
+      width: 96,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          <PermissionGuard permission="intervention:create">
-            <Button
-              size="sm"
-              variant="text"
-              startIcon={<Pencil size={14} />}
-              onClick={() => handleEdit(record)}
-            >
-              编辑
-            </Button>
-            {record.status === 'planned' && (
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<Play size={14} />}
-                onClick={() => openStatusModal(record.id, 'ongoing')}
-              >
-                开始执行
-              </Button>
-            )}
-            {record.status === 'ongoing' && (
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<CheckCircle2 size={14} />}
-                onClick={() => openStatusModal(record.id, 'completed')}
-              >
-                完成
-              </Button>
-            )}
-            {(record.status === 'planned' || record.status === 'ongoing') && (
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<Square size={14} />}
-                onClick={() => openStatusModal(record.id, 'stopped')}
-              >
-                停止
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="text"
-              danger
-              startIcon={<Trash2 size={14} />}
-              onClick={() => handleDelete(record.id)}
-            >
-              删除
-            </Button>
-          </PermissionGuard>
-        </div>
+        <PermissionGuard permission="intervention:create">
+          <div
+            style={{
+              display: 'flex',
+              gap: 4,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Tooltip title="编辑">
+              <IconButton size="sm" onClick={() => handleEdit(record)}>
+                <Pencil size={14} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="删除">
+              <IconButton size="sm" onClick={() => handleDelete(record.id)}>
+                <Trash2 size={14} color="var(--smc-error)" />
+              </IconButton>
+            </Tooltip>
+          </div>
+        </PermissionGuard>
       ),
     },
   ];

@@ -844,6 +844,11 @@
   pointer-events: none;
   animation: smc-fade-in var(--smc-dur-fast) var(--smc-ease);
 }
+/* Portal-mounted tooltip positions itself in page coordinates. */
+.smc-tip-bubble--portal {
+  position: absolute;
+  z-index: var(--smc-z-tooltip);
+}
 
 /* ---------- Menu (dropdown) ---------- */
 .smc-menu {
@@ -1042,6 +1047,7 @@
   color: var(--smc-text);
 }
 .smc-table th {
+  padding: 8px 14px;
   font-weight: 500;
   background: var(--smc-surface-alt);
   color: var(--smc-text-2);
@@ -1052,6 +1058,7 @@
   letter-spacing: 0.03em;
   text-transform: uppercase;
   font-size: var(--smc-fs-xs);
+  line-height: 1.4;
 }
 .smc-table tbody tr {
   transition: background var(--smc-dur-fast) var(--smc-ease);

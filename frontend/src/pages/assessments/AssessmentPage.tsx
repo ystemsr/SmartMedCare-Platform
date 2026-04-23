@@ -4,9 +4,11 @@ import {
   Button,
   Chip,
   DatePicker,
+  IconButton,
   Modal,
   Select,
   Spinner,
+  Tooltip,
   confirm,
 } from '../../components/ui';
 import type { AppTableColumn } from '../../components/AppTable';
@@ -302,19 +304,6 @@ const AssessmentPage: React.FC = () => {
         );
       },
     },
-    {
-      title: 'AI 评估',
-      dataIndex: 'feature_inputs',
-      width: 90,
-      render: (v: unknown) =>
-        v ? (
-          <Chip tone="info" outlined>
-            AI
-          </Chip>
-        ) : (
-          <Chip outlined>手动</Chip>
-        ),
-    },
     { title: '评估摘要', dataIndex: 'summary', ellipsis: true },
     {
       title: '创建时间',
@@ -325,38 +314,31 @@ const AssessmentPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 150,
+      width: 96,
       align: 'center',
       fixed: 'right',
       render: (_, record) => (
-        <div
-          style={{
-            display: 'flex',
-            gap: 4,
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-          }}
-        >
-          <PermissionGuard permission="assessment:create">
-            <Button
-              size="sm"
-              variant="text"
-              startIcon={<Pencil size={14} />}
-              onClick={() => handleEdit(record)}
-            >
-              编辑
-            </Button>
-            <Button
-              size="sm"
-              variant="text"
-              danger
-              startIcon={<Trash2 size={14} />}
-              onClick={() => handleDelete(record.id)}
-            >
-              删除
-            </Button>
-          </PermissionGuard>
-        </div>
+        <PermissionGuard permission="assessment:create">
+          <div
+            style={{
+              display: 'flex',
+              gap: 4,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Tooltip title="编辑">
+              <IconButton size="sm" onClick={() => handleEdit(record)}>
+                <Pencil size={14} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="删除">
+              <IconButton size="sm" onClick={() => handleDelete(record.id)}>
+                <Trash2 size={14} color="var(--smc-error)" />
+              </IconButton>
+            </Tooltip>
+          </div>
+        </PermissionGuard>
       ),
     },
   ];

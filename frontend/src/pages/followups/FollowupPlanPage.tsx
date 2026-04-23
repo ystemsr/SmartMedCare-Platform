@@ -1,26 +1,22 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import {
-  Plus,
-  Pencil,
-  Play,
-  FilePlus,
-  Trash2,
-  Sparkles,
-} from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import {
   Button,
   Chip,
   DatePicker,
+  IconButton,
   Modal,
   Select,
   Tabs,
   Textarea,
+  Tooltip,
   confirm,
 } from '../../components/ui';
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
+import StatusSwitcher from '../../components/StatusSwitcher';
 import { useTable } from '../../hooks/useTable';
 import {
   getFollowups,
@@ -39,6 +35,38 @@ import {
 import { message } from '../../utils/message';
 import type { Followup, FollowupListQuery } from '../../types/followup';
 import { RefPageHead, RefStat, RefGrid } from '../../components/ref';
+
+type FollowupStatus = Followup['status'];
+
+const FOLLOWUP_STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  FOLLOWUP_STATUS_OPTIONS.map((o) => [o.value, o.label]),
+);
+
+const buildStatusOption = (value: string) => ({
+  value,
+  label: FOLLOWUP_STATUS_LABEL[value] || value,
+  color: FOLLOWUP_STATUS_COLORS[value] || 'var(--smc-text)',
+});
+
+// 2x2 grid — laid out in natural progression order:
+//   [待执行]      [进行中]
+//   [已取消]      [已完成]
+const FOLLOWUP_STATUS_GRID: [
+  [ReturnType<typeof buildStatusOption>, ReturnType<typeof buildStatusOption>],
+  [ReturnType<typeof buildStatusOption>, ReturnType<typeof buildStatusOption>],
+] = [
+  [buildStatusOption('todo'), buildStatusOption('in_progress')],
+  [buildStatusOption('cancelled'), buildStatusOption('completed')],
+];
+
+// Forward-only transitions. Terminal states (completed / cancelled) cannot move.
+const FOLLOWUP_ALLOWED_NEXT: Record<string, string[]> = {
+  todo: ['in_progress', 'cancelled'],
+  in_progress: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: [],
+  overdue: ['in_progress', 'cancelled'],
+};
 
 const formFields: FormFieldConfig[] = [
   { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
@@ -209,11 +237,16 @@ const FollowupPlanPage: React.FC = () => {
     }
   };
 
-  const handleAddRecord = (followupId: number) => {
-    setRecordFollowupId(followupId);
-    setRecordResult('');
-    setRecordNextAction('');
-    setRecordModalVisible(true);
+  const handleStatusSwitch = (record: Followup, next: FollowupStatus) => {
+    // in_progress → completed must go through the result modal
+    if (record.status === 'in_progress' && next === 'completed') {
+      setRecordFollowupId(record.id);
+      setRecordResult('');
+      setRecordNextAction('');
+      setRecordModalVisible(true);
+      return;
+    }
+    handleStatusUpdate(record.id, next);
   };
 
   const handleRecordSubmit = async () => {
@@ -252,37 +285,37 @@ const FollowupPlanPage: React.FC = () => {
       render: (value) => formatPlanType(value as string | null | undefined),
     },
     {
-      title: 'AI 推荐',
-      key: 'ai_source',
-      width: 100,
-      render: (_, record) => {
-        const isAi = record.plan_type === 'ai_suggested' || record.alert_source === 'ml';
-        if (!isAi) {
-          return null;
-        }
-        return (
-          <Chip tone="info" outlined icon={<Sparkles size={12} />}>
-            AI
-          </Chip>
-        );
-      },
-    },
-    {
       title: '状态',
       dataIndex: 'status',
-      width: 100,
-      render: (status: unknown) => {
+      width: 120,
+      render: (status: unknown, record) => {
         const followupStatus = String(status ?? '');
+        const inGrid = FOLLOWUP_STATUS_GRID.flat().some(
+          (o) => o.value === followupStatus,
+        );
+        if (!inGrid) {
+          return (
+            <Chip
+              outlined
+              style={{
+                color: FOLLOWUP_STATUS_COLORS[followupStatus] || 'var(--smc-text)',
+                borderColor:
+                  FOLLOWUP_STATUS_COLORS[followupStatus] || 'var(--smc-divider)',
+              }}
+            >
+              {formatFollowupStatus(followupStatus)}
+            </Chip>
+          );
+        }
         return (
-          <Chip
-            outlined
-            style={{
-              color: FOLLOWUP_STATUS_COLORS[followupStatus] || 'var(--smc-text)',
-              borderColor: FOLLOWUP_STATUS_COLORS[followupStatus] || 'var(--smc-divider)',
-            }}
-          >
-            {formatFollowupStatus(followupStatus)}
-          </Chip>
+          <StatusSwitcher
+            current={followupStatus}
+            grid={FOLLOWUP_STATUS_GRID}
+            allowedNext={FOLLOWUP_ALLOWED_NEXT[followupStatus] || []}
+            onChange={(next) =>
+              handleStatusSwitch(record, next as FollowupStatus)
+            }
+          />
         );
       },
     },
@@ -297,52 +330,31 @@ const FollowupPlanPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 320,
+      width: 96,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          <PermissionGuard permission="followup:update">
-            <Button
-              size="sm"
-              variant="text"
-              startIcon={<Pencil size={14} />}
-              onClick={() => handleEdit(record)}
-            >
-              编辑
-            </Button>
-            {record.status === 'todo' && (
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<Play size={14} />}
-                onClick={() => handleStatusUpdate(record.id, 'in_progress')}
-              >
-                开始
-              </Button>
-            )}
-            {record.status === 'in_progress' && (
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<FilePlus size={14} />}
-                onClick={() => handleAddRecord(record.id)}
-              >
-                记录结果
-              </Button>
-            )}
-          </PermissionGuard>
-          <PermissionGuard permission="followup:update">
-            <Button
-              size="sm"
-              variant="text"
-              danger
-              startIcon={<Trash2 size={14} />}
-              onClick={() => handleDelete(record.id)}
-            >
-              删除
-            </Button>
-          </PermissionGuard>
-        </div>
+        <PermissionGuard permission="followup:update">
+          <div
+            style={{
+              display: 'flex',
+              gap: 4,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Tooltip title="编辑">
+              <IconButton size="sm" onClick={() => handleEdit(record)}>
+                <Pencil size={14} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="删除">
+              <IconButton size="sm" onClick={() => handleDelete(record.id)}>
+                <Trash2 size={14} color="var(--smc-error)" />
+              </IconButton>
+            </Tooltip>
+          </div>
+        </PermissionGuard>
       ),
     },
   ];

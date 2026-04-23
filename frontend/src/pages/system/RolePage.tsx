@@ -8,6 +8,7 @@ import { getRoles, createRole, updateRolePermissions, getPermissionsTree } from 
 import { formatDateTime } from '../../utils/formatter';
 import type { PermissionNode, Role } from '../../types/user';
 import { message } from '../../utils/message';
+import { RefPageHead } from '../../components/ref';
 
 const formFields: FormFieldConfig[] = [
   { name: 'name', label: '角色标识', required: true, placeholder: '如 doctor, admin' },
@@ -163,6 +164,18 @@ const RolePage: React.FC = () => {
 
   return (
     <>
+      <RefPageHead
+        title="用户与角色管理"
+        subtitle={`RBAC 授权 · 共 ${roles.length} 个角色，控制各角色可访问的功能点`}
+        actions={
+          <PermissionGuard permission="role:manage">
+            <Button startIcon={<Plus size={14} />} onClick={() => setFormVisible(true)}>
+              新建角色
+            </Button>
+          </PermissionGuard>
+        }
+      />
+
       <AppTable<Role>
         columns={columns}
         dataSource={roles}

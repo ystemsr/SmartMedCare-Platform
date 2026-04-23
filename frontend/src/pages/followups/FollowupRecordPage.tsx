@@ -7,6 +7,7 @@ import { formatDateTime, formatFollowupStatus, formatPlanType } from '../../util
 import { FOLLOWUP_STATUS_COLORS } from '../../utils/constants';
 import { message } from '../../utils/message';
 import type { Followup } from '../../types/followup';
+import { RefPageHead } from '../../components/ref';
 
 const FollowupRecordPage: React.FC = () => {
   const [data, setData] = useState<Followup[]>([]);
@@ -79,14 +80,20 @@ const FollowupRecordPage: React.FC = () => {
   ];
 
   return (
-    <AppTable<Followup>
-      columns={columns}
-      dataSource={data}
-      loading={loading}
-      pagination={{ ...pagination, showSizeChanger: true }}
-      onChange={(pag) => fetchData(pag.current, pag.pageSize)}
-      emptyText="暂无随访记录"
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <RefPageHead
+        title="随访记录"
+        subtitle={`共 ${pagination.total} 条已完成的随访记录`}
+      />
+      <AppTable<Followup>
+        columns={columns}
+        dataSource={data}
+        loading={loading}
+        pagination={{ ...pagination, showSizeChanger: true }}
+        onChange={(pag) => fetchData(pag.current, pag.pageSize)}
+        emptyText="暂无随访记录"
+      />
+    </div>
   );
 };
 

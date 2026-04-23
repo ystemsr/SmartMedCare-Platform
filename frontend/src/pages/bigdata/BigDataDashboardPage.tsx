@@ -13,6 +13,7 @@ import { formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
 import { usePermission } from '../../hooks/usePermission';
 import type { Job, JobType, PipelineFreshness, StageFreshness } from '../../types/bigdata';
+import { RefStat, RefGrid } from '../../components/ref';
 
 const POLL_INTERVAL_IDLE = 10_000;
 const POLL_INTERVAL_RUNNING = 5_000;
@@ -133,12 +134,48 @@ const BigDataDashboardPage: React.FC = () => {
   ).length;
   const recentJobs = jobs.slice(0, 8);
 
+  const succeededJobs = jobs.filter((j) => j.status === 'succeeded').length;
+  const failedJobs = jobs.filter((j) => j.status === 'failed').length;
+  const runningJobs = jobs.filter((j) => j.status === 'running').length;
+
   return (
     <div>
       <PageHeader
         title="大数据总览"
         description="这里展示系统数据是否够新。三段流程负责把业务数据同步、汇总、打分。绿色=6 小时内刚更新过，一般你不需要手动做任何事。"
       />
+
+      {/* Reference-style KPI row — the first tile uses the gradient KPI style. */}
+      <RefGrid cols={4} style={{ marginBottom: 16 }}>
+        <RefStat
+          kpi
+          label="作业总数"
+          value={jobsTotal || jobs.length}
+          sub={running ? `运行中 ${runningJobs}` : '系统处于空闲'}
+          icon={<LineChart size={16} />}
+        />
+        <RefStat
+          label="批量推理成功"
+          value={predictionCount}
+          sub="累计完成数"
+          icon={<BrainCircuit size={16} />}
+          tone="info"
+        />
+        <RefStat
+          label="近期失败作业"
+          value={failedJobs}
+          sub="需要关注"
+          tone="risk"
+          valueColor={failedJobs > 0 ? 'var(--smc-error)' : 'var(--smc-text)'}
+        />
+        <RefStat
+          label="最近成功作业"
+          value={succeededJobs}
+          sub="近 30 条"
+          tone="ok"
+          valueColor="var(--smc-success)"
+        />
+      </RefGrid>
 
       {/* Top action bar: refresh-all + status banner */}
       <Card style={{ marginBottom: 20 }}>

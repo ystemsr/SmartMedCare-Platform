@@ -1,9 +1,14 @@
 """Spark job submission client.
 
-Submits jobs by shelling out to `docker exec` on the Spark master container,
-invoking `spark-submit` on scripts delivered by Block B under
-`/opt/spark-apps/spark/<job>.py`. The job is launched as a background asyncio
-task; stdout/stderr are streamed to a log file under `SPARK_LOG_DIR`.
+Submits jobs by running `spark-submit` inside the Spark master container via
+the Docker Engine API (Unix socket at /var/run/docker.sock), invoking scripts
+delivered under `/opt/spark-apps/spark/<job>.py`. The job is launched as a
+background asyncio task; stdout/stderr are streamed to a log file under
+`SPARK_LOG_DIR`.
+
+Talking to the Docker daemon via the Python SDK (docker-py) keeps the backend
+image slim — no `docker` CLI / `docker.io` apt package is required, only the
+socket mount already declared in docker-compose.yml.
 """
 
 from __future__ import annotations
@@ -11,12 +16,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from docker import APIClient
+from docker.errors import APIError, DockerException, NotFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
@@ -54,27 +60,46 @@ def _docker_socket_path() -> str:
     return os.environ.get("DOCKER_HOST_SOCKET", "/var/run/docker.sock")
 
 
+def _docker_base_url() -> str:
+    return f"unix://{_docker_socket_path()}"
+
+
+def _docker_api_client() -> APIClient:
+    """Return a low-level Docker API client bound to the mounted socket."""
+    return APIClient(base_url=_docker_base_url())
+
+
 def _preflight_error() -> Optional[str]:
     """Return an English error string if this host cannot launch spark jobs.
 
-    Job submission shells out to `docker exec <spark-master> spark-submit ...`,
-    so we need (1) the docker CLI on PATH and (2) the docker socket reachable.
-    Without these, `asyncio.create_subprocess_exec` fails with a bare
-    "[Errno 2] No such file or directory" that is impossible to debug from the
-    UI log tail. Checking here turns that into a 400 on the submit endpoint.
+    Job submission uses the Docker Engine API over the Unix socket to `exec`
+    `spark-submit` inside the Spark master container. We need (1) the socket
+    to be mounted into this container and (2) the Spark master container to
+    exist and be reachable. Translating these failures here turns obscure
+    runtime errors into a crisp 400 on the submit endpoint.
     """
-    if shutil.which("docker") is None:
-        return (
-            "Spark job submission requires the 'docker' CLI in the backend "
-            "container. Rebuild the backend image so docker.io is installed: "
-            "docker compose up -d --build backend"
-        )
     sock = _docker_socket_path()
     if not os.path.exists(sock):
         return (
             f"Docker socket not mounted at {sock}. Ensure docker-compose.yml "
             "mounts /var/run/docker.sock into the backend service."
         )
+    try:
+        client = _docker_api_client()
+        client.ping()
+    except DockerException as e:
+        return f"Cannot connect to Docker daemon at {sock}: {e}"
+
+    container = _spark_container()
+    try:
+        client.inspect_container(container)
+    except NotFound:
+        return (
+            f"Spark master container '{container}' not found. "
+            "Is the spark-master service running? Check `docker compose ps`."
+        )
+    except APIError as e:
+        return f"Cannot inspect Spark master container '{container}': {e}"
     return None
 
 
@@ -89,12 +114,11 @@ def resolve_script(job_type: str) -> Optional[str]:
 
 
 def _build_command(job_type: str, params: dict[str, Any] | None) -> list[str]:
-    """Construct the `docker exec ... spark-submit ...` command."""
+    """Construct the `spark-submit ...` command to run inside spark-master."""
     script = resolve_script(job_type)
     if script is None:
         raise ValueError(f"Unknown job_type: {job_type}")
 
-    container = _spark_container()
     master = _spark_master_url()
     remote_script = f"{_apps_dir()}/spark/{script}"
 
@@ -106,13 +130,83 @@ def _build_command(job_type: str, params: dict[str, Any] | None) -> list[str]:
             args.extend([f"--{k}", str(v)])
 
     return [
-        "docker", "exec", container,
         "spark-submit",
         "--master", master,
         "--deploy-mode", "client",
         remote_script,
         *args,
     ]
+
+
+def _job_exec_env() -> list[str]:
+    """Env vars forwarded into the `spark-master` exec for our spark jobs.
+
+    The job scripts under data-jobs/spark/*.py read MySQL / HDFS connection
+    details from process env. We source them from the backend's own env
+    (loaded from .env via docker-compose `env_file`) so the spark-master
+    container does not need a copy of the credentials in its service
+    definition.
+    """
+    forward = [
+        "MYSQL_HOST",
+        "MYSQL_PORT",
+        "MYSQL_USER",
+        "MYSQL_PASSWORD",
+        "MYSQL_DATABASE",
+        "HDFS_BASE",
+        "SNAPSHOT_DT",
+    ]
+    env: list[str] = []
+    for name in forward:
+        value = os.environ.get(name)
+        if value is not None and value != "":
+            env.append(f"{name}={value}")
+    return env
+
+
+def _exec_in_spark_master(cmd: list[str], log_path: str) -> int:
+    """Run `cmd` inside the spark-master container, stream output to log_path.
+
+    Synchronous (blocking) — the caller is expected to run this in an asyncio
+    thread executor so the event loop is not blocked while Spark churns.
+    Returns the exec exit code.
+    """
+    client = _docker_api_client()
+    container = _spark_container()
+    exec_ref = client.exec_create(
+        container,
+        cmd,
+        stdout=True,
+        stderr=True,
+        tty=False,
+        environment=_job_exec_env(),
+    )
+    exec_id = exec_ref["Id"]
+
+    stream = client.exec_start(exec_id, stream=True, demux=False)
+    try:
+        with open(log_path, "w", encoding="utf-8") as log_f:
+            log_f.write(f"$ {' '.join(cmd)}\n")
+            for chunk in stream:
+                if not chunk:
+                    continue
+                if isinstance(chunk, bytes):
+                    log_f.write(chunk.decode("utf-8", errors="replace"))
+                else:
+                    for part in chunk:
+                        if part:
+                            log_f.write(part.decode("utf-8", errors="replace"))
+                log_f.flush()
+    finally:
+        # Ensure the stream is fully consumed so exec_inspect can report status.
+        try:
+            stream.close()  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            pass
+
+    info = client.exec_inspect(exec_id)
+    code = info.get("ExitCode")
+    return int(code if code is not None else 1)
 
 
 async def _update_job(job_id: str, data: dict) -> None:
@@ -137,14 +231,11 @@ async def _run_and_track(job_id: str, cmd: list[str], log_path: str) -> None:
     )
 
     try:
-        with open(log_path, "w", encoding="utf-8") as log_f:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=log_f,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            returncode = await proc.wait()
-    except (OSError, FileNotFoundError) as e:
+        loop = asyncio.get_running_loop()
+        returncode = await loop.run_in_executor(
+            None, _exec_in_spark_master, cmd, log_path
+        )
+    except (DockerException, OSError) as e:
         logger.exception("Failed to launch spark job %s", job_id)
         finished_at = datetime.now(timezone.utc)
         await _update_job(
@@ -162,9 +253,9 @@ async def _run_and_track(job_id: str, cmd: list[str], log_path: str) -> None:
                 f.write(
                     f"\nERROR launching job: {e}\n"
                     f"Command: {' '.join(cmd)}\n"
-                    "Hint: the backend container must have the 'docker' CLI "
-                    "installed and /var/run/docker.sock mounted so it can "
-                    "reach the Spark master container.\n"
+                    "Hint: the backend needs /var/run/docker.sock mounted and "
+                    "the spark-master container running so it can exec "
+                    "spark-submit inside it.\n"
                 )
         except OSError:
             pass
@@ -232,6 +323,13 @@ async def submit_job(
             "submitted_by": submitted_by,
         },
     )
+    # Commit before handing off to the background task. _run_and_track opens
+    # its own AsyncSession and immediately queries the row to stamp
+    # started_at / status=running; without this commit the task races with
+    # the FastAPI request's commit at end-of-scope, so that first update
+    # silently no-ops with "Job … not found during update" and the job
+    # ends up with finished_at set but started_at NULL.
+    await db.commit()
 
     cmd = _build_command(job_type, params)
     logger.info("Submitting spark job %s: %s", job_id, " ".join(cmd))

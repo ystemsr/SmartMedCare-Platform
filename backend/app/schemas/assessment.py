@@ -29,7 +29,17 @@ def _normalize_suggestions(value: Any) -> Any:
 
 
 class AssessmentCreate(BaseModel):
-    """Schema for creating an assessment."""
+    """Schema for creating an assessment.
+
+    Two modes supported:
+      1. Legacy manual entry — caller supplies `score`, `risk_level`, and
+         optionally `summary`/`suggestions`. `feature_inputs` stays NULL.
+      2. AI-driven — caller supplies `feature_inputs` (map of feature keys
+         defined in FEATURE_CATALOG). The service runs ML inference and
+         overwrites `score`, `risk_level`, `summary`, `suggestions` from the
+         model output. Missing features are mean-imputed; missing REQUIRED
+         features that cannot be auto-derived are rejected.
+    """
 
     elder_id: int
     assessment_type: str = "comprehensive"
@@ -37,6 +47,7 @@ class AssessmentCreate(BaseModel):
     risk_level: str = "low"
     summary: Optional[str] = None
     suggestions: Optional[list[str]] = None
+    feature_inputs: Optional[dict[str, Any]] = None
 
     @field_validator("suggestions", mode="before")
     @classmethod
@@ -70,6 +81,8 @@ class AssessmentResponse(BaseModel):
     risk_level: str
     summary: Optional[str] = None
     suggestions: Optional[list[str]] = None
+    feature_inputs: Optional[dict[str, Any]] = None
+    prediction_result_id: Optional[int] = None
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None
     created_at: Optional[datetime] = None

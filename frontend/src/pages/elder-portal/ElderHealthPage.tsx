@@ -17,6 +17,7 @@ import HealthTrendCharts, {
 import AlertsPanel from '../../components/elder-portal/AlertsPanel';
 import { formatDateTime } from '../../utils/formatter';
 import type { Alert as AlertEntity } from '../../types/alert';
+import { RefPageHead } from '../../components/ref';
 
 interface HealthRecord extends TrendRecord {
   id: number;
@@ -218,6 +219,10 @@ const ElderHealthPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <RefPageHead
+        title="我的健康记录"
+        subtitle="查看您的测量数据和健康趋势"
+      />
       <HealthTrendCharts records={trendRecords} />
 
       <AlertsPanel alerts={alerts} loading={alertsLoading} failed={alertsFailed} />

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, RefreshCw, XCircle, RotateCcw, Download, Copy } from 'lucide-react';
+import { Plus, RefreshCw, XCircle, RotateCcw, Download } from 'lucide-react';
 import PermissionGuard from '../../components/PermissionGuard';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PageHeader from '../../components/bigdata/PageHeader';
@@ -192,12 +192,6 @@ const JobManagerPage: React.FC = () => {
     }
   };
 
-  const handleCopyParams = (job: Job) => {
-    setSubmitType(job.job_type as JobType);
-    setSubmitParams({ ...(job.params || {}) });
-    setSubmitOpen(true);
-  };
-
   const columns: AppTableColumn<Job>[] = [
     {
       title: '作业 ID',
@@ -253,10 +247,18 @@ const JobManagerPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 220,
+      width: 140,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}
+        >
           <Button size="sm" variant="text" onClick={() => setSelected(record)}>
             详情
           </Button>
@@ -272,16 +274,6 @@ const JobManagerPage: React.FC = () => {
               </Button>
             </PermissionGuard>
           )}
-          <PermissionGuard permission="bigdata:run">
-            <Button
-              size="sm"
-              variant="text"
-              startIcon={<Copy size={14} />}
-              onClick={() => handleCopyParams(record)}
-            >
-              复用参数
-            </Button>
-          </PermissionGuard>
           {record.status === 'running' && (
             <PermissionGuard permission="bigdata:run">
               <Button

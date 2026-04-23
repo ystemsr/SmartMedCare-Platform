@@ -27,6 +27,7 @@ class AssessmentRepository:
             risk_level=data.risk_level,
             summary=data.summary,
             suggestions=data.suggestions,
+            feature_inputs=data.feature_inputs,
             created_by=created_by,
         )
         db.add(assessment)

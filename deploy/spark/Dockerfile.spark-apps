@@ -2,12 +2,40 @@ FROM bitnamilegacy/spark:3.5
 
 USER root
 
-RUN install_packages libgomp1 || true
+# Ensure UID 1001 has a /etc/passwd entry with a real home directory.
+# Bitnami's spark image runs as numeric UID 1001 with no matching passwd
+# entry — on Linux the JVM resolves `user.home` via getpwuid(3), so without
+# an entry it falls back to the literal string "?". Spark 3.5's
+# SparkSubmit.prepareSubmitEnvironment unconditionally initializes Ivy
+# settings (whose local repo defaults to ${user.home}/.ivy2/local) — this
+# aborts with "basedir must be absolute: ?/.ivy2/local" on every job,
+# regardless of whether --packages is actually used.
+RUN mkdir -p /home/spark \
+    && chown 1001:0 /home/spark \
+    && chmod 770 /home/spark \
+    && echo 'spark:x:1001:0:spark:/home/spark:/bin/bash' >> /etc/passwd
+
+RUN install_packages libgomp1 ca-certificates curl || true
+
+# Bake the MySQL JDBC driver onto Spark's classpath. Using `spark.jars.packages`
+# would pull it at submit time via Ivy, which (1) fails when the container has
+# no $HOME entry in /etc/passwd — JVM resolves `user.home` to `?` — and (2)
+# requires the spark-master container to reach Maven Central at runtime.
+# Placing the jar in $SPARK_HOME/jars removes both requirements.
+# Note: starting at 8.0.31 the artifact moved from groupId `mysql` to
+# `com.mysql`, so the repo path is /com/mysql/mysql-connector-j/... —
+# the old `/mysql/mysql-connector-j/` path returns 404.
+ARG MYSQL_JDBC_VERSION=8.0.33
+RUN curl -fsSL \
+    -o /opt/bitnami/spark/jars/mysql-connector-j-${MYSQL_JDBC_VERSION}.jar \
+    https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${MYSQL_JDBC_VERSION}/mysql-connector-j-${MYSQL_JDBC_VERSION}.jar \
+    && chmod 644 /opt/bitnami/spark/jars/mysql-connector-j-${MYSQL_JDBC_VERSION}.jar
 
 RUN pip install --no-cache-dir \
     torch==2.2.* \
-    numpy \
+    "numpy<2" \
     pandas \
+    pyarrow \
     "pyhive[hive_pure_sasl]" \
     thrift \
     thrift-sasl \

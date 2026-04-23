@@ -2,7 +2,10 @@ import React, {
   Fragment,
   type ReactNode,
   Suspense,
+  useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -44,6 +47,27 @@ function matchesPath(itemKey: string, pathname: string) {
   return pathname === itemKey || pathname.startsWith(`${itemKey}/`);
 }
 
+/**
+ * Among a set of sibling nav children, pick the one whose key is the
+ * longest matching prefix of the pathname. Needed because multiple
+ * children can match simultaneously (e.g. both `/bigdata` overview and
+ * `/bigdata/inference` match the path `/bigdata/inference`); without
+ * this, the first-matching-wins semantics of `Array.find` would always
+ * pin the highlight to the overview child.
+ */
+function findBestChildMatch(
+  children: AppShellMenuItem[],
+  pathname: string,
+): AppShellMenuItem | undefined {
+  let best: AppShellMenuItem | undefined;
+  for (const c of children) {
+    if (matchesPath(c.key, pathname)) {
+      if (!best || c.key.length > best.key.length) best = c;
+    }
+  }
+  return best;
+}
+
 function useIsMobile() {
   const [mobile, setMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 1024 : false,
@@ -59,7 +83,6 @@ function useIsMobile() {
 interface NavItemProps {
   item: AppShellMenuItem;
   selected: boolean;
-  showActivePill: boolean;
   mini: boolean;
   isMobile: boolean;
   mouseY: MotionValue<number>;
@@ -67,12 +90,19 @@ interface NavItemProps {
   hasChildren?: boolean;
   open?: boolean;
   isChild?: boolean;
+  /** Register the DOM node with the parent so the shared active-pill overlay
+   * can track its position. Stable across renders. */
+  registerNode?: (nodeId: string, el: HTMLButtonElement | null) => void;
+  /** Unique id used when registering the DOM node. Namespaced so parent
+   * and child items that happen to share the same route key (e.g. a
+   * BigData "总览" child reusing the parent's `/bigdata` path) don't
+   * collide in the registration map. */
+  nodeId: string;
 }
 
 const NavItem: React.FC<NavItemProps> = ({
   item,
   selected,
-  showActivePill,
   mini,
   isMobile,
   mouseY,
@@ -80,8 +110,18 @@ const NavItem: React.FC<NavItemProps> = ({
   hasChildren,
   open,
   isChild,
+  registerNode,
+  nodeId,
 }) => {
   const ref = useRef<HTMLButtonElement>(null);
+
+  // Forward the DOM node up so the parent can position the active pill
+  // without relying on viewport coordinates (which break once the nav is
+  // scrolled and the previous active item moves off-screen).
+  useLayoutEffect(() => {
+    registerNode?.(nodeId, ref.current);
+    return () => registerNode?.(nodeId, null);
+  }, [registerNode, nodeId]);
 
   const distance = useTransform(mouseY, (val) => {
     const bounds = ref.current?.getBoundingClientRect() ?? { y: 0, height: 0 };
@@ -141,13 +181,8 @@ const NavItem: React.FC<NavItemProps> = ({
         .filter(Boolean)
         .join(' ')}
     >
-      {showActivePill && (
-        <motion.span
-          layoutId="smc-navitem-active"
-          className="smc-navitem__bg"
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        />
-      )}
+      {/* Active pill is rendered once as an overlay inside the nav
+       * container (see AppShell), so per-item background is omitted. */}
 
       <motion.span
         style={{ scale: activeScale, position: 'relative' }}
@@ -254,27 +289,120 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
 
   const mini = sidebarCollapsed && !isMobile;
 
+  // --- Shared active-pill overlay -------------------------------------------
+  // A single persistent <motion.div> is positioned in the nav's own scroll
+  // content coordinates (offsetTop/Left relative to nav). Because it lives
+  // outside the buttons themselves, switching tabs is a smooth transform of
+  // one element rather than a layoutId morph between two, so the animation is
+  // correct regardless of whether the previous active item has been scrolled
+  // out of view.
+  const navRef = useRef<HTMLElement | null>(null);
+  const itemNodeRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const [pillRect, setPillRect] = useState<
+    { top: number; left: number; width: number; height: number } | null
+  >(null);
+
+  /**
+   * Compute the id of the item the pill should sit on. The rule:
+   *   - If a child matches the current path AND its submenu is visible
+   *     (sidebar expanded + parent expanded), highlight that child.
+   *   - Otherwise, if either the parent matches OR one of its children
+   *     matches but the submenu is collapsed/hidden, highlight the
+   *     parent instead.
+   *
+   * Namespaced ids (`top:` / `child:`) prevent parent and child buttons
+   * that happen to reuse the same route path from overwriting each
+   * other in the DOM-node registry.
+   */
+  const activeKey = useMemo(() => {
+    for (const item of items) {
+      if (item.children?.length) {
+        const submenuVisible = !mini && (expanded[item.key] ?? false);
+        const childMatch = findBestChildMatch(item.children, location.pathname);
+        if (childMatch && submenuVisible) {
+          return `child:${item.key}:${childMatch.key}`;
+        }
+        if (childMatch || matchesPath(item.key, location.pathname)) {
+          return `top:${item.key}`;
+        }
+      } else if (matchesPath(item.key, location.pathname)) {
+        return `top:${item.key}`;
+      }
+    }
+    return null;
+  }, [items, location.pathname, expanded, mini]);
+
+  const registerNode = useCallback(
+    (key: string, el: HTMLButtonElement | null) => {
+      if (el) itemNodeRefs.current.set(key, el);
+      else itemNodeRefs.current.delete(key);
+    },
+    [],
+  );
+
+  const measurePill = useCallback(() => {
+    if (!activeKey) {
+      setPillRect(null);
+      return;
+    }
+    const btn = itemNodeRefs.current.get(activeKey);
+    const nav = navRef.current;
+    if (!btn || !nav) {
+      setPillRect(null);
+      return;
+    }
+    // Use getBoundingClientRect-relative math instead of offsetTop/Left:
+    // the submenu has `position: relative` (for its vertical divider
+    // ::before pseudo), which makes IT the offsetParent for child
+    // buttons, not the nav. Reading offsetTop would therefore return
+    // the child's position within the submenu — wrong — and the pill
+    // would appear stuck near the parent.
+    const btnRect = btn.getBoundingClientRect();
+    const navRect = nav.getBoundingClientRect();
+    setPillRect({
+      top: btnRect.top - navRect.top + nav.scrollTop,
+      left: btnRect.left - navRect.left + nav.scrollLeft,
+      width: btnRect.width,
+      height: btnRect.height,
+    });
+  }, [activeKey]);
+
+  // Re-measure whenever the active key changes or the surrounding layout
+  // shifts (sidebar collapse, submenu expand/collapse, viewport size).
+  useLayoutEffect(() => {
+    // Double rAF: wait for framer's sidebar-width spring and subnav
+    // height animations to settle their first frame before measuring.
+    const id = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(measurePill);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [measurePill, mini, expanded, isMobile]);
+
+  useEffect(() => {
+    const onResize = () => measurePill();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [measurePill]);
+
   const renderItem = (item: AppShellMenuItem) => {
     const childSelected = item.children?.some((c) =>
       matchesPath(c.key, location.pathname),
     );
     const selfSelected = matchesPath(item.key, location.pathname);
     const selected = selfSelected || !!childSelected;
-    // Only one element should own the active-pill layoutId at a time.
-    // For parents with children, let the child own it when a child is selected.
-    const showActivePill = selfSelected && !childSelected;
 
     if (!item.children?.length) {
       return (
         <NavItem
           key={item.key}
+          nodeId={`top:${item.key}`}
           item={item}
           selected={selected}
-          showActivePill={selected}
           mini={mini}
           isMobile={isMobile}
           mouseY={mouseY}
           onClick={() => go(item.key)}
+          registerNode={registerNode}
         />
       );
     }
@@ -283,17 +411,18 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
     return (
       <Fragment key={item.key}>
         <NavItem
+          nodeId={`top:${item.key}`}
           item={item}
           selected={selected}
-          showActivePill={showActivePill}
           mini={mini}
           isMobile={isMobile}
           mouseY={mouseY}
           onClick={() => setExpanded((p) => ({ ...p, [item.key]: !open }))}
           hasChildren
           open={open}
+          registerNode={registerNode}
         />
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} onExitComplete={measurePill}>
           {!mini && open && (
             <motion.div
               key={`${item.key}-sub`}
@@ -301,24 +430,32 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              onAnimationComplete={measurePill}
               className="smc-shell__subnav"
             >
-              {item.children!.map((child) => {
-                const cs = matchesPath(child.key, location.pathname);
-                return (
-                  <NavItem
-                    key={child.key}
-                    item={child}
-                    selected={cs}
-                    showActivePill={cs}
-                    mini={false}
-                    isMobile={isMobile}
-                    mouseY={mouseY}
-                    onClick={() => go(child.key)}
-                    isChild
-                  />
+              {(() => {
+                const bestChild = findBestChildMatch(
+                  item.children!,
+                  location.pathname,
                 );
-              })}
+                return item.children!.map((child) => {
+                  const cs = bestChild?.key === child.key;
+                  return (
+                    <NavItem
+                      key={child.key}
+                      nodeId={`child:${item.key}:${child.key}`}
+                      item={child}
+                      selected={cs}
+                      mini={false}
+                      isMobile={isMobile}
+                      mouseY={mouseY}
+                      onClick={() => go(child.key)}
+                      isChild
+                      registerNode={registerNode}
+                    />
+                  );
+                });
+              })()}
             </motion.div>
           )}
         </AnimatePresence>
@@ -368,7 +505,33 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
           </button>
         )}
       </div>
-      <nav className="smc-shell__nav">{items.map(renderItem)}</nav>
+      <nav
+        ref={navRef}
+        className="smc-shell__nav"
+        style={{ position: 'relative' }}
+      >
+        {pillRect && (
+          <motion.div
+            aria-hidden
+            className="smc-navitem__bg"
+            initial={false}
+            animate={{
+              top: pillRect.top,
+              left: pillRect.left,
+              width: pillRect.width,
+              height: pillRect.height,
+              opacity: 1,
+            }}
+            transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.7 }}
+            style={{
+              position: 'absolute',
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          />
+        )}
+        {items.map(renderItem)}
+      </nav>
     </motion.aside>
   );
 
@@ -399,8 +562,64 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
             </IconButton>
           )}
           <div className="smc-shell__title-wrap">
-            <div className="smc-shell__title">智慧医养平台</div>
-            <div className="smc-shell__sub">健康管理与协同服务</div>
+            {(() => {
+              // Build breadcrumb from menu tree + current pathname.
+              let crumbs: { label: string; key?: string }[] = [];
+              for (const item of items) {
+                if (item.children?.length) {
+                  const child = item.children.find((c) =>
+                    matchesPath(c.key, location.pathname),
+                  );
+                  if (child) {
+                    crumbs = [
+                      { label: item.label, key: item.key },
+                      { label: child.label, key: child.key },
+                    ];
+                    break;
+                  }
+                  if (matchesPath(item.key, location.pathname)) {
+                    crumbs = [{ label: item.label, key: item.key }];
+                    break;
+                  }
+                } else if (matchesPath(item.key, location.pathname)) {
+                  crumbs = [{ label: item.label, key: item.key }];
+                  break;
+                }
+              }
+              const primaryRole = user?.roles?.[0];
+              const roleLabel =
+                primaryRole === 'admin'
+                  ? '管理员'
+                  : primaryRole === 'doctor'
+                    ? '医生'
+                    : primaryRole === 'elder'
+                      ? '老人'
+                      : primaryRole === 'family'
+                        ? '家属'
+                        : '用户';
+              return (
+                <div className="ref-crumbs">
+                  <span className="ref-crumbs__role">
+                    {roleLabel} · {user?.real_name || user?.username || ''}
+                  </span>
+                  {crumbs.map((c, i) => (
+                    <React.Fragment key={i}>
+                      <span className="ref-crumbs__sep">/</span>
+                      {i === crumbs.length - 1 ? (
+                        <span className="ref-crumbs__cur">{c.label}</span>
+                      ) : (
+                        <span style={{ color: 'var(--smc-text-2)' }}>
+                          {c.label}
+                        </span>
+                      )}
+                    </React.Fragment>
+                  ))}
+                  {crumbs.length === 0 && (
+                    <span className="ref-crumbs__cur">智慧医养平台</span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <DropdownMenu
             trigger={avatar}

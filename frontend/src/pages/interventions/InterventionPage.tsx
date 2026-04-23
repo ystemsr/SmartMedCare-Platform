@@ -24,6 +24,7 @@ import { formatDateTime, formatInterventionStatus } from '../../utils/formatter'
 import { INTERVENTION_STATUS_OPTIONS, INTERVENTION_STATUS_COLORS } from '../../utils/constants';
 import { message } from '../../utils/message';
 import type { Intervention, InterventionListQuery } from '../../types/intervention';
+import { RefPageHead, RefGrid, RefStat, RefCard } from '../../components/ref';
 
 const INTERVENTION_TYPE_OPTIONS = [
   { label: '用药指导', value: 'medication_guidance' },
@@ -219,8 +220,110 @@ const InterventionPage: React.FC = () => {
     },
   ];
 
+  const byType = INTERVENTION_TYPE_OPTIONS.map((t) => ({
+    label: t.label,
+    count: data.filter((d) => d.type === t.value).length,
+    color:
+      t.value === 'medication_guidance'
+        ? 'var(--smc-primary)'
+        : t.value === 'diet_advice'
+          ? 'var(--smc-success)'
+          : t.value === 'exercise_guidance'
+            ? 'var(--smc-warning)'
+            : t.value === 'mental_intervention'
+              ? '#6e4fc9'
+              : 'var(--smc-text-3)',
+  }));
+  const maxBy = Math.max(1, ...byType.map((b) => b.count));
+  const pending = data.filter((d) => d.status === 'planned').length;
+  const inProgress = data.filter((d) => d.status === 'ongoing').length;
+  const completed = data.filter((d) => d.status === 'completed').length;
+
   return (
     <>
+      <RefPageHead
+        title="干预记录"
+        subtitle={`累计 ${pagination.total ?? data.length} 条 · 待执行 ${pending} · 执行中 ${inProgress} · 已完成 ${completed}`}
+        actions={
+          <PermissionGuard permission="intervention:create">
+            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
+              新增记录
+            </Button>
+          </PermissionGuard>
+        }
+      />
+
+      <div
+        className="ref-grid"
+        style={{ gridTemplateColumns: '1fr 2fr', gap: 16, marginBottom: 16 }}
+      >
+        <RefCard title="干预类型分布" subtitle="按类型统计数量">
+          {byType.map((b, i) => (
+            <div key={b.label} style={{ marginBottom: i === byType.length - 1 ? 0 : 12 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 13,
+                  marginBottom: 5,
+                }}
+              >
+                <span>{b.label}</span>
+                <span className="ref-num" style={{ color: 'var(--smc-text-3)' }}>
+                  {b.count}
+                </span>
+              </div>
+              <div className="ref-bar-track">
+                <div
+                  className="ref-bar-fill"
+                  style={{ width: `${(b.count / maxBy) * 100}%`, background: b.color }}
+                />
+              </div>
+            </div>
+          ))}
+          {byType.every((b) => b.count === 0) && (
+            <div
+              style={{
+                color: 'var(--smc-text-3)',
+                textAlign: 'center',
+                padding: 16,
+                fontSize: 13,
+              }}
+            >
+              暂无干预数据
+            </div>
+          )}
+        </RefCard>
+        <RefGrid cols={2}>
+          <RefStat
+            label="待执行"
+            value={pending}
+            sub="尚未开始"
+            tone="warn"
+            valueColor="var(--smc-warning)"
+          />
+          <RefStat
+            label="执行中"
+            value={inProgress}
+            sub="正在跟进"
+            tone="info"
+          />
+          <RefStat
+            label="已完成"
+            value={completed}
+            sub="计入成效评估"
+            tone="ok"
+            valueColor="var(--smc-success)"
+          />
+          <RefStat
+            label="本月累计"
+            value={pagination.total ?? data.length}
+            sub="含全部状态"
+            tone="primary"
+          />
+        </RefGrid>
+      </div>
+
       <AppTable<Intervention>
         columns={columns}
         dataSource={data}

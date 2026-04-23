@@ -1,4 +1,5 @@
 import React, { type ReactNode } from 'react';
+import { RefPageHead } from '../ref';
 
 interface PageHeaderProps {
   title: string;
@@ -6,43 +7,14 @@ interface PageHeaderProps {
   actions?: ReactNode;
 }
 
+/**
+ * Thin wrapper over the shared reference page head so every big-data
+ * screen matches the rest of the admin vocabulary (display serif title,
+ * muted subtitle, trailing action slot). Kept here for backward-compat
+ * with existing bigdata page imports.
+ */
 const PageHeader: React.FC<PageHeaderProps> = ({ title, description, actions }) => (
-  <div
-    style={{
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 16,
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 24,
-    }}
-  >
-    <div style={{ minWidth: 0 }}>
-      <h2
-        style={{
-          margin: 0,
-          fontSize: 'var(--smc-fs-2xl)',
-          fontWeight: 700,
-          letterSpacing: 0.2,
-          color: 'var(--smc-text)',
-        }}
-      >
-        {title}
-      </h2>
-      {description && (
-        <p
-          style={{
-            margin: '6px 0 0',
-            fontSize: 'var(--smc-fs-sm)',
-            color: 'var(--smc-text-2)',
-          }}
-        >
-          {description}
-        </p>
-      )}
-    </div>
-    {actions && <div>{actions}</div>}
-  </div>
+  <RefPageHead title={title} subtitle={description} actions={actions} />
 );
 
 export default PageHeader;

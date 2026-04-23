@@ -6,7 +6,9 @@ import type {
   AssessmentUpdate,
   AssessmentGenerate,
   AssessmentListQuery,
+  AssessmentPrefill,
 } from '../types/assessment';
+import type { FeatureCatalogEntry } from '../types/survey';
 
 export function getAssessments(
   params: AssessmentListQuery,
@@ -35,4 +37,16 @@ export function deleteAssessment(id: number): Promise<ApiResponse<null>> {
 
 export function generateAssessment(data: AssessmentGenerate): Promise<ApiResponse<Assessment>> {
   return http.post('/assessments/generate', data);
+}
+
+export function getAssessmentFeatureCatalog(): Promise<
+  ApiResponse<{ items: FeatureCatalogEntry[] }>
+> {
+  return http.get('/assessments/feature-catalog');
+}
+
+export function getAssessmentPrefill(
+  elderId: number,
+): Promise<ApiResponse<AssessmentPrefill>> {
+  return http.get(`/assessments/prefill/${elderId}`);
 }

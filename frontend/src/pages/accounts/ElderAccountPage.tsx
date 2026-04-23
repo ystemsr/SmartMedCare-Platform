@@ -9,6 +9,7 @@ import { getElders, resetElderPassword, updateElderAccountStatus } from '../../a
 import { formatGender } from '../../utils/formatter';
 import type { Elder, ElderListQuery } from '../../types/elder';
 import { message } from '../../utils/message';
+import { RefPageHead } from '../../components/ref';
 
 interface CredentialsState {
   title: string;
@@ -122,6 +123,10 @@ const ElderAccountPage: React.FC = () => {
 
   return (
     <>
+      <RefPageHead
+        title="老人账户管理"
+        subtitle={`共 ${pagination.total ?? data.length} 位老人 · 重置密码或启用/禁用登录账户`}
+      />
       <AppTable<Elder>
         columns={columns}
         dataSource={data}

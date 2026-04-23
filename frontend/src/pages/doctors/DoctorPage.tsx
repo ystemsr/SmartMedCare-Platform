@@ -17,7 +17,7 @@ import {
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
-import StatCard from '../../components/StatCard';
+import { RefPageHead, RefStat, RefGrid } from '../../components/ref';
 import { useTable } from '../../hooks/useTable';
 import { getUsers, createUser, updateUser, deleteUser } from '../../api/users';
 import { formatDateTime } from '../../utils/formatter';
@@ -182,57 +182,43 @@ const DoctorPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div className="smc-page-hero">
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="smc-page-hero__kicker">人员 · Clinicians</div>
-          <h1 className="smc-page-hero__title">医生管理</h1>
-          <p className="smc-page-hero__sub">
-            管理平台中的医生账号，包括创建、编辑、停用等操作。停用后医生将无法登录并处理随访。
-          </p>
-        </div>
-        <div className="smc-page-hero__actions">
+      <RefPageHead
+        title="医生管理"
+        subtitle={`共 ${stats.total} 位医生 · 在岗 ${stats.active} · 停用 ${stats.disabled}`}
+        actions={
           <PermissionGuard permission="user:manage">
             <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
               新增医生
             </Button>
           </PermissionGuard>
-        </div>
-      </div>
+        }
+      />
 
-      <div
-        style={{
-          display: 'grid',
-          gap: 16,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-        }}
-      >
-        <StatCard
-          title="医生总数"
+      <RefGrid cols={3}>
+        <RefStat
+          label="医生总数"
           value={stats.total}
-          suffix="人"
-          icon={<Stethoscope size={20} />}
-          color="var(--smc-text)"
-          loading={loading}
+          sub="平台全体医生"
+          icon={<Stethoscope size={16} />}
+          tone="info"
         />
-        <StatCard
-          title="正常状态"
+        <RefStat
+          label="正常状态"
           value={stats.active}
-          suffix="人"
-          icon={<CheckCircle2 size={20} />}
-          color="var(--smc-success)"
-          hint="可接收随访与预警"
-          loading={loading}
+          sub="可接收随访与预警"
+          icon={<CheckCircle2 size={16} />}
+          tone="ok"
+          valueColor="var(--smc-success)"
         />
-        <StatCard
-          title="已禁用"
+        <RefStat
+          label="已禁用"
           value={stats.disabled}
-          suffix="人"
-          icon={<Ban size={20} />}
-          color="var(--smc-error)"
-          hint="暂不可登录"
-          loading={loading}
+          sub="暂不可登录"
+          icon={<Ban size={16} />}
+          tone="risk"
+          valueColor="var(--smc-error)"
         />
-      </div>
+      </RefGrid>
 
       <AppTable<User>
         columns={columns}

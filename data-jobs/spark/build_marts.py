@@ -150,7 +150,20 @@ def main() -> None:
     )
     logger.info("mart_followup_completion refreshed")
 
-    logger.info("All marts built successfully for dt=%s", snapshot_dt)
+    # Report total rows across all marts so the backend's log-tail parser
+    # (looks for `rows_processed=N`) can surface a meaningful count in the UI.
+    mart_tables = [
+        "mart_elder_risk_summary",
+        "mart_daily_alerts",
+        "mart_intervention_effectiveness",
+        "mart_followup_completion",
+    ]
+    total_rows = 0
+    for t in mart_tables:
+        n = spark.sql(f"SELECT COUNT(*) FROM {t}").first()[0]
+        total_rows += int(n or 0)
+
+    logger.info("All marts built successfully for dt=%s rows_processed=%d", snapshot_dt, total_rows)
     spark.stop()
 
 

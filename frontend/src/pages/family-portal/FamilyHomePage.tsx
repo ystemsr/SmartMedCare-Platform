@@ -159,10 +159,10 @@ const FamilyHomePage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Welcome banner */}
+      {/* Welcome banner — warm Anthropic-style gradient to match app palette. */}
       <Card
         style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          background: 'linear-gradient(135deg, var(--smc-primary-700) 0%, var(--smc-primary) 100%)',
           color: '#fff',
           overflow: 'hidden',
           position: 'relative',

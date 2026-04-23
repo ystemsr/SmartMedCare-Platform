@@ -10,6 +10,7 @@ import { formatDateTime } from '../../utils/formatter';
 import type { User } from '../../types/user';
 import type { PaginationParams } from '../../types/common';
 import { message } from '../../utils/message';
+import { RefPageHead, RefGrid, RefStat } from '../../components/ref';
 
 const createFields: FormFieldConfig[] = [
   { name: 'username', label: '用户名', required: true },
@@ -149,8 +150,46 @@ const UserPage: React.FC = () => {
     },
   ];
 
+  const active = data.filter((u) => u.status === 'active').length;
+  const disabled = data.filter((u) => u.status === 'disabled').length;
+
   return (
     <>
+      <RefPageHead
+        title="用户管理"
+        subtitle={`共 ${pagination.total ?? data.length} 位用户 · 正常 ${active} · 禁用 ${disabled}`}
+        actions={
+          <PermissionGuard permission="user:manage">
+            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
+              新增用户
+            </Button>
+          </PermissionGuard>
+        }
+      />
+
+      <RefGrid cols={3} style={{ marginBottom: 16 }}>
+        <RefStat
+          label="用户总数"
+          value={pagination.total ?? data.length}
+          sub="平台注册账户"
+          tone="info"
+        />
+        <RefStat
+          label="正常"
+          value={active}
+          sub="可正常登录"
+          tone="ok"
+          valueColor="var(--smc-success)"
+        />
+        <RefStat
+          label="已禁用"
+          value={disabled}
+          sub="暂不可登录"
+          tone="risk"
+          valueColor="var(--smc-error)"
+        />
+      </RefGrid>
+
       <AppTable<User>
         columns={columns}
         dataSource={data}

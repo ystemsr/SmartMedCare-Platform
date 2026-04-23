@@ -146,6 +146,32 @@ STORED AS PARQUET
 LOCATION '/user/hive/warehouse/smartmedcare.db/raw_interventions'
 TBLPROPERTIES ('parquet.compression'='SNAPPY');
 
+-- -----------------------------------------------------------------------------
+-- raw_assessments — AI health assessments (feature_inputs carries the 20-feature
+-- snapshot the doctor assembled when creating each assessment).
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS raw_assessments;
+CREATE EXTERNAL TABLE raw_assessments (
+    id                    BIGINT,
+    elder_id              BIGINT,
+    assessment_type       STRING,
+    score                 INT,
+    risk_level            STRING,
+    summary               STRING,
+    -- JSON columns land as STRING in Hive — parse with get_json_object() / from_json().
+    suggestions           STRING,
+    feature_inputs        STRING,
+    prediction_result_id  BIGINT,
+    created_by            BIGINT,
+    created_at            TIMESTAMP,
+    updated_at            TIMESTAMP,
+    deleted_at            TIMESTAMP
+)
+PARTITIONED BY (dt STRING)
+STORED AS PARQUET
+LOCATION '/user/hive/warehouse/smartmedcare.db/raw_assessments'
+TBLPROPERTIES ('parquet.compression'='SNAPPY');
+
 -- After adding new partition directories in HDFS, run:
 --   MSCK REPAIR TABLE raw_elders;
 --   MSCK REPAIR TABLE raw_health_records;
@@ -153,3 +179,4 @@ TBLPROPERTIES ('parquet.compression'='SNAPPY');
 --   MSCK REPAIR TABLE raw_alerts;
 --   MSCK REPAIR TABLE raw_followups;
 --   MSCK REPAIR TABLE raw_interventions;
+--   MSCK REPAIR TABLE raw_assessments;

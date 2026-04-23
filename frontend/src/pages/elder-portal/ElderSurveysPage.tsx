@@ -33,6 +33,7 @@ import type {
   SurveyTask,
 } from '../../types/survey';
 import type { PredictionTask } from '../../types/prediction';
+import { RefPageHead } from '../../components/ref';
 
 type TabKey = 'pending' | 'submitted';
 
@@ -147,27 +148,10 @@ const ElderSurveysPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <header>
-        <h2
-          style={{
-            margin: 0,
-            fontSize: 'var(--smc-fs-2xl)',
-            fontWeight: 700,
-            color: 'var(--smc-text)',
-          }}
-        >
-          健康调查
-        </h2>
-        <p
-          style={{
-            margin: '6px 0 0',
-            fontSize: 'var(--smc-fs-sm)',
-            color: 'var(--smc-text-2)',
-          }}
-        >
-          医生给您派发的健康信息采集与评估任务。完成后评估会更准确。
-        </p>
-      </header>
+      <RefPageHead
+        title="健康调查"
+        subtitle={`待完成 ${pendingCount} 项 · 医生给您派发的健康信息采集与评估任务，完成后评估会更准确`}
+      />
 
       <Card>
         <div style={{ padding: '0 8px' }}>

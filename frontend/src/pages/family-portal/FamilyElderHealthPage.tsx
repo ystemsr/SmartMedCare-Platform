@@ -488,11 +488,11 @@ const FamilyElderHealthPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Elder info header */}
+      {/* Elder info header — tinted with warm primary to align with app palette. */}
       {elderInfo && (
         <Card
           style={{
-            background: 'linear-gradient(135deg, #667eea08 0%, #764ba208 100%)',
+            background: 'linear-gradient(135deg, rgba(217,119,87,0.08) 0%, rgba(120,140,93,0.06) 100%)',
           }}
         >
           <div style={{ padding: '20px 24px' }}>

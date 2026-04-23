@@ -19,6 +19,7 @@ import {
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
+import { RefPageHead, RefStat, RefGrid } from '../../components/ref';
 import CredentialsModal from '../../components/CredentialsModal';
 import ElderDetailDrawer from '../../components/ElderDetailDrawer';
 import InlineDoctorSwitcher from '../../components/InlineDoctorSwitcher';
@@ -537,22 +538,47 @@ const ElderListPage: React.FC = () => {
         onDelete={handleDelete}
         onOpenFullArchive={handleOpenFullArchive}
       />
-      <div className="smc-page-hero">
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="smc-page-hero__kicker">老人 · Residents</div>
-          <h1 className="smc-page-hero__title">老人管理</h1>
-          <p className="smc-page-hero__sub">
-            维护老人基础档案、家属关系与账户凭证。切换「健康档案」进入以卡片形式浏览的档案视图。
-          </p>
-        </div>
-        <div className="smc-page-hero__actions">
+      <RefPageHead
+        title="老人管理"
+        subtitle={`共 ${pagination.total ?? data.length} 人 · 维护基础档案、家属关系与账户凭证 · 切换「健康档案」以卡片形式浏览`}
+        actions={
           <PermissionGuard permission="elder:create">
             <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
               新增老人
             </Button>
           </PermissionGuard>
-        </div>
-      </div>
+        }
+      />
+
+      {/* Quick-glance stats computed from the current page of records. */}
+      <RefGrid cols={4} style={{ marginBottom: 16 }}>
+        <RefStat
+          label="在管老人"
+          value={pagination.total ?? data.length}
+          sub="全部档案数"
+          tone="info"
+        />
+        <RefStat
+          label="已激活账户"
+          value={data.filter((e) => e.account_status === 'active').length}
+          sub="当前页统计"
+          tone="ok"
+          valueColor="var(--smc-success)"
+        />
+        <RefStat
+          label="AI 高风险"
+          value={data.filter((e) => e.latest_high_risk === true).length}
+          sub="需重点关注"
+          tone="risk"
+          valueColor="var(--smc-error)"
+        />
+        <RefStat
+          label="未指派医生"
+          value={data.filter((e) => !e.primary_doctor_id).length}
+          sub="尚待分配"
+          tone="warn"
+        />
+      </RefGrid>
 
       <div style={{ marginBottom: 16 }}>
         <Tabs

@@ -32,6 +32,7 @@ import {
 } from '../../utils/constants';
 import { message } from '../../utils/message';
 import type { Alert, AlertListQuery } from '../../types/alert';
+import { RefPageHead, RefStat, RefGrid } from '../../components/ref';
 
 const createFields: FormFieldConfig[] = [
   { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
@@ -352,8 +353,56 @@ const AlertListPage: React.FC = () => {
     );
   };
 
+  const pending = data.filter((a) => a.status === 'pending').length;
+  const processing = data.filter((a) => a.status === 'processing').length;
+  const resolved = data.filter((a) => a.status === 'resolved').length;
+  const highRisk = data.filter((a) => a.risk_level === 'high').length;
+
   return (
     <>
+      <RefPageHead
+        title="风险预警"
+        subtitle={`共 ${pagination.total ?? data.length} 条 · 待处理 ${pending} · 处理中 ${processing} · 今日解决 ${resolved}`}
+        actions={
+          <PermissionGuard permission="alert:update">
+            <Button startIcon={<Plus size={14} />} onClick={() => setFormVisible(true)}>
+              手动创建
+            </Button>
+          </PermissionGuard>
+        }
+      />
+
+      <RefGrid cols={4} style={{ marginBottom: 16 }}>
+        <RefStat
+          label="待处理"
+          value={pending}
+          sub="需要立即响应"
+          tone="risk"
+          valueColor="var(--smc-error)"
+        />
+        <RefStat
+          label="处理中"
+          value={processing}
+          sub="医生正在跟进"
+          tone="warn"
+          valueColor="var(--smc-warning)"
+        />
+        <RefStat
+          label="已解决"
+          value={resolved}
+          sub="本页已闭环"
+          tone="ok"
+          valueColor="var(--smc-success)"
+        />
+        <RefStat
+          label="高风险预警"
+          value={highRisk}
+          sub="重点关注等级"
+          tone="risk"
+          valueColor="var(--smc-error)"
+        />
+      </RefGrid>
+
       <AppTable<Alert>
         columns={columns}
         dataSource={data}

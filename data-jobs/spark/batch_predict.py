@@ -1,43 +1,23 @@
 """Spark batch inference against the multi-task TorchScript model.
 
 Pipeline:
-    1. Read the latest partitions of smartmedcare.raw_elders and
-       smartmedcare.raw_health_records (dt = SNAPSHOT_DT, default today).
-    2. Join on elder_id (one-to-many -> keep latest health_record per elder).
-    3. Featurize into the 20-column vector expected by the model. Mapping
-       assumptions are documented below; features without a direct source in
-       the MySQL schema default to 0.0 (matches inference.py behaviour).
-    4. Broadcast the TorchScript model (bundled at --model-path) and run
+    1. Read smartmedcare.raw_assessments (partition dt=SNAPSHOT_DT, default
+       today). For each elder keep the latest non-deleted row.
+    2. Parse `feature_inputs` JSON into the 20-feature vector the model
+       expects. Elders with missing keys are silently skipped — we never
+       feed the model default/imputed values at batch scale because that
+       produces the "everyone looks the same" collapse we intentionally
+       solved by storing complete inputs per assessment.
+    3. Broadcast the TorchScript model (bundled at --model-path) and run
        per-partition pandas_udf inference.
-    5. Overwrite the dt=<SNAPSHOT_DT> partition of
-       smartmedcare.predictions_elder_health.
+    4. Overwrite the dt=<SNAPSHOT_DT> partition of
+       smartmedcare.predictions_elder_health, and append a mirror row to
+       MySQL `prediction_results` so the elder management page picks up the
+       updated scores immediately.
 
-Feature mapping assumptions (MySQL schema -> 20-feature vector):
-
-    AGE                <- floor((today - elders.birth_date) / 365.25)
-    IS_FEMALE          <- 1 if elders.gender = 'female' else 0
-    RACE               <- 0 (not captured in MySQL schema)
-    SCHLYRS            <- 0 (not captured)
-    SELF_HEALTH        <- proxy from recent blood pressure / glucose (0 fallback)
-    HEALTH_CHANGE      <- 0 (not captured)
-    FALL_2YR           <- 0 (not captured)
-    PAIN               <- 0 (not captured)
-    BMI_CATEGORY       <- derived from height_cm / weight_kg when both present
-    MEMORY_RATING      <- 0 (not captured)
-    MEMORY_CHANGE      <- 0
-    SERIAL7_SCORE      <- 0
-    DATE_NAMING        <- 0
-    ADL_SCORE          <- 0
-    HOSPITAL_STAY      <- 0
-    NURSING_HOME       <- 0
-    HOME_HEALTH        <- 0
-    HAS_USUAL_CARE     <- 1 (all platform-managed elders have a carer)
-    NUM_HOSPITAL_STAYS <- 0
-    DOCTOR_VISITS      <- 0
-
-These proxies are intentionally conservative. When the operational schema is
-extended with geriatric assessment fields, update the featurize() function
-below -- it is the single source of truth for feature derivation.
+The `feature_inputs` JSON is written by AssessmentService.create_assessment
+whenever a doctor runs the AI assessment flow; those rows are synced to
+`raw_assessments` by mysql_to_hdfs.py as part of the pipeline.
 
 Environment:
     SNAPSHOT_DT    (default: today, YYYY-MM-DD)
@@ -117,88 +97,71 @@ SCALER_SCALE = np.array([
 # -----------------------------------------------------------------------------
 
 
+# Every feature the model expects. Order matters (mirrors FEATURE_COLS in
+# app.services.ml_inference). Kept local so this script stays self-contained.
+_FEATURE_KEYS = [
+    "AGE", "IS_FEMALE", "RACE", "SCHLYRS", "SELF_HEALTH", "HEALTH_CHANGE",
+    "FALL_2YR", "PAIN", "BMI_CATEGORY",
+    "MEMORY_RATING", "MEMORY_CHANGE", "SERIAL7_SCORE", "DATE_NAMING",
+    "ADL_SCORE", "HOSPITAL_STAY", "NURSING_HOME", "HOME_HEALTH",
+    "HAS_USUAL_CARE", "NUM_HOSPITAL_STAYS", "DOCTOR_VISITS",
+]
+
+
 def featurize(spark: SparkSession, snapshot_dt: str):
-    """Join raw_elders with latest raw_health_records and emit feature cols.
+    """Build the feature DataFrame for batch inference.
+
+    Source: each elder's most recent non-deleted row in
+    `smartmedcare.raw_assessments` (partition dt=<snapshot_dt>). The 20-feature
+    vector is extracted from the `feature_inputs` JSON the service assembles
+    when a doctor creates an AI assessment.
+
+    Any elder whose latest feature_inputs is missing one or more keys is
+    silently dropped — we would rather skip a scoring than emit a prediction
+    derived from default / mean-imputed inputs. Elders with no assessment at
+    all for the partition are likewise skipped.
 
     Returns a DataFrame with columns: elder_id, <20 feature columns>.
     """
-    elders = spark.sql(
+    # Latest non-deleted assessment per elder, joined so we know the elder's
+    # basic demographics (for auditability; not strictly needed since
+    # feature_inputs already has AGE / IS_FEMALE).
+    latest_assessment = spark.sql(
         f"""
-        SELECT id AS elder_id, gender, birth_date
-        FROM smartmedcare.raw_elders
-        WHERE dt = '{snapshot_dt}' AND deleted_at IS NULL
-        """
-    )
-
-    # Keep latest health record per elder (by recorded_at, falling back to created_at).
-    latest_hr = spark.sql(
-        f"""
-        SELECT elder_id, height_cm, weight_kg
+        SELECT elder_id, feature_inputs
         FROM (
             SELECT
                 elder_id,
-                height_cm,
-                weight_kg,
+                feature_inputs,
                 ROW_NUMBER() OVER (
                     PARTITION BY elder_id
-                    ORDER BY COALESCE(recorded_at, created_at) DESC
+                    ORDER BY COALESCE(updated_at, created_at) DESC
                 ) AS rn
-            FROM smartmedcare.raw_health_records
-            WHERE dt = '{snapshot_dt}' AND deleted_at IS NULL
+            FROM smartmedcare.raw_assessments
+            WHERE dt = '{snapshot_dt}'
+              AND deleted_at IS NULL
+              AND feature_inputs IS NOT NULL
         ) t
         WHERE rn = 1
         """
     )
 
-    joined = elders.join(latest_hr, on="elder_id", how="left")
+    # Extract each key from the JSON, cast to DOUBLE so the downstream pandas
+    # UDF sees plain numerics. `get_json_object` returns NULL for missing keys
+    # which lets us drop the elder below instead of silently imputing.
+    parsed = latest_assessment
+    for key in _FEATURE_KEYS:
+        parsed = parsed.withColumn(
+            key,
+            F.get_json_object(F.col("feature_inputs"), f"$.{key}").cast(DoubleType()),
+        )
+    parsed = parsed.drop("feature_inputs")
 
-    # BMI category: 0 underweight, 1 normal, 2 overweight, 3 obese.
-    # BMI = weight_kg / (height_cm/100)^2.
-    bmi_expr = F.when(
-        (F.col("height_cm").isNotNull()) & (F.col("weight_kg").isNotNull()) & (F.col("height_cm") > 0),
-        F.col("weight_kg") / F.pow(F.col("height_cm") / 100.0, F.lit(2.0)),
-    )
-    bmi_category = (
-        F.when(bmi_expr < 18.5, F.lit(0))
-        .when(bmi_expr < 24.0, F.lit(1))
-        .when(bmi_expr < 28.0, F.lit(2))
-        .when(bmi_expr >= 28.0, F.lit(3))
-        .otherwise(F.lit(0))
-    )
+    # Silent-skip policy: drop any row where ANY of the 20 keys is null.
+    for key in _FEATURE_KEYS:
+        parsed = parsed.filter(F.col(key).isNotNull())
 
-    age_expr = F.when(
-        F.col("birth_date").isNotNull(),
-        F.floor(F.months_between(F.current_date(), F.col("birth_date")) / 12),
-    ).otherwise(F.lit(0))
-
-    is_female = F.when(F.lower(F.col("gender")) == "female", F.lit(1)).otherwise(F.lit(0))
-
-    features = joined.select(
-        F.col("elder_id"),
-        age_expr.cast(DoubleType()).alias("AGE"),
-        is_female.cast(DoubleType()).alias("IS_FEMALE"),
-        F.lit(0.0).alias("RACE"),
-        F.lit(0.0).alias("SCHLYRS"),
-        F.lit(0.0).alias("SELF_HEALTH"),
-        F.lit(0.0).alias("HEALTH_CHANGE"),
-        F.lit(0.0).alias("FALL_2YR"),
-        F.lit(0.0).alias("PAIN"),
-        bmi_category.cast(DoubleType()).alias("BMI_CATEGORY"),
-        F.lit(0.0).alias("MEMORY_RATING"),
-        F.lit(0.0).alias("MEMORY_CHANGE"),
-        F.lit(0.0).alias("SERIAL7_SCORE"),
-        F.lit(0.0).alias("DATE_NAMING"),
-        F.lit(0.0).alias("ADL_SCORE"),
-        F.lit(0.0).alias("HOSPITAL_STAY"),
-        F.lit(0.0).alias("NURSING_HOME"),
-        F.lit(0.0).alias("HOME_HEALTH"),
-        F.lit(1.0).alias("HAS_USUAL_CARE"),
-        F.lit(0.0).alias("NUM_HOSPITAL_STAYS"),
-        F.lit(0.0).alias("DOCTOR_VISITS"),
-    )
-
-    # Fill any nulls to 0.0 (matches inference.py features.get(col, 0.0)).
-    return features.fillna(0.0)
+    return parsed
 
 
 # -----------------------------------------------------------------------------
@@ -301,12 +264,17 @@ def main() -> None:
     logger.info("Scoring %d elders", feature_count)
 
     if feature_count == 0:
-        logger.warning("No elders to score for dt=%s, exiting", snapshot_dt)
+        logger.warning(
+            "No elders to score for dt=%s, exiting rows_processed=0",
+            snapshot_dt,
+        )
         spark.stop()
         return
 
     predict_fn = make_predict_udf(args.model_path)
     predictions = features.mapInPandas(predict_fn, schema=OUTPUT_SCHEMA)
+    # Cache — we consume this DataFrame twice (Hive partition + MySQL append).
+    predictions = predictions.cache()
 
     out = predictions.withColumn("dt", F.lit(snapshot_dt))
     # Use insertInto() so Hive's managed table / partitioning is respected;
@@ -314,7 +282,49 @@ def main() -> None:
     out.write.mode("overwrite").insertInto(
         "smartmedcare.predictions_elder_health", overwrite=True
     )
-    logger.info("Wrote predictions for dt=%s", snapshot_dt)
+    logger.info("Wrote %d predictions to Hive for dt=%s", feature_count, snapshot_dt)
+
+    # Also append to the operational MySQL `prediction_results` table so
+    # the elder management page (which queries MySQL, not Hive) surfaces
+    # the new scores and `predicted_at` timestamps after a batch run.
+    # Schema is kept in sync by upstream Alembic migrations; `id`,
+    # `created_at`, `updated_at`, `deleted_at` are filled in by MySQL.
+    mysql_host = os.environ.get("MYSQL_HOST", "mysql")
+    mysql_port = os.environ.get("MYSQL_PORT", "3306")
+    mysql_user = os.environ.get("MYSQL_USER", "root")
+    mysql_password = os.environ.get("MYSQL_PASSWORD")
+    mysql_database = os.environ.get("MYSQL_DATABASE", "smartmedcare")
+    if not mysql_password:
+        logger.warning(
+            "MYSQL_PASSWORD not set; skipping MySQL mirror of prediction_results. "
+            "Elder management page will not reflect these scores."
+        )
+    else:
+        jdbc_url = (
+            f"jdbc:mysql://{mysql_host}:{mysql_port}/{mysql_database}"
+            "?useSSL=false&serverTimezone=UTC&characterEncoding=utf8"
+        )
+        # Project into the exact column layout MySQL expects.
+        mysql_df = predictions.select(
+            F.col("elder_id").cast("long").alias("elder_id"),
+            F.col("high_risk_prob").cast("decimal(6,4)").alias("high_risk_prob"),
+            F.col("high_risk").cast("boolean").alias("high_risk"),
+            F.col("followup_prob").cast("decimal(6,4)").alias("followup_prob"),
+            F.col("followup_needed").cast("boolean").alias("followup_needed"),
+            F.col("health_score").cast("float").alias("health_score"),
+            F.col("predicted_at").cast("timestamp").alias("predicted_at"),
+        )
+        mysql_df.write.format("jdbc").options(
+            url=jdbc_url,
+            user=mysql_user,
+            password=mysql_password,
+            driver="com.mysql.cj.jdbc.Driver",
+            dbtable="prediction_results",
+            batchsize="500",
+        ).mode("append").save()
+        logger.info("Mirrored %d predictions to MySQL prediction_results", feature_count)
+
+    logger.info("Wrote predictions for dt=%s rows_processed=%d", snapshot_dt, feature_count)
     spark.stop()
 
 

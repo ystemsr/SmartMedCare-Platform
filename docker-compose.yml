@@ -78,8 +78,8 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
-      # Docker socket + CLI (installed in image) let the backend shell out to
-      # `docker exec spark-master spark-submit ...` for job submission.
+      # Docker socket lets the backend talk to the Docker Engine API (via the
+      # docker-py SDK) to exec spark-submit inside the spark-master container.
       - /var/run/docker.sock:/var/run/docker.sock
       # Shared spark log dir so the backend can tail logs from submitted jobs.
       - spark_logs:/app/logs/spark

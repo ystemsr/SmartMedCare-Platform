@@ -23,9 +23,56 @@ async def create_assessment(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_permission("assessment:create")),
 ):
-    """Manually create a health assessment."""
-    result = await AssessmentService.create_assessment(db, body, created_by=current_user.id)
+    """Create a health assessment.
+
+    If `feature_inputs` is present the service runs the 20-feature ML model
+    and populates score/risk_level/summary/suggestions from its output;
+    otherwise falls through to legacy manual entry.
+    """
+    try:
+        result = await AssessmentService.create_assessment(
+            db, body, created_by=current_user.id
+        )
+    except ValueError as e:
+        return error_response(BUSINESS_VALIDATION_FAILED, str(e))
     return success_response(data=result.model_dump(mode="json"))
+
+
+@router.get("/feature-catalog")
+async def get_feature_catalog(
+    _user=Depends(require_permission("assessment:create")),
+):
+    """Return the public 20-feature catalog used to render the AI form."""
+    from app.services.feature_catalog import public_catalog
+
+    return success_response(data={"items": public_catalog()})
+
+
+@router.get("/prefill/{elder_id}")
+async def get_assessment_prefill(
+    elder_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(require_permission("assessment:create")),
+):
+    """Return known inputs for an elder (auto + cached permanent answers).
+
+    Used by the frontend to pre-populate the AI assessment form so the doctor
+    only has to fill in dynamic doctor-administered and elder self-report
+    fields.
+    """
+    from app.services.feature_catalog import (
+        build_auto_inputs,
+        build_permanent_cached,
+    )
+
+    auto = await build_auto_inputs(db, elder_id)
+    permanent = await build_permanent_cached(db, elder_id)
+    return success_response(
+        data={
+            "auto_inputs": auto,
+            "permanent_inputs": permanent,
+        }
+    )
 
 
 @router.get("")

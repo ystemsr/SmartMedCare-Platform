@@ -38,6 +38,7 @@ import {
 } from '../../utils/constants';
 import { message } from '../../utils/message';
 import type { Followup, FollowupListQuery } from '../../types/followup';
+import { RefPageHead, RefStat, RefGrid } from '../../components/ref';
 
 const formFields: FormFieldConfig[] = [
   { name: 'elder_id', label: '老人', type: 'elder-picker', required: true, labelField: 'elder_name' },
@@ -346,8 +347,56 @@ const FollowupPlanPage: React.FC = () => {
     },
   ];
 
+  const pendingCount = data.filter(
+    (f) => f.status === 'todo' || f.status === 'in_progress',
+  ).length;
+  const completedCount = data.filter((f) => f.status === 'completed').length;
+  const overdueCount = data.filter((f) => f.status === 'overdue').length;
+
   return (
     <div>
+      <RefPageHead
+        title="随访管理"
+        subtitle={`共 ${pagination.total ?? data.length} 条计划 · 待执行 ${pendingCount} · 已完成 ${completedCount}`}
+        actions={
+          <PermissionGuard permission="followup:create">
+            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
+              新建随访
+            </Button>
+          </PermissionGuard>
+        }
+      />
+
+      <RefGrid cols={4} style={{ marginBottom: 16 }}>
+        <RefStat
+          label="待执行"
+          value={pendingCount}
+          sub="当前页统计"
+          tone="warn"
+          valueColor="var(--smc-warning)"
+        />
+        <RefStat
+          label="已完成"
+          value={completedCount}
+          sub="计入 SLA"
+          tone="ok"
+          valueColor="var(--smc-success)"
+        />
+        <RefStat
+          label="已逾期"
+          value={overdueCount}
+          sub="超过计划时间"
+          tone="risk"
+          valueColor="var(--smc-error)"
+        />
+        <RefStat
+          label="计划总数"
+          value={pagination.total ?? data.length}
+          sub="本月累计"
+          tone="info"
+        />
+      </RefGrid>
+
       <div style={{ marginBottom: 16 }}>
         <Tabs
           activeKey={activeTab}

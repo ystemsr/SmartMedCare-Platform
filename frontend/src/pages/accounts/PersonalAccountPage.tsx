@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Card, Divider, Input } from '../../components/ui';
+import { RefPageHead, RefAvatar, RefPill } from '../../components/ref';
 import { useAuthStore } from '../../store/auth';
 import { changePassword } from '../../api/auth';
 import { message } from '../../utils/message';
@@ -87,33 +88,82 @@ const PersonalAccountPage: React.FC = () => {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <Card>
-        <div style={{ padding: 24 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700 }}>个人信息</h3>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <RefPageHead
+        title="个人账户"
+        subtitle="基本资料 · 安全设置"
+      />
+
+      <div
+        className="ref-grid"
+        style={{ gridTemplateColumns: '1fr 2fr', gap: 16 }}
+      >
+        <Card>
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 16,
+              padding: 24,
+              textAlign: 'center',
             }}
           >
-            {infoItems.map(([label, value]) => (
-              <div
-                key={label}
-                style={{
-                  padding: 16,
-                  borderRadius: 10,
-                  background: 'var(--smc-bg)',
-                }}
-              >
-                <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>{label}</div>
-                <div style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>{value}</div>
-              </div>
-            ))}
+            <RefAvatar
+              name={user?.real_name || user?.username}
+              size="xxl"
+              style={{ margin: '0 auto' }}
+            />
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 600,
+                marginTop: 12,
+                fontFamily: 'var(--smc-font-display)',
+              }}
+            >
+              {user?.real_name || user?.username || '-'}
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                color: 'var(--smc-text-3)',
+                marginTop: 4,
+              }}
+            >
+              {user?.roles?.join(' · ') || '-'}
+            </div>
+            <div
+              style={{
+                marginTop: 14,
+                display: 'flex',
+                justifyContent: 'center',
+              }}
+            >
+              <RefPill tone="ok" dot>
+                在线
+              </RefPill>
+            </div>
+            <hr className="ref-hr" style={{ margin: '16px 0' }} />
+            <div
+              style={{
+                textAlign: 'left',
+                fontSize: 13,
+                color: 'var(--smc-text-2)',
+              }}
+            >
+              {infoItems.map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '6px 0',
+                  }}
+                >
+                  <span style={{ color: 'var(--smc-text-3)' }}>{label}</span>
+                  <span style={{ fontWeight: 500 }}>{value}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
 
       <Card>
         <div style={{ padding: 24 }}>
@@ -166,6 +216,7 @@ const PersonalAccountPage: React.FC = () => {
           </form>
         </div>
       </Card>
+      </div>
     </div>
   );
 };

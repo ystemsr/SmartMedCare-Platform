@@ -41,12 +41,6 @@ export interface AssessmentPrefill {
 /** Update assessment request */
 export interface AssessmentUpdate extends Partial<AssessmentCreate> {}
 
-/** Auto-generate assessment request */
-export interface AssessmentGenerate {
-  elder_id: number;
-  force_recalculate?: boolean;
-}
-
 /** Assessment list query parameters */
 export interface AssessmentListQuery extends PaginationParams {
   elder_id?: number;

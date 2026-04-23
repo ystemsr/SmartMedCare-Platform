@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, require_permission
-from app.schemas.assessment import AssessmentCreate, AssessmentGenerate, AssessmentUpdate
+from app.schemas.assessment import AssessmentCreate, AssessmentUpdate
 from app.services.assessment import AssessmentService
 from app.utils.pagination import PaginationParams
 from app.utils.response import NOT_FOUND, BUSINESS_VALIDATION_FAILED, error_response, success_response
@@ -95,24 +95,6 @@ async def list_assessments(
         date_start=date_start,
         date_end=date_end,
     )
-    return success_response(data=result.model_dump(mode="json"))
-
-
-@router.post("/generate")
-async def generate_assessment(
-    body: AssessmentGenerate,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_permission("assessment:create")),
-):
-    """Auto-generate an assessment from the latest health data."""
-    result = await AssessmentService.generate_assessment(
-        db, body.elder_id, force=body.force_recalculate, created_by=current_user.id,
-    )
-    if result is None:
-        return error_response(
-            BUSINESS_VALIDATION_FAILED,
-            "No health records found for this elder",
-        )
     return success_response(data=result.model_dump(mode="json"))
 
 

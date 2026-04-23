@@ -4,7 +4,6 @@ import type {
   Assessment,
   AssessmentCreate,
   AssessmentUpdate,
-  AssessmentGenerate,
   AssessmentListQuery,
   AssessmentPrefill,
 } from '../types/assessment';
@@ -33,10 +32,6 @@ export function updateAssessment(
 
 export function deleteAssessment(id: number): Promise<ApiResponse<null>> {
   return http.delete(`/assessments/${id}`);
-}
-
-export function generateAssessment(data: AssessmentGenerate): Promise<ApiResponse<Assessment>> {
-  return http.post('/assessments/generate', data);
 }
 
 export function getAssessmentFeatureCatalog(): Promise<

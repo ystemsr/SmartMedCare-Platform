@@ -95,8 +95,3 @@ class AssessmentResponse(BaseModel):
         return _normalize_suggestions(v)
 
 
-class AssessmentGenerate(BaseModel):
-    """Schema for auto-generating an assessment from health data."""
-
-    elder_id: int
-    force_recalculate: bool = False

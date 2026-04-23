@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Zap, Pencil, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Pencil, Trash2, Sparkles } from 'lucide-react';
 import {
   Button,
   Chip,
@@ -23,7 +23,6 @@ import {
   createAssessment,
   updateAssessment,
   deleteAssessment,
-  generateAssessment,
   getAssessmentFeatureCatalog,
   getAssessmentPrefill,
 } from '../../api/assessments';
@@ -72,9 +71,6 @@ const AssessmentPage: React.FC = () => {
   const [editVisible, setEditVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<Assessment | null>(null);
   const [createVisible, setCreateVisible] = useState(false);
-  const [generateModalVisible, setGenerateModalVisible] = useState(false);
-  const [generateElderId, setGenerateElderId] = useState<number | ''>('');
-  const [generateLoading, setGenerateLoading] = useState(false);
 
   // AI create flow state
   const [catalog, setCatalog] = useState<FeatureCatalogEntry[]>([]);
@@ -242,32 +238,6 @@ const AssessmentPage: React.FC = () => {
     }
   };
 
-  const handleGenerate = async () => {
-    if (
-      generateElderId === '' ||
-      !Number.isFinite(generateElderId) ||
-      generateElderId <= 0
-    ) {
-      message.warning('请选择老人');
-      return;
-    }
-    try {
-      setGenerateLoading(true);
-      await generateAssessment({
-        elder_id: generateElderId,
-        force_recalculate: true,
-      });
-      message.success('评估生成成功');
-      setGenerateModalVisible(false);
-      setGenerateElderId('');
-      refresh();
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '生成失败');
-    } finally {
-      setGenerateLoading(false);
-    }
-  };
-
   const columns: AppTableColumn<Assessment>[] = [
     {
       title: '老人姓名',
@@ -414,13 +384,6 @@ const AssessmentPage: React.FC = () => {
         subtitle={`共 ${pagination.total ?? data.length} 份评估 · 平均得分 ${avgScore} · 高风险 ${highRisk} 人`}
         actions={
           <PermissionGuard permission="assessment:create">
-            <Button
-              variant="outlined"
-              startIcon={<Zap size={14} />}
-              onClick={() => setGenerateModalVisible(true)}
-            >
-              自动生成
-            </Button>
             <Button startIcon={<Plus size={14} />} onClick={openCreate}>
               发起 AI 评估
             </Button>
@@ -562,39 +525,6 @@ const AssessmentPage: React.FC = () => {
         }}
         onCancel={() => setEditVisible(false)}
       />
-
-      <Modal
-        open={generateModalVisible}
-        onClose={() => {
-          setGenerateModalVisible(false);
-          setGenerateElderId('');
-        }}
-        title="自动生成评估（基于最近体征）"
-        width={520}
-        footer={
-          <>
-            <Button
-              variant="outlined"
-              onClick={() => {
-                setGenerateModalVisible(false);
-                setGenerateElderId('');
-              }}
-            >
-              取消
-            </Button>
-            <Button onClick={handleGenerate} loading={generateLoading}>
-              {generateLoading ? '生成中...' : '确定'}
-            </Button>
-          </>
-        }
-      >
-        <ElderPicker
-          label="老人"
-          required
-          value={generateElderId}
-          onChange={(id) => setGenerateElderId(id)}
-        />
-      </Modal>
     </>
   );
 };

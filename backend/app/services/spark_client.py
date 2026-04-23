@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,34 @@ def _log_dir() -> Path:
 
 def _apps_dir() -> str:
     return os.environ.get("SPARK_APPS_DIR", "/opt/spark-apps")
+
+
+def _docker_socket_path() -> str:
+    return os.environ.get("DOCKER_HOST_SOCKET", "/var/run/docker.sock")
+
+
+def _preflight_error() -> Optional[str]:
+    """Return an English error string if this host cannot launch spark jobs.
+
+    Job submission shells out to `docker exec <spark-master> spark-submit ...`,
+    so we need (1) the docker CLI on PATH and (2) the docker socket reachable.
+    Without these, `asyncio.create_subprocess_exec` fails with a bare
+    "[Errno 2] No such file or directory" that is impossible to debug from the
+    UI log tail. Checking here turns that into a 400 on the submit endpoint.
+    """
+    if shutil.which("docker") is None:
+        return (
+            "Spark job submission requires the 'docker' CLI in the backend "
+            "container. Rebuild the backend image so docker.io is installed: "
+            "docker compose up -d --build backend"
+        )
+    sock = _docker_socket_path()
+    if not os.path.exists(sock):
+        return (
+            f"Docker socket not mounted at {sock}. Ensure docker-compose.yml "
+            "mounts /var/run/docker.sock into the backend service."
+        )
+    return None
 
 
 def new_job_id() -> str:
@@ -130,7 +159,13 @@ async def _run_and_track(job_id: str, cmd: list[str], log_path: str) -> None:
         )
         try:
             with open(log_path, "a", encoding="utf-8") as f:
-                f.write(f"\nERROR: {e}\n")
+                f.write(
+                    f"\nERROR launching job: {e}\n"
+                    f"Command: {' '.join(cmd)}\n"
+                    "Hint: the backend container must have the 'docker' CLI "
+                    "installed and /var/run/docker.sock mounted so it can "
+                    "reach the Spark master container.\n"
+                )
         except OSError:
             pass
         return
@@ -177,6 +212,10 @@ async def submit_job(
     """Create a BigDataJob row and launch the command in the background."""
     if resolve_script(job_type) is None:
         raise ValueError(f"Unsupported job_type: {job_type}")
+
+    preflight = _preflight_error()
+    if preflight:
+        raise ValueError(preflight)
 
     job_id = new_job_id()
     log_path = str(_log_dir() / f"{job_id}.log")
@@ -310,6 +349,10 @@ async def submit_pipeline(
         if run_id:
             logger.info("Reusing running pipeline run %s", run_id)
             return run_id, True
+
+    preflight = _preflight_error()
+    if preflight:
+        raise ValueError(preflight)
 
     pipeline_run_id = new_pipeline_run_id()
     asyncio.create_task(_run_pipeline_chain(pipeline_run_id, submitted_by))

@@ -147,9 +147,17 @@ class FollowupService:
     async def add_record(
         db: AsyncSession, followup_id: int, data: dict
     ) -> Optional[FollowupRecordResponse]:
-        """Add a record to a followup."""
+        """Add a record to a followup.
+
+        Promotes the parent followup's status to match the record's status
+        (e.g. marks the followup as completed once the doctor logs a
+        completed visit).
+        """
         record = await FollowupRepository.add_record(db, followup_id, data)
         if record is None:
             return None
+        record_status = data.get("status")
+        if record_status:
+            await FollowupRepository.update_status(db, followup_id, record_status)
         await db.commit()
         return FollowupRecordResponse.model_validate(record)

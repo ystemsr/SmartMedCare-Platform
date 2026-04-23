@@ -4,6 +4,7 @@ import logging
 from decimal import Decimal
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.assessment import AssessmentRepository
@@ -18,6 +19,57 @@ from app.utils.pagination import PaginationParams
 logger = logging.getLogger(__name__)
 
 
+async def _enrich_one(
+    db: AsyncSession, response: AssessmentResponse
+) -> AssessmentResponse:
+    """Attach elder_name / created_by_name to a single assessment response."""
+    from app.models.elder import Elder
+    from app.models.user import User
+
+    if response.elder_id is not None:
+        row = await db.execute(select(Elder.name).where(Elder.id == response.elder_id))
+        response.elder_name = row.scalar_one_or_none()
+    if response.created_by is not None:
+        row = await db.execute(
+            select(User.real_name, User.username).where(User.id == response.created_by)
+        )
+        item = row.first()
+        if item is not None:
+            response.created_by_name = item[0] or item[1]
+    return response
+
+
+async def _enrich_list(db: AsyncSession, page):
+    """Attach elder_name / created_by_name to a paginated list of assessments."""
+    from app.models.elder import Elder
+    from app.models.user import User
+
+    elder_ids = {item.elder_id for item in page.items if item.elder_id is not None}
+    if elder_ids:
+        rows = await db.execute(
+            select(Elder.id, Elder.name).where(Elder.id.in_(elder_ids))
+        )
+        elder_map = {r[0]: r[1] for r in rows.all()}
+        for item in page.items:
+            if item.elder_id is not None:
+                item.elder_name = elder_map.get(item.elder_id)
+
+    creator_ids = {
+        item.created_by for item in page.items if item.created_by is not None
+    }
+    if creator_ids:
+        rows = await db.execute(
+            select(User.id, User.real_name, User.username).where(
+                User.id.in_(creator_ids)
+            )
+        )
+        creator_map = {r[0]: (r[1] or r[2]) for r in rows.all()}
+        for item in page.items:
+            if item.created_by is not None:
+                item.created_by_name = creator_map.get(item.created_by)
+    return page
+
+
 class AssessmentService:
     """Assessment business operations."""
 
@@ -30,7 +82,8 @@ class AssessmentService:
         await db.commit()
         await db.refresh(assessment)
         logger.info("Assessment created: id=%s elder_id=%s", assessment.id, data.elder_id)
-        return AssessmentResponse.model_validate(assessment)
+        response = AssessmentResponse.model_validate(assessment)
+        return await _enrich_one(db, response)
 
     @staticmethod
     async def list_assessments(
@@ -42,8 +95,8 @@ class AssessmentService:
         date_start: Optional[str] = None,
         date_end: Optional[str] = None,
     ):
-        """List assessments with filters and pagination."""
-        return await AssessmentRepository.get_list(
+        """List assessments with filters and pagination (enriched with names)."""
+        page = await AssessmentRepository.get_list(
             db, pagination,
             elder_id=elder_id,
             risk_level=risk_level,
@@ -51,6 +104,7 @@ class AssessmentService:
             date_start=date_start,
             date_end=date_end,
         )
+        return await _enrich_list(db, page)
 
     @staticmethod
     async def get_assessment(
@@ -60,7 +114,8 @@ class AssessmentService:
         assessment = await AssessmentRepository.get_by_id(db, assessment_id)
         if assessment is None:
             return None
-        return AssessmentResponse.model_validate(assessment)
+        response = AssessmentResponse.model_validate(assessment)
+        return await _enrich_one(db, response)
 
     @staticmethod
     async def update_assessment(
@@ -73,7 +128,8 @@ class AssessmentService:
         await db.commit()
         await db.refresh(assessment)
         logger.info("Assessment updated: id=%s", assessment_id)
-        return AssessmentResponse.model_validate(assessment)
+        response = AssessmentResponse.model_validate(assessment)
+        return await _enrich_one(db, response)
 
     @staticmethod
     async def delete_assessment(db: AsyncSession, assessment_id: int) -> bool:
@@ -99,7 +155,8 @@ class AssessmentService:
         if not force:
             existing = await AssessmentRepository.get_latest_by_elder(db, elder_id)
             if existing is not None:
-                return AssessmentResponse.model_validate(existing)
+                response = AssessmentResponse.model_validate(existing)
+                return await _enrich_one(db, response)
 
         # Fetch the latest health record
         health_record = await HealthRecordRepository.get_latest_by_elder(db, elder_id)
@@ -176,4 +233,5 @@ class AssessmentService:
             "Assessment generated: id=%s elder_id=%s score=%s risk=%s",
             assessment.id, elder_id, score, risk_level,
         )
-        return AssessmentResponse.model_validate(assessment)
+        response = AssessmentResponse.model_validate(assessment)
+        return await _enrich_one(db, response)

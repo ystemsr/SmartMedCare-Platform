@@ -38,7 +38,7 @@ interface ElderProfile {
 
 interface HealthRecord {
   id: number;
-  record_date: string;
+  recorded_at?: string | null;
   blood_pressure_systolic?: number | null;
   blood_pressure_diastolic?: number | null;
   heart_rate?: number | null;
@@ -145,7 +145,7 @@ const ElderHomePage: React.FC = () => {
             heartRate: latest.heart_rate != null ? String(latest.heart_rate) : '--',
             bloodGlucose:
               latest.blood_glucose != null ? String(latest.blood_glucose) : '--',
-            lastRecordAt: latest.created_at || latest.record_date,
+            lastRecordAt: latest.recorded_at || latest.created_at,
           });
         }
       } catch {

@@ -32,12 +32,14 @@ class AssessmentResponse(BaseModel):
 
     id: int
     elder_id: int
+    elder_name: Optional[str] = None
     assessment_type: str
     score: Optional[int] = None
     risk_level: str
     summary: Optional[str] = None
     suggestions: Optional[list[str]] = None
     created_by: Optional[int] = None
+    created_by_name: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

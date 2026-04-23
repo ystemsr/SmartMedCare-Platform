@@ -112,6 +112,11 @@ class HealthArchiveService:
     ) -> int:
         """Import health records from a CSV or Excel file.
 
+        Column headers must exactly match the English model field names:
+        height_cm, weight_kg, blood_pressure_systolic, blood_pressure_diastolic,
+        blood_glucose, heart_rate, temperature, chronic_diseases, allergies,
+        recorded_at.
+
         Returns the number of records imported.
         """
         import pandas as pd
@@ -125,15 +130,15 @@ class HealthArchiveService:
         for _, row in df.iterrows():
             record = HealthRecord(
                 elder_id=elder_id,
-                height_cm=row.get("height_cm"),
-                weight_kg=row.get("weight_kg"),
-                blood_pressure_systolic=row.get("blood_pressure_systolic"),
-                blood_pressure_diastolic=row.get("blood_pressure_diastolic"),
-                blood_glucose=row.get("blood_glucose"),
-                heart_rate=row.get("heart_rate"),
-                temperature=row.get("temperature"),
-                chronic_diseases=row.get("chronic_diseases") if not _is_nan(row.get("chronic_diseases")) else None,
-                allergies=row.get("allergies") if not _is_nan(row.get("allergies")) else None,
+                height_cm=_clean_decimal(row.get("height_cm")),
+                weight_kg=_clean_decimal(row.get("weight_kg")),
+                blood_pressure_systolic=_clean_int(row.get("blood_pressure_systolic")),
+                blood_pressure_diastolic=_clean_int(row.get("blood_pressure_diastolic")),
+                blood_glucose=_clean_decimal(row.get("blood_glucose")),
+                heart_rate=_clean_int(row.get("heart_rate")),
+                temperature=_clean_decimal(row.get("temperature")),
+                chronic_diseases=_parse_string_list(row.get("chronic_diseases")),
+                allergies=_parse_string_list(row.get("allergies")),
                 recorded_at=_parse_datetime(row.get("recorded_at")),
             )
             db.add(record)
@@ -194,6 +199,57 @@ def _is_nan(value) -> bool:
         return False
 
 
+def _clean_int(value) -> int | None:
+    """Coerce a pandas cell to int, returning None for NaN / empty."""
+    if value is None or _is_nan(value):
+        return None
+    try:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _clean_decimal(value):
+    """Coerce a pandas cell to a value safe for a Numeric column."""
+    from decimal import Decimal, InvalidOperation
+
+    if value is None or _is_nan(value):
+        return None
+    try:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            return Decimal(stripped)
+        return Decimal(str(value))
+    except (TypeError, ValueError, InvalidOperation):
+        return None
+
+
+def _parse_string_list(value) -> list[str] | None:
+    """Parse a cell into a list[str] for JSON columns (chronic_diseases / allergies).
+
+    Accepts list input as-is, or splits strings on common separators so CSV
+    cells like "糖尿病,高血压" become ["糖尿病", "高血压"].
+    """
+    if value is None or _is_nan(value):
+        return None
+    if isinstance(value, list):
+        items = [str(v).strip() for v in value if str(v).strip()]
+        return items or None
+    text = str(value).strip()
+    if not text:
+        return None
+    for sep in (";", "；", ",", "，", "、", "/", "|"):
+        if sep in text:
+            parts = [p.strip() for p in text.split(sep)]
+            parts = [p for p in parts if p]
+            return parts or None
+    return [text]
+
+
 def _parse_datetime(value) -> datetime | None:
     """Parse a datetime value from a pandas cell."""
     if value is None or _is_nan(value):
@@ -201,6 +257,10 @@ def _parse_datetime(value) -> datetime | None:
     if isinstance(value, datetime):
         return value
     try:
-        return datetime.fromisoformat(str(value))
+        import pandas as pd
+        ts = pd.to_datetime(value, errors="coerce")
+        if pd.isna(ts):
+            return None
+        return ts.to_pydatetime()
     except (ValueError, TypeError):
         return None

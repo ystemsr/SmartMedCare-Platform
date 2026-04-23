@@ -29,6 +29,8 @@ const healthRecordFields: FormFieldConfig[] = [
   { name: 'blood_glucose', label: '血糖(mmol/L)', type: 'number' },
   { name: 'heart_rate', label: '心率(次/分)', type: 'number' },
   { name: 'temperature', label: '体温(℃)', type: 'number' },
+  { name: 'chronic_diseases', label: '慢性病（多项用英文逗号分隔）' },
+  { name: 'allergies', label: '过敏史（多项用英文逗号分隔）' },
 ];
 
 const medicalRecordFields: FormFieldConfig[] = [
@@ -181,6 +183,14 @@ const ElderDetailPage: React.FC = () => {
         render: (value: unknown) => {
           const diseases = value as string[] | undefined;
           return diseases?.join(', ') || '-';
+        },
+      },
+      {
+        title: '过敏史',
+        dataIndex: 'allergies',
+        render: (value: unknown) => {
+          const allergies = value as string[] | undefined;
+          return allergies?.join(', ') || '-';
         },
       },
       {
@@ -685,10 +695,21 @@ const ElderDetailPage: React.FC = () => {
         visible={healthFormVisible}
         fields={healthRecordFields}
         onSubmit={async (values) => {
-          await createHealthRecord(elderId, {
+          const splitList = (v: unknown): string[] | undefined => {
+            if (!v) return undefined;
+            if (Array.isArray(v)) return v.map(String).map((s) => s.trim()).filter(Boolean);
+            return String(v)
+              .split(/[,，;；、/|]/)
+              .map((s) => s.trim())
+              .filter(Boolean);
+          };
+          const payload = {
             ...values,
+            chronic_diseases: splitList((values as Record<string, unknown>).chronic_diseases),
+            allergies: splitList((values as Record<string, unknown>).allergies),
             recorded_at: new Date().toISOString(),
-          } as Parameters<typeof createHealthRecord>[1]);
+          };
+          await createHealthRecord(elderId, payload as Parameters<typeof createHealthRecord>[1]);
           message.success('添加成功');
           setHealthFormVisible(false);
           fetchHealthRecords();

@@ -4,7 +4,25 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+
+def _coerce_string_list(value):
+    """Accept list, None, or a scalar string (legacy rows) and return list[str]."""
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        for sep in (";", "；", ",", "，", "、", "/", "|"):
+            if sep in text:
+                parts = [p.strip() for p in text.split(sep) if p.strip()]
+                return parts or None
+        return [text]
+    return [str(value)]
 
 
 # ---- Health Records ----
@@ -57,6 +75,11 @@ class HealthRecordResponse(BaseModel):
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("chronic_diseases", "allergies", mode="before")
+    @classmethod
+    def _tolerate_legacy_shape(cls, v):
+        return _coerce_string_list(v)
 
 
 # ---- Medical Records ----

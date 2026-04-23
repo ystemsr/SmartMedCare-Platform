@@ -1,9 +1,31 @@
 """Pydantic schemas for health assessments."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+
+def _normalize_suggestions(value: Any) -> Any:
+    """Coerce legacy dict-shaped suggestions into a flat list of strings.
+
+    Older rows persisted suggestions as {"运动建议": "...", "饮食建议": "..."};
+    the current contract is list[str]. Normalize on read so those rows remain
+    usable without a data migration.
+    """
+    if value is None or isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        items: list[str] = []
+        for k, v in value.items():
+            if v is None or v == "":
+                items.append(str(k))
+            else:
+                items.append(f"{k}：{v}")
+        return items
+    if isinstance(value, str):
+        return [value]
+    return value
 
 
 class AssessmentCreate(BaseModel):
@@ -16,6 +38,11 @@ class AssessmentCreate(BaseModel):
     summary: Optional[str] = None
     suggestions: Optional[list[str]] = None
 
+    @field_validator("suggestions", mode="before")
+    @classmethod
+    def _coerce_suggestions(cls, v: Any) -> Any:
+        return _normalize_suggestions(v)
+
 
 class AssessmentUpdate(BaseModel):
     """Schema for updating an assessment. All fields optional."""
@@ -25,6 +52,11 @@ class AssessmentUpdate(BaseModel):
     risk_level: Optional[str] = None
     summary: Optional[str] = None
     suggestions: Optional[list[str]] = None
+
+    @field_validator("suggestions", mode="before")
+    @classmethod
+    def _coerce_suggestions(cls, v: Any) -> Any:
+        return _normalize_suggestions(v)
 
 
 class AssessmentResponse(BaseModel):
@@ -43,6 +75,11 @@ class AssessmentResponse(BaseModel):
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("suggestions", mode="before")
+    @classmethod
+    def _coerce_suggestions(cls, v: Any) -> Any:
+        return _normalize_suggestions(v)
 
 
 class AssessmentGenerate(BaseModel):

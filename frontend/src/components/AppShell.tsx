@@ -28,6 +28,7 @@ import {
 import { IconButton, DropdownMenu, Spinner } from './ui';
 import { useAuthStore } from '../store/auth';
 import { useAppStore } from '../store/app';
+import AIEntryFab from './AIEntryFab';
 
 export interface AppShellMenuItem {
   key: string;
@@ -659,6 +660,7 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
           </Suspense>
         </main>
       </div>
+      <AIEntryFab />
     </div>
   );
 };

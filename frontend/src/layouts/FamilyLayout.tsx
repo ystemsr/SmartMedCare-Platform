@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { HeartPulse, Home, User } from 'lucide-react';
+import { HeartPulse, Home, User, Sparkles } from 'lucide-react';
 import AppShell, { type AppShellMenuItem } from '../components/AppShell';
 import { getElderAlerts } from '../api/family';
 
@@ -61,6 +61,11 @@ const FamilyLayout: React.FC = () => {
       key: '/family/elder',
       icon: <IconWithBadge icon={<HeartPulse size={18} />} count={alertCount} />,
       label: '老人健康',
+    },
+    {
+      key: '/ai',
+      icon: <Sparkles size={18} />,
+      label: 'AI 助手',
     },
     {
       key: '/family/personal',

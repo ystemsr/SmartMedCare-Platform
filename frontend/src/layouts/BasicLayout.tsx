@@ -15,6 +15,8 @@ import {
   FolderOpen,
   BarChart3,
   LineChart,
+  Sparkles,
+  Cog,
 } from 'lucide-react';
 import AppShell, { type AppShellMenuItem } from '../components/AppShell';
 import { usePermission } from '../hooks/usePermission';
@@ -121,6 +123,20 @@ const BasicLayout: React.FC = () => {
             label: '多维分析',
           },
         ],
+      });
+    }
+
+    items.push({
+      key: '/ai',
+      icon: <Sparkles size={18} />,
+      label: 'AI 助手',
+    });
+
+    if (hasAnyPermission(['system:config'])) {
+      items.push({
+        key: '/ai/config',
+        icon: <Cog size={18} />,
+        label: 'AI 模型配置',
       });
     }
 

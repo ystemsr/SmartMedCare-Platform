@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Home, User, HeartPulse, UserPlus, ClipboardList } from 'lucide-react';
+import { Home, User, HeartPulse, UserPlus, ClipboardList, Sparkles } from 'lucide-react';
 import AppShell, { type AppShellMenuItem } from '../components/AppShell';
 import { listMySurveys } from '../api/surveys';
 import { listMyPredictionTasks } from '../api/predictions';
@@ -59,6 +59,11 @@ const ElderLayout: React.FC = () => {
         key: '/elder/invite',
         icon: <UserPlus size={20} />,
         label: '邀请家属',
+      },
+      {
+        key: '/ai',
+        icon: <Sparkles size={20} />,
+        label: 'AI 助手',
       },
       {
         key: '/elder/personal',

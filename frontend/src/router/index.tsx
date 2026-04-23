@@ -35,6 +35,8 @@ const JobManagerPage = lazy(() => import('../pages/bigdata/JobManagerPage'));
 const HdfsBrowserPage = lazy(() => import('../pages/bigdata/HdfsBrowserPage'));
 const HiveQueryPage = lazy(() => import('../pages/bigdata/HiveQueryPage'));
 const BigDataAnalyticsPage = lazy(() => import('../pages/bigdata/BigDataAnalyticsPage'));
+const AIChatPage = lazy(() => import('../pages/ai/AIChatPage'));
+const AIConfigPage = lazy(() => import('../pages/ai/AIConfigPage'));
 
 const PageLoading: React.FC = () => (
   <div
@@ -100,7 +102,27 @@ const AppRouter: React.FC = () => {
           <Route path="/bigdata/hdfs" element={<HdfsBrowserPage />} />
           <Route path="/bigdata/hive" element={<HiveQueryPage />} />
           <Route path="/bigdata/analytics" element={<BigDataAnalyticsPage />} />
+          <Route path="/ai/config" element={<AIConfigPage />} />
         </Route>
+
+        {/* Full-screen AI chat — open to every authenticated role.
+         * `/ai` = empty state; `/ai/:id` = viewing a conversation. */}
+        <Route
+          path="/ai"
+          element={
+            <ProtectedRoute>
+              <AIChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai/:id"
+          element={
+            <ProtectedRoute>
+              <AIChatPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           element={

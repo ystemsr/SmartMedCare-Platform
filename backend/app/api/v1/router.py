@@ -47,3 +47,7 @@ api_router.include_router(
 # ===== Weather (OpenWeatherMap) =====
 from app.api.v1.endpoints import weather
 api_router.include_router(weather.router, prefix="/weather", tags=["天气"])
+
+# ===== AI assistant (chat + model config) =====
+from app.api.v1.endpoints import ai
+api_router.include_router(ai.router, prefix="/ai", tags=["AI 助手"])

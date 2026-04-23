@@ -124,8 +124,12 @@ const InterventionPage: React.FC = () => {
   };
 
   const columns: AppTableColumn<Intervention>[] = [
-    { title: '老人ID', dataIndex: 'elder_id', width: 80 },
-    { title: '老人姓名', dataIndex: 'elder_name', width: 100 },
+    {
+      title: '老人姓名',
+      dataIndex: 'elder_name',
+      width: 120,
+      render: (value) => (value ? String(value) : '-'),
+    },
     { title: '干预类型', dataIndex: 'type', width: 120 },
     {
       title: '状态',

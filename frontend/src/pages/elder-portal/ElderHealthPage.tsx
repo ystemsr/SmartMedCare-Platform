@@ -15,13 +15,12 @@ import HealthTrendCharts, {
   type TrendRecord,
 } from '../../components/elder-portal/HealthTrendCharts';
 import AlertsPanel from '../../components/elder-portal/AlertsPanel';
-import { formatDate, formatDateTime } from '../../utils/formatter';
+import { formatDateTime } from '../../utils/formatter';
 import type { Alert as AlertEntity } from '../../types/alert';
 
 interface HealthRecord extends TrendRecord {
   id: number;
-  record_type: string;
-  summary: string;
+  temperature?: number | null;
   created_at: string;
 }
 
@@ -145,17 +144,11 @@ const ElderHealthPage: React.FC = () => {
   const columns = useMemo<AppTableColumn<HealthRecord>[]>(
     () => [
       {
-        title: '记录日期',
-        dataIndex: 'record_date',
-        key: 'record_date',
-        width: 130,
-        render: (value) => formatDate(value as string | undefined),
-      },
-      {
-        title: '类型',
-        dataIndex: 'record_type',
-        key: 'record_type',
-        width: 120,
+        title: '记录时间',
+        dataIndex: 'recorded_at',
+        key: 'recorded_at',
+        width: 170,
+        render: (value) => formatDateTime(value as string | undefined),
       },
       {
         title: '血压',
@@ -184,10 +177,11 @@ const ElderHealthPage: React.FC = () => {
         render: (value) => (value != null ? `${value} mmol/L` : '-'),
       },
       {
-        title: '摘要',
-        dataIndex: 'summary',
-        key: 'summary',
-        ellipsis: true,
+        title: '体温',
+        dataIndex: 'temperature',
+        key: 'temperature',
+        width: 100,
+        render: (value) => (value != null ? `${value} ℃` : '-'),
       },
       {
         title: '创建时间',

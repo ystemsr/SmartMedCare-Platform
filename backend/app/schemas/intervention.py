@@ -48,12 +48,14 @@ class InterventionResponse(BaseModel):
 
     id: int
     elder_id: int
+    elder_name: Optional[str] = None
     followup_id: Optional[int] = None
     type: str
     status: str
     content: Optional[str] = None
     planned_at: Optional[datetime] = None
     performed_by: Optional[int] = None
+    performed_by_name: Optional[str] = None
     performed_at: Optional[datetime] = None
     result: Optional[str] = None
     created_at: datetime

@@ -1,7 +1,16 @@
-import React, { useCallback, useState } from 'react';
-import { Plus, Eye, Search, CheckCircle2, Ban } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Plus, Eye, Search, CheckCircle2, Ban, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Chip, DatePicker, Select, confirm } from '../../components/ui';
+import {
+  Button,
+  Chip,
+  DatePicker,
+  Divider,
+  Drawer,
+  Select,
+  Spinner,
+  confirm,
+} from '../../components/ui';
 import type { AppTableColumn } from '../../components/AppTable';
 import AppTable from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
@@ -9,6 +18,7 @@ import PermissionGuard from '../../components/PermissionGuard';
 import { useTable } from '../../hooks/useTable';
 import {
   getAlerts,
+  getAlertDetail,
   createAlert,
   updateAlertStatus,
   batchUpdateAlertStatus,
@@ -48,10 +58,31 @@ const SOURCE_LABELS: Record<string, string> = {
   rule: '规则',
 };
 
+function DrawerField({
+  label,
+  value,
+  fullWidth = false,
+}: {
+  label: string;
+  value?: React.ReactNode;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
+      <div style={{ fontSize: 12, color: 'var(--smc-text-2)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 14, wordBreak: 'break-word' }}>{value ?? '-'}</div>
+    </div>
+  );
+}
+
 const AlertListPage: React.FC = () => {
   const navigate = useNavigate();
   const [formVisible, setFormVisible] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+
+  const [drawerAlertId, setDrawerAlertId] = useState<number | null>(null);
+  const [drawerAlert, setDrawerAlert] = useState<Alert | null>(null);
+  const [drawerLoading, setDrawerLoading] = useState(false);
 
   const fetchFn = useCallback(
     (params: AlertListQuery & { page: number; page_size: number }) => getAlerts(params),
@@ -60,6 +91,27 @@ const AlertListPage: React.FC = () => {
 
   const { data, loading, pagination, handleTableChange, refresh, handleSearch, query, setQuery } =
     useTable<Alert, AlertListQuery>(fetchFn);
+
+  const loadDrawer = useCallback(async (id: number) => {
+    setDrawerLoading(true);
+    try {
+      const res = await getAlertDetail(id);
+      setDrawerAlert(res.data);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '加载预警详情失败');
+      setDrawerAlert(null);
+    } finally {
+      setDrawerLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (drawerAlertId == null) {
+      setDrawerAlert(null);
+      return;
+    }
+    loadDrawer(drawerAlertId);
+  }, [drawerAlertId, loadDrawer]);
 
   const handleStatusUpdate = async (id: number, status: Alert['status']) => {
     const ok = await confirm({
@@ -73,6 +125,7 @@ const AlertListPage: React.FC = () => {
       await updateAlertStatus(id, { status });
       message.success('状态更新成功');
       refresh();
+      if (drawerAlertId === id) await loadDrawer(id);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '操作失败');
     }
@@ -180,54 +233,124 @@ const AlertListPage: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 280,
+      width: 100,
       fixed: 'right',
       render: (_, record) => (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          <Button
-            size="sm"
-            variant="text"
-            startIcon={<Eye size={14} />}
-            onClick={() => navigate(`/alerts/${record.id}`)}
-          >
-            详情
-          </Button>
-          <PermissionGuard permission="alert:update">
-            {record.status === 'pending' && (
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<Search size={14} />}
-                onClick={() => handleStatusUpdate(record.id, 'processing')}
-              >
-                处理
-              </Button>
-            )}
-            {record.status === 'processing' && (
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<CheckCircle2 size={14} />}
-                onClick={() => handleStatusUpdate(record.id, 'resolved')}
-              >
-                解决
-              </Button>
-            )}
-            {(record.status === 'pending' || record.status === 'processing') && (
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<Ban size={14} />}
-                onClick={() => handleStatusUpdate(record.id, 'ignored')}
-              >
-                忽略
-              </Button>
-            )}
-          </PermissionGuard>
-        </div>
+        <Button
+          size="sm"
+          variant="text"
+          startIcon={<Eye size={14} />}
+          onClick={() => setDrawerAlertId(record.id)}
+        >
+          详情
+        </Button>
       ),
     },
   ];
+
+  const renderDrawerBody = () => {
+    if (drawerLoading && !drawerAlert) {
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
+          <Spinner />
+        </div>
+      );
+    }
+    if (!drawerAlert) return null;
+    const riskColor = RISK_LEVEL_COLORS[drawerAlert.risk_level] || 'var(--smc-text)';
+    const statusColor = ALERT_STATUS_COLORS[drawerAlert.status] || 'var(--smc-text)';
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Chip outlined style={{ color: riskColor, borderColor: riskColor }}>
+            {formatRiskLevel(drawerAlert.risk_level)}
+          </Chip>
+          <Chip outlined style={{ color: statusColor, borderColor: statusColor }}>
+            {formatAlertStatus(drawerAlert.status)}
+          </Chip>
+          {drawerAlert.source && (
+            <Chip
+              outlined
+              style={{
+                color: SOURCE_COLORS[drawerAlert.source] || 'var(--smc-text)',
+                borderColor: SOURCE_COLORS[drawerAlert.source] || 'var(--smc-divider)',
+              }}
+            >
+              {SOURCE_LABELS[drawerAlert.source] || drawerAlert.source}
+            </Chip>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gap: 14,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          }}
+        >
+          <DrawerField label="预警标题" value={drawerAlert.title} fullWidth />
+          <DrawerField label="预警类型" value={drawerAlert.type} />
+          <DrawerField label="老人" value={drawerAlert.elder_name || `#${drawerAlert.elder_id}`} />
+          <DrawerField label="触发时间" value={formatDateTime(drawerAlert.triggered_at)} />
+          {drawerAlert.resolved_at && (
+            <DrawerField label="解决时间" value={formatDateTime(drawerAlert.resolved_at)} />
+          )}
+          <DrawerField label="描述" value={drawerAlert.description} fullWidth />
+          {drawerAlert.remark && <DrawerField label="备注" value={drawerAlert.remark} fullWidth />}
+        </div>
+
+        <Divider />
+
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--smc-text-2)', marginBottom: 8 }}>
+            处理操作
+          </div>
+          <PermissionGuard permission="alert:update">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {drawerAlert.status === 'pending' && (
+                <Button
+                  startIcon={<Search size={14} />}
+                  onClick={() => handleStatusUpdate(drawerAlert.id, 'processing')}
+                >
+                  开始处理
+                </Button>
+              )}
+              {drawerAlert.status === 'processing' && (
+                <Button
+                  startIcon={<CheckCircle2 size={14} />}
+                  onClick={() => handleStatusUpdate(drawerAlert.id, 'resolved')}
+                >
+                  标记解决
+                </Button>
+              )}
+              {(drawerAlert.status === 'pending' || drawerAlert.status === 'processing') && (
+                <Button
+                  variant="outlined"
+                  startIcon={<Ban size={14} />}
+                  onClick={() => handleStatusUpdate(drawerAlert.id, 'ignored')}
+                >
+                  忽略
+                </Button>
+              )}
+              <Button
+                variant="outlined"
+                onClick={() => navigate(`/elders/${drawerAlert.elder_id}`)}
+              >
+                查看老人信息
+              </Button>
+              <Button
+                variant="text"
+                startIcon={<ExternalLink size={14} />}
+                onClick={() => navigate(`/alerts/${drawerAlert.id}`)}
+              >
+                查看完整详情页
+              </Button>
+            </div>
+          </PermissionGuard>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -340,6 +463,16 @@ const AlertListPage: React.FC = () => {
         }}
         onCancel={() => setFormVisible(false)}
       />
+
+      <Drawer
+        open={drawerAlertId != null}
+        onClose={() => setDrawerAlertId(null)}
+        placement="right"
+        width={520}
+        title="预警详情"
+      >
+        {renderDrawerBody()}
+      </Drawer>
     </>
   );
 };

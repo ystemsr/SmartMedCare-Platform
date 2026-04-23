@@ -6,7 +6,7 @@ import { Heart, Activity, Droplet } from 'lucide-react';
 import { Card, CardBody } from '@/components/ui';
 
 export interface TrendRecord {
-  record_date: string;
+  recorded_at?: string | null;
   blood_pressure_systolic?: number | null;
   blood_pressure_diastolic?: number | null;
   heart_rate?: number | null;
@@ -58,8 +58,8 @@ function buildLast7Days(records: TrendRecord[]): DailyAggregate[] {
   // Average values when multiple records share a day; ignore older than 7 days.
   const buckets = new Map<string, { sysSum: number; sysCnt: number; diaSum: number; diaCnt: number; hrSum: number; hrCnt: number; bgSum: number; bgCnt: number }>();
   records.forEach((r) => {
-    if (!r.record_date) return;
-    const day = dayjs(r.record_date).format('YYYY-MM-DD');
+    if (!r.recorded_at) return;
+    const day = dayjs(r.recorded_at).format('YYYY-MM-DD');
     if (!dateIndex.has(day)) return;
     const b = buckets.get(day) ?? { sysSum: 0, sysCnt: 0, diaSum: 0, diaCnt: 0, hrSum: 0, hrCnt: 0, bgSum: 0, bgCnt: 0 };
     if (r.blood_pressure_systolic != null) { b.sysSum += r.blood_pressure_systolic; b.sysCnt += 1; }

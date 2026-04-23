@@ -96,11 +96,22 @@ const ElderArchivePage: React.FC = () => {
 
       const entries: TimelineEntry[] = [];
       healthRes.data.items.forEach((record: HealthRecord) => {
+        const parts = [
+          `血压 ${record.blood_pressure_systolic || '-'}/${record.blood_pressure_diastolic || '-'}`,
+          `心率 ${record.heart_rate || '-'}`,
+          `血糖 ${record.blood_glucose || '-'}`,
+        ];
+        if (record.chronic_diseases?.length) {
+          parts.push(`慢性病: ${record.chronic_diseases.join('、')}`);
+        }
+        if (record.allergies?.length) {
+          parts.push(`过敏史: ${record.allergies.join('、')}`);
+        }
         entries.push({
           time: record.recorded_at,
           type: 'health',
           label: '健康记录',
-          content: `血压 ${record.blood_pressure_systolic || '-'}/${record.blood_pressure_diastolic || '-'}，心率 ${record.heart_rate || '-'}，血糖 ${record.blood_glucose || '-'}`,
+          content: parts.join('，'),
         });
       });
       medicalRes.data.items.forEach((record: MedicalRecord) => {
@@ -120,7 +131,11 @@ const ElderArchivePage: React.FC = () => {
         });
       });
 
-      entries.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+      entries.sort((a, b) => {
+        const tb = a.time ? new Date(a.time).getTime() : 0;
+        const ta = b.time ? new Date(b.time).getTime() : 0;
+        return ta - tb;
+      });
       setTimeline(entries);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '加载失败');

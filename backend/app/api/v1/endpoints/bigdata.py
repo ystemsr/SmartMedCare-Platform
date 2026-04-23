@@ -334,7 +334,12 @@ async def pipeline_run(
     current_user=Depends(require_permission("bigdata:run")),
 ):
     """Trigger the full three-stage pipeline. Idempotent while a run is in flight."""
-    run_id, reused = await spark_client.submit_pipeline(db, submitted_by=current_user.id)
+    try:
+        run_id, reused = await spark_client.submit_pipeline(
+            db, submitted_by=current_user.id
+        )
+    except ValueError as e:
+        return error_response(PARAM_ERROR, str(e))
     jobs = await BigDataJobRepository.list_by_pipeline_run_id(db, run_id)
     payload = PipelineRunResponse(
         pipeline_run_id=run_id,

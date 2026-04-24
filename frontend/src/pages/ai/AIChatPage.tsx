@@ -11,6 +11,7 @@ import {
   getPublicConfig,
   streamChat,
   type AIChatMessage,
+  type AIModelEntry,
 } from '../../api/ai';
 import ThinkingBubble from './ThinkingBubble';
 import MarkdownStream from './MarkdownStream';
@@ -43,6 +44,7 @@ interface Conversation {
 
 const STORAGE_KEY = 'smc.ai.conversations.v1';
 const COLLAPSE_KEY = 'smc.ai.side.collapsed';
+const MODEL_KEY = 'smc.ai.model.selected';
 
 /* =========================================================================
  * Utilities
@@ -296,19 +298,61 @@ const AIChatPage: React.FC = () => {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
 
-  /* ---- model display ---- */
-  const [modelName, setModelName] = useState('AI 助手');
+  /* ---- model picker ---- */
+  const [models, setModels] = useState<AIModelEntry[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    try {
+      return localStorage.getItem(MODEL_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [configured, setConfigured] = useState<boolean>(true);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   useEffect(() => {
     getPublicConfig()
       .then((res) => {
-        setModelName(res.data.model || 'AI 助手');
+        const list = res.data.models || [];
+        setModels(list);
         setConfigured(res.data.configured);
+        // Ensure current selection is valid; otherwise adopt server default
+        // or first entry.
+        setSelectedModel((prev) => {
+          if (prev && list.some((m) => m.model === prev)) return prev;
+          return res.data.model || list[0]?.model || '';
+        });
       })
       .catch(() => {
-        setModelName('AI 助手');
+        setModels([]);
       });
   }, []);
+  useEffect(() => {
+    try {
+      if (selectedModel) localStorage.setItem(MODEL_KEY, selectedModel);
+    } catch {
+      /* quota ignored */
+    }
+  }, [selectedModel]);
+  const selectedEntry = useMemo(
+    () => models.find((m) => m.model === selectedModel),
+    [models, selectedModel],
+  );
+  const modelDisplay =
+    selectedEntry?.display_name ||
+    selectedEntry?.model ||
+    selectedModel ||
+    'AI 助手';
+
+  // Close the model menu when clicking outside.
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-ai-model-pop]')) setModelMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [modelMenuOpen]);
 
   /* ---- smart autoscroll ----
    * Only auto-scroll when the user is already near the bottom; if they
@@ -467,7 +511,7 @@ const AIChatPage: React.FC = () => {
           : undefined;
 
       try {
-        await streamChat(payload, undefined, {
+        await streamChat(payload, selectedModel || undefined, {
           signal: controller.signal,
           onDelta: (delta) => {
             if (firstToken) {
@@ -566,7 +610,7 @@ const AIChatPage: React.FC = () => {
         abortRef.current = null;
       }
     },
-    [],
+    [selectedModel],
   );
 
   const sendFromEmpty = () => {
@@ -744,10 +788,126 @@ const AIChatPage: React.FC = () => {
               </button>
             </div>
             <div className="ai-actions-right">
-              <div className="ai-model" title="当前模型">
-                <b>{modelName}</b>
-                <span className="ai-tag">Chat</span>
-                <IcoCaretDown />
+              <div
+                data-ai-model-pop
+                className="ai-model-pop"
+                style={{ position: 'relative' }}
+              >
+                <button
+                  type="button"
+                  className="ai-model"
+                  title="切换模型"
+                  onClick={() => setModelMenuOpen((v) => !v)}
+                  disabled={models.length === 0}
+                  style={{
+                    border: 0,
+                    background: 'transparent',
+                    cursor: models.length === 0 ? 'default' : 'pointer',
+                    font: 'inherit',
+                    color: 'inherit',
+                  }}
+                >
+                  <b>{modelDisplay}</b>
+                  <span className="ai-tag">Chat</span>
+                  <IcoCaretDown />
+                </button>
+                {modelMenuOpen && models.length > 0 && (
+                  <div
+                    role="listbox"
+                    className="ai-model-menu"
+                    style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 8px)',
+                      right: 0,
+                      minWidth: 260,
+                      maxHeight: 320,
+                      overflowY: 'auto',
+                      padding: 6,
+                      background: 'var(--ai-surface, #fff)',
+                      border: '1px solid var(--ai-border, #e5e5e5)',
+                      borderRadius: 12,
+                      boxShadow:
+                        '0 12px 32px rgba(15, 15, 15, 0.12), 0 2px 6px rgba(15, 15, 15, 0.06)',
+                      zIndex: 20,
+                    }}
+                  >
+                    {models.map((m) => {
+                      const isActive = m.model === selectedModel;
+                      return (
+                        <button
+                          key={m.model}
+                          type="button"
+                          role="option"
+                          aria-selected={isActive}
+                          onClick={() => {
+                            setSelectedModel(m.model);
+                            setModelMenuOpen(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                            width: '100%',
+                            padding: '9px 10px',
+                            border: 0,
+                            borderRadius: 8,
+                            background: isActive
+                              ? 'var(--ai-accent-soft, rgba(92, 141, 93, 0.12))'
+                              : 'transparent',
+                            color: 'inherit',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            font: 'inherit',
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              minWidth: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                fontSize: 13,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {m.display_name || m.model}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11.5,
+                                color: 'var(--ai-muted, #8a847b)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {m.model}
+                            </span>
+                          </span>
+                          {isActive && (
+                            <span
+                              aria-hidden
+                              style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: '50%',
+                                background: 'var(--ai-accent, #5c8d5d)',
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               {showStop ? (
                 <button

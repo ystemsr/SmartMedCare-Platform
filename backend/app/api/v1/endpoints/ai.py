@@ -27,30 +27,129 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# Role codes that have their own dedicated system prompt. Order matters
+# when a user holds multiple roles — earlier entries win (admin beats
+# doctor, doctor beats family, etc.).
+ROLE_CODES: List[str] = ["admin", "doctor", "elder", "family"]
+
 # Mapping of public config field name -> system_configs.config_key
 _AI_KEYS: Dict[str, str] = {
     "base_url": "ai.base_url",
     "api_key": "ai.api_key",
+    # `model` is the actual model name of the DEFAULT selection. `models`
+    # is the JSON-encoded list of [{display_name, model}] offered to the
+    # chat UI — users pick one and the choice is sent back as body.model.
     "model": "ai.model",
+    "models": "ai.models",
     "temperature": "ai.temperature",
     "max_tokens": "ai.max_tokens",
     "reasoning_enabled": "ai.reasoning_enabled",
+    # Shared fallback — used when a role-specific prompt is empty.
     "system_prompt": "ai.system_prompt",
+    # Per-role prompts. Each role sees only its own prompt during chat.
+    "system_prompt_admin": "ai.system_prompt.admin",
+    "system_prompt_doctor": "ai.system_prompt.doctor",
+    "system_prompt_elder": "ai.system_prompt.elder",
+    "system_prompt_family": "ai.system_prompt.family",
 }
+
+_SHARED_DEFAULT_PROMPT = (
+    "你是智慧医养大数据公共服务平台的 AI 助手。"
+    "请用简洁、友善、专业的中文回答用户问题。"
+    "涉及健康建议时，需提醒用户以医生诊断为准。"
+)
+
+_ROLE_DEFAULT_PROMPTS: Dict[str, str] = {
+    "admin": (
+        "你是智慧医养大数据公共服务平台的管理员助手。"
+        "协助管理员处理系统运维、用户与权限管理、数据治理、统计报表解读等工作。"
+        "回答需准确、严谨，必要时引用平台功能路径或配置项。"
+    ),
+    "doctor": (
+        "你是智慧医养大数据公共服务平台的医生助手。"
+        "协助医生完成健康评估、风险研判、随访与干预建议等临床辅助工作。"
+        "请用专业、克制的语气回答，涉及诊疗建议时需提示以临床判断为准，不替代医生决策。"
+    ),
+    "elder": (
+        "你是智慧医养大数据公共服务平台的老人助手。"
+        "请用温和、亲切、通俗易懂的口吻回答老人关心的健康、用药、作息、就医流程等问题。"
+        "避免使用过多专业术语；遇到紧急症状，优先提示及时就医或联系家属。"
+    ),
+    "family": (
+        "你是智慧医养大数据公共服务平台的家属助手。"
+        "协助家属了解老人健康状况、随访记录、用药与照护建议。"
+        "回答需兼具通俗与准确，必要时提示家属与医生沟通或紧急就医。"
+    ),
+}
+
+_DEFAULT_MODELS: List[Dict[str, str]] = [
+    {"display_name": "MiniMax M2.7", "model": "minimax/minimax-m2.7"},
+]
 
 _DEFAULTS: Dict[str, Any] = {
     "base_url": "",
     "api_key": "",
     "model": "minimax/minimax-m2.7",
+    "models": list(_DEFAULT_MODELS),
     "temperature": 0.7,
     "max_tokens": 2048,
     "reasoning_enabled": True,
-    "system_prompt": (
-        "你是智慧医养大数据公共服务平台的 AI 助手，面向医生、老人、家属和管理员。"
-        "请用简洁、友善、专业的中文回答用户问题。"
-        "涉及健康建议时，需提醒用户以医生诊断为准。"
-    ),
+    "system_prompt": _SHARED_DEFAULT_PROMPT,
+    "system_prompt_admin": _ROLE_DEFAULT_PROMPTS["admin"],
+    "system_prompt_doctor": _ROLE_DEFAULT_PROMPTS["doctor"],
+    "system_prompt_elder": _ROLE_DEFAULT_PROMPTS["elder"],
+    "system_prompt_family": _ROLE_DEFAULT_PROMPTS["family"],
 }
+
+
+def _normalize_models(raw: Any) -> List[Dict[str, str]]:
+    """Coerce a user-supplied models value into a clean list.
+
+    Accepts either a JSON string or a python list. Drops entries that
+    have no `model` field; fills a missing `display_name` with the
+    model's own name so the chat UI always has something to show.
+    Preserves order; de-duplicates on the actual `model` name.
+    """
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw) if raw.strip() else []
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(raw, list):
+        return []
+    out: List[Dict[str, str]] = []
+    seen: set = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        model = (item.get("model") or "").strip()
+        if not model or model in seen:
+            continue
+        display = (item.get("display_name") or "").strip() or model
+        out.append({"display_name": display, "model": model})
+        seen.add(model)
+    return out
+
+
+def _primary_role(user: User) -> Optional[str]:
+    """Pick the most privileged role among a user's roles."""
+    role_names = {ur.role.name for ur in (user.user_roles or []) if ur.role}
+    for code in ROLE_CODES:
+        if code in role_names:
+            return code
+    return None
+
+
+def _resolve_prompt(cfg: Dict[str, Any], role: Optional[str]) -> str:
+    """Return the system prompt that should be injected for `role`.
+
+    Priority: role-specific prompt (if set) > shared `system_prompt`.
+    """
+    if role:
+        rp = (cfg.get(f"system_prompt_{role}") or "").strip()
+        if rp:
+            return rp
+    return (cfg.get("system_prompt") or "").strip()
 
 
 def _coerce(field: str, raw: Optional[str]) -> Any:
@@ -68,6 +167,8 @@ def _coerce(field: str, raw: Optional[str]) -> Any:
             return _DEFAULTS[field]
     if field == "reasoning_enabled":
         return str(raw).strip().lower() in ("1", "true", "yes", "on")
+    if field == "models":
+        return _normalize_models(raw)
     return raw
 
 
@@ -89,6 +190,22 @@ async def _load_config(db: AsyncSession) -> Dict[str, Any]:
     for field, key in _AI_KEYS.items():
         if key in by_key:
             cfg[field] = _coerce(field, by_key[key])
+
+    # Reconcile the models list with the legacy single-model field.
+    # If the list is empty but a legacy `ai.model` is set, adopt it as
+    # a single entry. If both are set but the default is no longer in
+    # the list, snap back to the first entry so the chat UI always has
+    # a valid selection.
+    models = cfg.get("models") or []
+    legacy_model = (cfg.get("model") or "").strip()
+    if not models and legacy_model:
+        models = [{"display_name": legacy_model, "model": legacy_model}]
+    if models:
+        available = {m["model"] for m in models}
+        if legacy_model not in available:
+            legacy_model = models[0]["model"]
+    cfg["models"] = models
+    cfg["model"] = legacy_model
     return cfg
 
 
@@ -97,8 +214,13 @@ async def _save_config(db: AsyncSession, updates: Dict[str, Any]) -> None:
         key = _AI_KEYS.get(field)
         if not key:
             continue
-        if isinstance(value, bool):
+        if field == "models":
+            normalized = _normalize_models(value)
+            str_val = json.dumps(normalized, ensure_ascii=False)
+        elif isinstance(value, bool):
             str_val = "true" if value else "false"
+        elif isinstance(value, (list, dict)):
+            str_val = json.dumps(value, ensure_ascii=False)
         else:
             str_val = "" if value is None else str(value)
         stmt = select(SystemConfig).where(SystemConfig.config_key == key)
@@ -131,14 +253,24 @@ class ChatRequest(BaseModel):
     model: Optional[str] = None
 
 
+class ModelEntry(BaseModel):
+    display_name: str = ""
+    model: str
+
+
 class ConfigUpdate(BaseModel):
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
+    models: Optional[List[ModelEntry]] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     reasoning_enabled: Optional[bool] = None
     system_prompt: Optional[str] = None
+    system_prompt_admin: Optional[str] = None
+    system_prompt_doctor: Optional[str] = None
+    system_prompt_elder: Optional[str] = None
+    system_prompt_family: Optional[str] = None
 
 
 class TestConfig(BaseModel):
@@ -160,6 +292,7 @@ async def get_public_config(
     return success_response(
         {
             "model": cfg["model"],
+            "models": cfg["models"],
             "configured": bool(cfg["base_url"] and cfg["api_key"]),
             "reasoning_enabled": cfg["reasoning_enabled"],
         }
@@ -181,7 +314,13 @@ async def chat_stream(
     cfg = await _load_config(db)
     base_url = (cfg["base_url"] or "").rstrip("/")
     api_key = cfg["api_key"] or ""
-    model = body.model or cfg["model"]
+    # Only honor `body.model` if it's in the configured list — stops
+    # arbitrary upstream calls and falls back to the default otherwise.
+    allowed = {m["model"] for m in cfg.get("models") or []}
+    if body.model and body.model in allowed:
+        model = body.model
+    else:
+        model = cfg["model"]
 
     if not base_url or not api_key:
         raise HTTPException(
@@ -189,8 +328,10 @@ async def chat_stream(
         )
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
-    if cfg.get("system_prompt") and (not messages or messages[0]["role"] != "system"):
-        messages.insert(0, {"role": "system", "content": cfg["system_prompt"]})
+    role_code = _primary_role(current_user)
+    system_prompt = _resolve_prompt(cfg, role_code)
+    if system_prompt and (not messages or messages[0]["role"] != "system"):
+        messages.insert(0, {"role": "system", "content": system_prompt})
 
     payload: Dict[str, Any] = {
         "model": model,

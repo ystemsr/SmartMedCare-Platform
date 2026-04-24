@@ -69,6 +69,34 @@ function findBestChildMatch(
   return best;
 }
 
+/**
+ * Pick the top-level item with the longest key that matches the
+ * pathname, considering its children too. Without this, sibling routes
+ * like `/ai` and `/ai/config` both match `/ai/config`, and the first
+ * one wins — which would pin the sidebar highlight to "AI 助手" while
+ * the user is on "AI 模型配置".
+ */
+function findBestTopMatch(
+  items: AppShellMenuItem[],
+  pathname: string,
+): AppShellMenuItem | undefined {
+  let best: AppShellMenuItem | undefined;
+  let bestLen = -1;
+  for (const item of items) {
+    let localLen = -1;
+    if (matchesPath(item.key, pathname)) localLen = item.key.length;
+    if (item.children?.length) {
+      const child = findBestChildMatch(item.children, pathname);
+      if (child && child.key.length > localLen) localLen = child.key.length;
+    }
+    if (localLen > bestLen) {
+      bestLen = localLen;
+      best = localLen >= 0 ? item : undefined;
+    }
+  }
+  return best;
+}
+
 function useIsMobile() {
   const [mobile, setMobile] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 1024 : false,
@@ -266,13 +294,10 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
   const mouseY = useMotionValue(Number.POSITIVE_INFINITY);
 
   useEffect(() => {
-    const active = items.reduce<Record<string, boolean>>((acc, item) => {
-      if (item.children?.some((c) => matchesPath(c.key, location.pathname))) {
-        acc[item.key] = true;
-      }
-      return acc;
-    }, {});
-    setExpanded((prev) => ({ ...prev, ...active }));
+    const best = findBestTopMatch(items, location.pathname);
+    if (best?.children?.length) {
+      setExpanded((prev) => ({ ...prev, [best.key]: true }));
+    }
   }, [items, location.pathname]);
 
   useEffect(() => {
@@ -315,23 +340,25 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
    * that happen to reuse the same route path from overwriting each
    * other in the DOM-node registry.
    */
+  const bestTopItem = useMemo(
+    () => findBestTopMatch(items, location.pathname),
+    [items, location.pathname],
+  );
+
   const activeKey = useMemo(() => {
-    for (const item of items) {
-      if (item.children?.length) {
-        const submenuVisible = !mini && (expanded[item.key] ?? false);
-        const childMatch = findBestChildMatch(item.children, location.pathname);
-        if (childMatch && submenuVisible) {
-          return `child:${item.key}:${childMatch.key}`;
-        }
-        if (childMatch || matchesPath(item.key, location.pathname)) {
-          return `top:${item.key}`;
-        }
-      } else if (matchesPath(item.key, location.pathname)) {
-        return `top:${item.key}`;
+    if (!bestTopItem) return null;
+    if (bestTopItem.children?.length) {
+      const submenuVisible = !mini && (expanded[bestTopItem.key] ?? false);
+      const childMatch = findBestChildMatch(
+        bestTopItem.children,
+        location.pathname,
+      );
+      if (childMatch && submenuVisible) {
+        return `child:${bestTopItem.key}:${childMatch.key}`;
       }
     }
-    return null;
-  }, [items, location.pathname, expanded, mini]);
+    return `top:${bestTopItem.key}`;
+  }, [bestTopItem, location.pathname, expanded, mini]);
 
   const registerNode = useCallback(
     (key: string, el: HTMLButtonElement | null) => {
@@ -386,11 +413,7 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
   }, [measurePill]);
 
   const renderItem = (item: AppShellMenuItem) => {
-    const childSelected = item.children?.some((c) =>
-      matchesPath(c.key, location.pathname),
-    );
-    const selfSelected = matchesPath(item.key, location.pathname);
-    const selected = selfSelected || !!childSelected;
+    const selected = bestTopItem?.key === item.key;
 
     if (!item.children?.length) {
       return (
@@ -566,25 +589,22 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
             {(() => {
               // Build breadcrumb from menu tree + current pathname.
               let crumbs: { label: string; key?: string }[] = [];
-              for (const item of items) {
-                if (item.children?.length) {
-                  const child = item.children.find((c) =>
-                    matchesPath(c.key, location.pathname),
-                  );
-                  if (child) {
-                    crumbs = [
-                      { label: item.label, key: item.key },
-                      { label: child.label, key: child.key },
-                    ];
-                    break;
-                  }
-                  if (matchesPath(item.key, location.pathname)) {
-                    crumbs = [{ label: item.label, key: item.key }];
-                    break;
-                  }
-                } else if (matchesPath(item.key, location.pathname)) {
-                  crumbs = [{ label: item.label, key: item.key }];
-                  break;
+              if (bestTopItem) {
+                const childMatch = bestTopItem.children?.length
+                  ? findBestChildMatch(
+                      bestTopItem.children,
+                      location.pathname,
+                    )
+                  : undefined;
+                if (childMatch) {
+                  crumbs = [
+                    { label: bestTopItem.label, key: bestTopItem.key },
+                    { label: childMatch.label, key: childMatch.key },
+                  ];
+                } else {
+                  crumbs = [
+                    { label: bestTopItem.label, key: bestTopItem.key },
+                  ];
                 }
               }
               const primaryRole = user?.roles?.[0];

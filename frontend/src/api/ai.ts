@@ -7,8 +7,14 @@ export interface AIChatMessage {
   content: string;
 }
 
+export interface AIModelEntry {
+  display_name: string;
+  model: string;
+}
+
 export interface AIPublicConfig {
   model: string;
+  models: AIModelEntry[];
   configured: boolean;
   reasoning_enabled: boolean;
 }
@@ -16,10 +22,15 @@ export interface AIPublicConfig {
 export interface AIFullConfig {
   base_url: string;
   model: string;
+  models: AIModelEntry[];
   temperature: number;
   max_tokens: number;
   reasoning_enabled: boolean;
   system_prompt: string;
+  system_prompt_admin: string;
+  system_prompt_doctor: string;
+  system_prompt_elder: string;
+  system_prompt_family: string;
   api_key_masked: string;
   has_api_key: boolean;
 }
@@ -28,10 +39,15 @@ export interface AIConfigUpdate {
   base_url?: string;
   api_key?: string;
   model?: string;
+  models?: AIModelEntry[];
   temperature?: number;
   max_tokens?: number;
   reasoning_enabled?: boolean;
   system_prompt?: string;
+  system_prompt_admin?: string;
+  system_prompt_doctor?: string;
+  system_prompt_elder?: string;
+  system_prompt_family?: string;
 }
 
 export interface AITestPayload {

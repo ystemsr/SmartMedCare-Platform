@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Trash2 } from 'lucide-react';
 import {
@@ -34,6 +34,7 @@ interface ModelRow {
   id: string;
   display_name: string;
   model: string;
+  vision: boolean;
 }
 
 interface FormValues {
@@ -232,7 +233,8 @@ const ModelList: React.FC<{
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '28px minmax(0, 1fr) minmax(0, 1.3fr) 36px',
+          gridTemplateColumns:
+            '28px minmax(0, 1fr) minmax(0, 1.3fr) 92px 36px',
           gap: 12,
           padding: '0 4px',
           fontSize: 11,
@@ -245,6 +247,7 @@ const ModelList: React.FC<{
         <span>默认</span>
         <span>展示名称</span>
         <span>实际模型名</span>
+        <span style={{ textAlign: 'center' }}>图像</span>
         <span />
       </div>
       {rows.map((row) => {
@@ -255,7 +258,8 @@ const ModelList: React.FC<{
             key={row.id}
             style={{
               display: 'grid',
-              gridTemplateColumns: '28px minmax(0, 1fr) minmax(0, 1.3fr) 36px',
+              gridTemplateColumns:
+                '28px minmax(0, 1fr) minmax(0, 1.3fr) 92px 36px',
               gap: 12,
               alignItems: 'center',
               padding: 10,
@@ -288,6 +292,22 @@ const ModelList: React.FC<{
               value={row.model}
               onChange={(e) => onPatch(row.id, { model: e.target.value })}
             />
+            <label
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+              title="勾选后允许在聊天中向该模型上传图像"
+            >
+              <Switch
+                checked={row.vision}
+                onChange={(e) =>
+                  onPatch(row.id, { vision: e.target.checked })
+                }
+                aria-label="支持图像输入"
+              />
+            </label>
             <IconButton
               aria-label="删除"
               onClick={() => onRemove(row.id)}
@@ -364,18 +384,37 @@ const RolePills: React.FC<{
 
 /* ---------- Page ---------- */
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 const AIConfigPage: React.FC = () => {
   const [tab, setTab] = useState<'model' | 'prompt'>('model');
   const [promptRole, setPromptRole] = useState<PromptRole>('admin');
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string>('');
   const [current, setCurrent] = useState<AIFullConfig | null>(null);
   const [values, setValues] = useState<FormValues>(defaults);
 
+  /* ---- auto-save state ---- */
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveError, setSaveError] = useState<string>('');
+  // Skip the auto-save effect until the initial server payload has
+  // populated `values`; otherwise we'd POST the empty defaults on mount.
+  const skipAutoSaveRef = useRef(true);
+  // Last serialized payload we successfully sent — used to suppress
+  // no-op auto-saves that fire after rehydration.
+  const lastSavedRef = useRef<string>('');
+  // Coalesce bursts of edits into a single request.
+  const debounceRef = useRef<number | null>(null);
+  // Used to ignore a stale save's resolution if a newer one started.
+  const saveTokenRef = useRef(0);
+
   const load = async () => {
     setLoading(true);
+    // Pause auto-save while we hydrate from the server, then re-enable
+    // after the state commit (in a microtask) so the bootstrap state
+    // doesn't trigger a redundant PUT.
+    skipAutoSaveRef.current = true;
     try {
       const res = await getAIConfig();
       const cfg = res.data;
@@ -384,12 +423,14 @@ const AIConfigPage: React.FC = () => {
         id: makeRowId(),
         display_name: m.display_name || m.model,
         model: m.model,
+        vision: !!m.vision,
       }));
       if (rows.length === 0 && cfg.model) {
         rows.push({
           id: makeRowId(),
           display_name: cfg.model,
           model: cfg.model,
+          vision: false,
         });
       }
       const defaultModel =
@@ -416,6 +457,11 @@ const AIConfigPage: React.FC = () => {
       message.error(err instanceof Error ? err.message : '加载失败');
     } finally {
       setLoading(false);
+      // Reset the saved-payload baseline so the auto-save effect treats
+      // the loaded state as already-persisted.
+      lastSavedRef.current = '';
+      setSaveStatus('idle');
+      setSaveError('');
     }
   };
   useEffect(() => {
@@ -440,7 +486,10 @@ const AIConfigPage: React.FC = () => {
   const addModelRow = () => {
     setValues((v) => ({
       ...v,
-      models: [...v.models, { id: makeRowId(), display_name: '', model: '' }],
+      models: [
+        ...v.models,
+        { id: makeRowId(), display_name: '', model: '', vision: false },
+      ],
     }));
   };
 
@@ -461,19 +510,19 @@ const AIConfigPage: React.FC = () => {
     setValues((v) => ({ ...v, default_model: modelName }));
   };
 
-  const save = async () => {
-    // Validate: must have at least one model with a non-empty actual name.
-    const cleanedModels: AIModelEntry[] = values.models
+  /** Build the payload to send to the server, or `null` if the current
+   * state isn't persistable yet (no valid model configured). */
+  const buildPayload = (
+    v: FormValues,
+  ): Parameters<typeof updateAIConfig>[0] | null => {
+    const cleanedModels: AIModelEntry[] = v.models
       .map((r) => ({
         display_name: r.display_name.trim() || r.model.trim(),
         model: r.model.trim(),
+        vision: !!r.vision,
       }))
       .filter((m) => m.model.length > 0);
-    if (cleanedModels.length === 0) {
-      message.error('请至少配置一个模型');
-      return;
-    }
-    // Dedupe by actual model name — keep first occurrence.
+    if (cleanedModels.length === 0) return null;
     const seen = new Set<string>();
     const deduped: AIModelEntry[] = [];
     for (const m of cleanedModels) {
@@ -481,52 +530,91 @@ const AIConfigPage: React.FC = () => {
       seen.add(m.model);
       deduped.push(m);
     }
-    const defaultModel = deduped.some((m) => m.model === values.default_model)
-      ? values.default_model
+    const defaultModel = deduped.some((m) => m.model === v.default_model)
+      ? v.default_model
       : deduped[0].model;
+    const payload: Parameters<typeof updateAIConfig>[0] = {
+      base_url: v.base_url.trim(),
+      model: defaultModel,
+      models: deduped,
+      temperature: Number(v.temperature) || 0.7,
+      max_tokens: Number(v.max_tokens) || 2048,
+      reasoning_enabled: v.reasoning_enabled,
+      system_prompt: v.prompts.shared,
+      system_prompt_admin: v.prompts.admin,
+      system_prompt_doctor: v.prompts.doctor,
+      system_prompt_elder: v.prompts.elder,
+      system_prompt_family: v.prompts.family,
+    };
+    if (v.api_key.trim()) payload.api_key = v.api_key.trim();
+    return payload;
+  };
 
-    setSaving(true);
+  /** Persist `values` to the server. Does not rehydrate local state on
+   * success — that would steal focus from any actively-edited input.
+   * The user-facing status ribbon ("已保存" / "保存失败") is the only
+   * feedback the auto-save loop emits. */
+  const persistValues = async (v: FormValues) => {
+    const payload = buildPayload(v);
+    if (!payload) {
+      // No valid model — silently skip. The status ribbon shows a
+      // hint so the user understands why nothing has saved yet.
+      setSaveStatus('idle');
+      setSaveError('请至少配置一个模型');
+      return;
+    }
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastSavedRef.current) {
+      // Already persisted this exact payload — likely a no-op edit.
+      return;
+    }
+    const myToken = ++saveTokenRef.current;
+    setSaveStatus('saving');
+    setSaveError('');
     try {
-      const payload: Parameters<typeof updateAIConfig>[0] = {
-        base_url: values.base_url.trim(),
-        model: defaultModel,
-        models: deduped,
-        temperature: Number(values.temperature) || 0.7,
-        max_tokens: Number(values.max_tokens) || 2048,
-        reasoning_enabled: values.reasoning_enabled,
-        system_prompt: values.prompts.shared,
-        system_prompt_admin: values.prompts.admin,
-        system_prompt_doctor: values.prompts.doctor,
-        system_prompt_elder: values.prompts.elder,
-        system_prompt_family: values.prompts.family,
-      };
-      if (values.api_key.trim()) payload.api_key = values.api_key.trim();
       const res = await updateAIConfig(payload);
+      if (myToken !== saveTokenRef.current) return; // stale
+      lastSavedRef.current = serialized;
       setCurrent(res.data);
-      // Rehydrate rows from the authoritative server response so IDs/order
-      // stay stable and any server-side dedup is reflected.
-      const rows: ModelRow[] = (res.data.models || []).map((m) => ({
-        id: makeRowId(),
-        display_name: m.display_name || m.model,
-        model: m.model,
-      }));
-      setValues((v) => ({
-        ...v,
-        api_key: '',
-        models: rows,
-        default_model:
-          res.data.model &&
-          rows.some((r) => r.model === res.data.model)
-            ? res.data.model
-            : rows[0]?.model || '',
-      }));
-      message.success('已保存');
+      // After a successful save we still need the form to remember that
+      // the API key field is now persisted (so future PUTs that omit it
+      // mean "keep current"). We DON'T touch `values.models` here — the
+      // user may be mid-edit and we'd clobber their input.
+      if (payload.api_key) {
+        setValues((cur) => ({ ...cur, api_key: '' }));
+      }
+      setSaveStatus('saved');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '保存失败');
-    } finally {
-      setSaving(false);
+      if (myToken !== saveTokenRef.current) return;
+      setSaveStatus('error');
+      setSaveError(err instanceof Error ? err.message : '保存失败');
     }
   };
+
+  // Auto-save: debounce 700ms after each `values` mutation.
+  useEffect(() => {
+    if (skipAutoSaveRef.current) {
+      // The first commit after `load()` populates `values` with the
+      // server-provided baseline — we don't want to immediately POST
+      // that back. Re-enable from the next mutation onward.
+      skipAutoSaveRef.current = false;
+      return;
+    }
+    if (debounceRef.current !== null) {
+      window.clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null;
+      void persistValues(values);
+    }, 700);
+    return () => {
+      if (debounceRef.current !== null) {
+        window.clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values]);
 
   const runTest = async () => {
     setTesting(true);
@@ -811,15 +899,58 @@ const AIConfigPage: React.FC = () => {
           boxShadow: 'var(--smc-shadow-xs)',
         }}
       >
-        <Button onClick={save} loading={saving}>
-          保存配置
-        </Button>
         <Button variant="secondary" onClick={runTest} loading={testing}>
           测试连接
         </Button>
         <Button variant="text" onClick={load}>
           重新加载
         </Button>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            color:
+              saveStatus === 'error'
+                ? 'var(--smc-error, #c53030)'
+                : saveStatus === 'saved'
+                  ? 'var(--smc-success, #2f855a)'
+                  : 'var(--smc-text-3)',
+          }}
+          title={
+            saveError ||
+            (saveStatus === 'saving'
+              ? '正在自动保存…'
+              : saveStatus === 'saved'
+                ? '所有更改已自动保存到服务器'
+                : '编辑后将自动保存')
+          }
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background:
+                saveStatus === 'saving'
+                  ? 'var(--smc-warning, #c69026)'
+                  : saveStatus === 'saved'
+                    ? 'var(--smc-success, #2f855a)'
+                    : saveStatus === 'error'
+                      ? 'var(--smc-error, #c53030)'
+                      : 'var(--smc-border-strong, #cbc6bb)',
+            }}
+          />
+          {saveStatus === 'saving'
+            ? '保存中…'
+            : saveStatus === 'saved'
+              ? '已自动保存'
+              : saveStatus === 'error'
+                ? `保存失败：${saveError || '未知错误'}`
+                : saveError || '更改将自动保存'}
+        </div>
         <div
           style={{
             marginLeft: 'auto',

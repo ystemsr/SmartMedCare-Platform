@@ -8,7 +8,7 @@ The AI assistant is a thin proxy to an OpenAI-compatible provider
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -90,8 +90,8 @@ _ROLE_DEFAULT_PROMPTS: Dict[str, str] = {
     ),
 }
 
-_DEFAULT_MODELS: List[Dict[str, str]] = [
-    {"display_name": "MiniMax M2.7", "model": "minimax/minimax-m2.7"},
+_DEFAULT_MODELS: List[Dict[str, Any]] = [
+    {"display_name": "MiniMax M2.7", "model": "minimax/minimax-m2.7", "vision": False},
 ]
 
 _DEFAULTS: Dict[str, Any] = {
@@ -110,13 +110,15 @@ _DEFAULTS: Dict[str, Any] = {
 }
 
 
-def _normalize_models(raw: Any) -> List[Dict[str, str]]:
+def _normalize_models(raw: Any) -> List[Dict[str, Any]]:
     """Coerce a user-supplied models value into a clean list.
 
     Accepts either a JSON string or a python list. Drops entries that
     have no `model` field; fills a missing `display_name` with the
     model's own name so the chat UI always has something to show.
-    Preserves order; de-duplicates on the actual `model` name.
+    Preserves order; de-duplicates on the actual `model` name. The
+    `vision` flag declares whether the model accepts image inputs;
+    defaults to False for backwards compatibility.
     """
     if isinstance(raw, str):
         try:
@@ -125,7 +127,7 @@ def _normalize_models(raw: Any) -> List[Dict[str, str]]:
             return []
     if not isinstance(raw, list):
         return []
-    out: List[Dict[str, str]] = []
+    out: List[Dict[str, Any]] = []
     seen: set = set()
     for item in raw:
         if not isinstance(item, dict):
@@ -134,7 +136,8 @@ def _normalize_models(raw: Any) -> List[Dict[str, str]]:
         if not model or model in seen:
             continue
         display = (item.get("display_name") or "").strip() or model
-        out.append({"display_name": display, "model": model})
+        vision = bool(item.get("vision"))
+        out.append({"display_name": display, "model": model, "vision": vision})
         seen.add(model)
     return out
 
@@ -253,7 +256,10 @@ def _mask(key: str) -> str:
 
 class ChatMessage(BaseModel):
     role: str = Field(pattern=r"^(system|user|assistant)$")
-    content: str
+    # OpenAI-compatible: a plain string OR a list of content parts.
+    # Image parts use `{"type": "image_url", "image_url": {"url": "..."}}`
+    # where the URL is typically a data URL (data:image/jpeg;base64,...).
+    content: Union[str, List[Dict[str, Any]]]
 
 
 class ChatRequest(BaseModel):
@@ -271,6 +277,7 @@ class ChatRequest(BaseModel):
 class ModelEntry(BaseModel):
     display_name: str = ""
     model: str
+    vision: bool = False
 
 
 class ConfigUpdate(BaseModel):
@@ -333,15 +340,33 @@ async def chat_stream(
     api_key = cfg["api_key"] or ""
     # Only honor `body.model` if it's in the configured list — stops
     # arbitrary upstream calls and falls back to the default otherwise.
-    allowed = {m["model"] for m in cfg.get("models") or []}
+    models_list = cfg.get("models") or []
+    allowed = {m["model"]: m for m in models_list}
     if body.model and body.model in allowed:
         model = body.model
     else:
         model = cfg["model"]
+    selected_entry = allowed.get(model) or {}
+    vision_supported = bool(selected_entry.get("vision"))
 
     if not base_url or not api_key:
         raise HTTPException(
             status_code=400, detail="AI 模型尚未配置，请联系管理员在「AI 模型配置」中填写"
+        )
+
+    # Reject image parts if the selected model isn't marked as vision-capable.
+    has_images = any(
+        isinstance(m.content, list)
+        and any(
+            isinstance(p, dict) and p.get("type") == "image_url"
+            for p in m.content
+        )
+        for m in body.messages
+    )
+    if has_images and not vision_supported:
+        raise HTTPException(
+            status_code=400,
+            detail="当前模型不支持图像输入，请切换到支持视觉的模型",
         )
 
     messages: List[Dict[str, Any]] = [
@@ -366,15 +391,40 @@ async def chat_stream(
             -1,
         )
         if last_user_idx >= 0:
-            user_query = messages[last_user_idx]["content"] or ""
+            raw_content = messages[last_user_idx]["content"]
+            # Multimodal content: extract text parts to use as the query
+            # and rebuild the message preserving image parts after the
+            # RAG-wrapped text.
+            image_parts: List[Dict[str, Any]] = []
+            if isinstance(raw_content, list):
+                text_chunks: List[str] = []
+                for part in raw_content:
+                    if not isinstance(part, dict):
+                        continue
+                    if part.get("type") == "text":
+                        text_chunks.append(str(part.get("text") or ""))
+                    elif part.get("type") == "image_url":
+                        image_parts.append(part)
+                user_query = "\n".join(t for t in text_chunks if t).strip()
+            else:
+                user_query = raw_content or ""
             try:
                 hits = await kb_retrieve(role_code, user_query)
             except Exception as e:  # noqa: BLE001
                 logger.warning("kb retrieve failed: %s", e)
                 hits = []
+            wrapped_text = build_rag_prompt(user_query, hits)
+            new_content: Union[str, List[Dict[str, Any]]]
+            if image_parts:
+                new_content = [
+                    {"type": "text", "text": wrapped_text},
+                    *image_parts,
+                ]
+            else:
+                new_content = wrapped_text
             messages[last_user_idx] = {
                 "role": "user",
-                "content": build_rag_prompt(user_query, hits),
+                "content": new_content,
             }
             kb_event = {
                 "knowledge_base": {

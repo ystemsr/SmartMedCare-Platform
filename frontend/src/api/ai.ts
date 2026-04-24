@@ -2,14 +2,28 @@ import http from './http';
 import type { ApiResponse } from '../types/common';
 import { getToken } from '../utils/storage';
 
+export interface AIChatTextPart {
+  type: 'text';
+  text: string;
+}
+
+export interface AIChatImagePart {
+  type: 'image_url';
+  image_url: { url: string };
+}
+
+export type AIChatContentPart = AIChatTextPart | AIChatImagePart;
+
 export interface AIChatMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | AIChatContentPart[];
 }
 
 export interface AIModelEntry {
   display_name: string;
   model: string;
+  /** Whether this model accepts image inputs. */
+  vision?: boolean;
 }
 
 export interface AIPublicConfig {

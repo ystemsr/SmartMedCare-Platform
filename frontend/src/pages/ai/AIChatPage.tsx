@@ -28,6 +28,8 @@ interface UIMsg {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  /** Image attachments shown above a user bubble — each entry is a data URL. */
+  images?: string[];
   reasoning?: string;
   /** Assistant message streaming-in-progress flag. */
   pending?: boolean;
@@ -41,6 +43,15 @@ interface UIMsg {
   /** Knowledge-base lookup performed for this reply (at most one). */
   knowledgeBase?: KnowledgeBaseCall;
 }
+
+interface PendingImage {
+  id: string;
+  dataUrl: string;
+}
+
+const MAX_IMAGES = 3;
+const IMAGE_MAX_DIMENSION = 1280;
+const IMAGE_JPEG_QUALITY = 0.85;
 
 interface Conversation {
   id: string;
@@ -112,6 +123,39 @@ function makeUuid(): string {
   ).toString(16)}${rand().slice(0, 3)}-${rand()}${rand().slice(0, 4)}`;
 }
 
+/** Read an image file, downscale so the longest side is ≤ IMAGE_MAX_DIMENSION,
+ * and return a JPEG data URL. Keeps payload small enough to embed in chat
+ * messages and persist to localStorage without blowing the quota. */
+async function fileToDownscaledDataUrl(file: File): Promise<string> {
+  const rawDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('读取文件失败'));
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error('图像解码失败'));
+    el.src = rawDataUrl;
+  });
+  const longest = Math.max(img.naturalWidth, img.naturalHeight);
+  const scale = longest > IMAGE_MAX_DIMENSION ? IMAGE_MAX_DIMENSION / longest : 1;
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  if (scale === 1 && file.type === 'image/jpeg') {
+    // No resize needed and already JPEG — return the raw data URL untouched.
+    return rawDataUrl;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return rawDataUrl;
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
+}
+
 function useAutosize(ref: React.RefObject<HTMLTextAreaElement | null>, value: string) {
   useEffect(() => {
     const ta = ref.current;
@@ -181,6 +225,11 @@ const IcoTrash = () => (
     <path d="M3 6h18" />
     <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
     <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+  </svg>
+);
+const IcoX = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 6l12 12M18 6 6 18" />
   </svg>
 );
 const IcoBack = () => (
@@ -288,6 +337,23 @@ const AIChatPage: React.FC = () => {
   useAutosize(taEmptyRef, draftEmpty);
   useAutosize(taConvRef, draftConv);
 
+  /* ---- image attachments (per-composer) ---- */
+  const [pendingImagesEmpty, setPendingImagesEmpty] = useState<PendingImage[]>([]);
+  const [pendingImagesConv, setPendingImagesConv] = useState<PendingImage[]>([]);
+  const fileInputEmptyRef = useRef<HTMLInputElement>(null);
+  const fileInputConvRef = useRef<HTMLInputElement>(null);
+  // Surfaced as a brief inline notice when an upload is rejected
+  // (too many images, wrong type, decode failure, …).
+  const [imageNoticeEmpty, setImageNoticeEmpty] = useState('');
+  const [imageNoticeConv, setImageNoticeConv] = useState('');
+  // Drag-hover feedback. We use a ref-counter to handle nested
+  // dragenter/dragleave events fired by descendant elements — without
+  // it, the overlay would flicker as the cursor moved across children.
+  const [dragHoverEmpty, setDragHoverEmpty] = useState(false);
+  const [dragHoverConv, setDragHoverConv] = useState(false);
+  const dragCounterEmptyRef = useRef(0);
+  const dragCounterConvRef = useRef(0);
+
   /* ---- pills ----
    * Both toggles are shared across the empty and conversation composers:
    * once the user turns a pill on for a new chat, it stays on as the
@@ -356,11 +422,31 @@ const AIChatPage: React.FC = () => {
     () => models.find((m) => m.model === selectedModel),
     [models, selectedModel],
   );
+  // Display order: the currently-selected model is pinned to the top
+  // of the picker so the most-recently-used model is always immediate.
+  const orderedModels = useMemo(() => {
+    if (!selectedModel) return models;
+    const idx = models.findIndex((m) => m.model === selectedModel);
+    if (idx <= 0) return models;
+    const next = models.slice();
+    const [picked] = next.splice(idx, 1);
+    next.unshift(picked);
+    return next;
+  }, [models, selectedModel]);
   const modelDisplay =
     selectedEntry?.display_name ||
     selectedEntry?.model ||
     selectedModel ||
     'AI 助手';
+  const visionSupported = !!selectedEntry?.vision;
+
+  // If the user switches to a model that doesn't support vision, drop any
+  // staged images so they can't be sent silently.
+  useEffect(() => {
+    if (visionSupported) return;
+    setPendingImagesEmpty((arr) => (arr.length === 0 ? arr : []));
+    setPendingImagesConv((arr) => (arr.length === 0 ? arr : []));
+  }, [visionSupported]);
 
   // Close the model menu when clicking outside.
   useEffect(() => {
@@ -469,7 +555,22 @@ const AIChatPage: React.FC = () => {
       abortRef.current = controller;
       const payload: AIChatMessage[] = newMessages
         .filter((m) => !m.pending && !m.errored)
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m) => {
+          // User turns with attached images are sent as a multimodal
+          // content array (`{type:text}` + one `{type:image_url}` per
+          // image). All other turns stay as plain strings.
+          if (m.role === 'user' && m.images && m.images.length > 0) {
+            const parts: AIChatMessage['content'] = [
+              { type: 'text', text: m.content || '' },
+              ...m.images.map((url) => ({
+                type: 'image_url' as const,
+                image_url: { url },
+              })),
+            ];
+            return { role: m.role, content: parts };
+          }
+          return { role: m.role, content: m.content };
+        });
 
       // Immediate patch (bypasses RAF batching — used for first-token /
       // state transitions / final cleanup).
@@ -707,11 +808,17 @@ const AIChatPage: React.FC = () => {
 
   const sendFromEmpty = () => {
     const v = draftEmpty.trim();
-    if (!v || streaming) return;
+    const imgs = pendingImagesEmpty;
+    if ((!v && imgs.length === 0) || streaming) return;
     const convId = makeUuid();
     freshIdsRef.current.add(convId);
 
-    const userMsg: UIMsg = { id: makeId('m'), role: 'user', content: v };
+    const userMsg: UIMsg = {
+      id: makeId('m'),
+      role: 'user',
+      content: v,
+      ...(imgs.length > 0 ? { images: imgs.map((i) => i.dataUrl) } : {}),
+    };
     const placeholderId = makeId('m');
     const aiMsg: UIMsg = {
       id: placeholderId,
@@ -732,6 +839,8 @@ const AIChatPage: React.FC = () => {
     // the new conv — no flicker, no unknown-id redirect.
     setConversations((list) => [newConv, ...list]);
     setDraftEmpty('');
+    setPendingImagesEmpty([]);
+    setImageNoticeEmpty('');
     navigate(`/ai/${convId}`);
     runStream(newConv, [userMsg, aiMsg], placeholderId, {
       webSearch: forceWebSearch && webSearchAvailable,
@@ -742,8 +851,14 @@ const AIChatPage: React.FC = () => {
   const sendFromConv = () => {
     if (!activeConv) return;
     const v = draftConv.trim();
-    if (!v || streaming) return;
-    const userMsg: UIMsg = { id: makeId('m'), role: 'user', content: v };
+    const imgs = pendingImagesConv;
+    if ((!v && imgs.length === 0) || streaming) return;
+    const userMsg: UIMsg = {
+      id: makeId('m'),
+      role: 'user',
+      content: v,
+      ...(imgs.length > 0 ? { images: imgs.map((i) => i.dataUrl) } : {}),
+    };
     const placeholderId = makeId('m');
     const aiMsg: UIMsg = {
       id: placeholderId,
@@ -761,6 +876,8 @@ const AIChatPage: React.FC = () => {
       list.map((c) => (c.id === activeConv.id ? updated : c)),
     );
     setDraftConv('');
+    setPendingImagesConv([]);
+    setImageNoticeConv('');
     runStream(updated, nextMsgs, placeholderId, {
       webSearch: forceWebSearch && webSearchAvailable,
       useKnowledgeBase: useKnowledgeBase && knowledgeBaseAvailable,
@@ -777,9 +894,19 @@ const AIChatPage: React.FC = () => {
 
   const renderMessage = (m: UIMsg) => {
     if (m.role === 'user') {
+      const imgs = m.images || [];
       return (
         <div key={m.id} className="ai-msg-user">
-          <div className="ai-bubble-user">{m.content}</div>
+          {imgs.length > 0 && (
+            <div className="ai-msg-user-thumbs">
+              {imgs.map((url, i) => (
+                <div key={i} className="ai-msg-thumb">
+                  <img src={url} alt={`image-${i + 1}`} />
+                </div>
+              ))}
+            </div>
+          )}
+          {m.content && <div className="ai-bubble-user">{m.content}</div>}
         </div>
       );
     }
@@ -834,8 +961,122 @@ const AIChatPage: React.FC = () => {
     const setValue = isEmpty ? setDraftEmpty : setDraftConv;
     const taRef = isEmpty ? taEmptyRef : taConvRef;
     const sendFn = isEmpty ? sendFromEmpty : sendFromConv;
-    const canSend = value.trim().length > 0 && !streaming;
+    const pendingImages = isEmpty ? pendingImagesEmpty : pendingImagesConv;
+    const setPendingImages = isEmpty
+      ? setPendingImagesEmpty
+      : setPendingImagesConv;
+    const fileInputRef = isEmpty ? fileInputEmptyRef : fileInputConvRef;
+    const imageNotice = isEmpty ? imageNoticeEmpty : imageNoticeConv;
+    const setImageNotice = isEmpty ? setImageNoticeEmpty : setImageNoticeConv;
+    const dragHover = isEmpty ? dragHoverEmpty : dragHoverConv;
+    const setDragHover = isEmpty ? setDragHoverEmpty : setDragHoverConv;
+    const dragCounterRef = isEmpty ? dragCounterEmptyRef : dragCounterConvRef;
+    const canSend =
+      (value.trim().length > 0 || pendingImages.length > 0) && !streaming;
     const showStop = streaming && !isEmpty;
+    const attachDisabled = !visionSupported;
+    const attachTitle = !visionSupported
+      ? '当前模型不支持图像输入，请先在「AI 模型配置」中开启或切换到支持视觉的模型'
+      : pendingImages.length >= MAX_IMAGES
+        ? `最多上传 ${MAX_IMAGES} 张图像`
+        : '上传图像（最多 3 张）';
+
+    const handleFiles = async (input: FileList | File[] | null) => {
+      const all = input ? Array.from(input) : [];
+      // Filter to images first so non-image drag/paste doesn't burn slots.
+      const imageFiles = all.filter((f) => f.type.startsWith('image/'));
+      if (imageFiles.length === 0) return;
+      if (!visionSupported) {
+        setImageNotice('当前模型不支持图像输入');
+        return;
+      }
+      const remaining = MAX_IMAGES - pendingImages.length;
+      if (remaining <= 0) {
+        setImageNotice(`最多上传 ${MAX_IMAGES} 张图像`);
+        return;
+      }
+      const picked = imageFiles.slice(0, remaining);
+      const truncated = imageFiles.length > remaining;
+      const accepted: PendingImage[] = [];
+      for (const file of picked) {
+        try {
+          const dataUrl = await fileToDownscaledDataUrl(file);
+          accepted.push({ id: makeId('img'), dataUrl });
+        } catch {
+          /* ignore single-file failures */
+        }
+      }
+      if (accepted.length === 0) {
+        setImageNotice('图像处理失败，请更换图片再试');
+        return;
+      }
+      setPendingImages((arr) => [...arr, ...accepted].slice(0, MAX_IMAGES));
+      setImageNotice(truncated ? `最多上传 ${MAX_IMAGES} 张图像` : '');
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      // Only intercept when the clipboard actually carries image files —
+      // otherwise let the browser's default text paste through untouched.
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+      const files: File[] = [];
+      for (const it of Array.from(items)) {
+        if (it.kind !== 'file') continue;
+        const f = it.getAsFile();
+        if (f && f.type.startsWith('image/')) files.push(f);
+      }
+      if (files.length === 0) return;
+      e.preventDefault();
+      void handleFiles(files);
+    };
+
+    const dragHasFiles = (e: React.DragEvent<HTMLDivElement>) =>
+      !!e.dataTransfer?.types?.includes('Files');
+
+    const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+      if (!dragHasFiles(e)) return;
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      if (dragCounterRef.current === 1) setDragHover(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+      if (!dragHasFiles(e)) return;
+      dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+      if (dragCounterRef.current === 0) setDragHover(false);
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+      const files = e.dataTransfer?.files;
+      // Always reset drag state on drop, even when no files are present.
+      dragCounterRef.current = 0;
+      setDragHover(false);
+      if (!files || files.length === 0) return;
+      // Only intercept image drops — let the browser handle anything else
+      // (text drags, etc.) so we don't break unrelated drop targets.
+      const hasImage = Array.from(files).some((f) =>
+        f.type.startsWith('image/'),
+      );
+      if (!hasImage) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void handleFiles(files);
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+      // Showing the copy cursor + suppressing the browser's default
+      // "open this image in a new tab" behavior requires preventDefault
+      // on every dragover, even before the drop fires.
+      if (dragHasFiles(e)) {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const removeImage = (id: string) => {
+      setPendingImages((arr) => arr.filter((i) => i.id !== id));
+      setImageNotice('');
+    };
     const searchDisabled = !webSearchAvailable;
     const searchTitle = searchDisabled
       ? '联网搜索不可用（未配置 BRAVE_API_KEY）'
@@ -851,7 +1092,57 @@ const AIChatPage: React.FC = () => {
 
     return (
       <div className="ai-composer-wrap">
-        <div className="ai-composer">
+        <div
+          className={`ai-composer${dragHover ? ' dragging' : ''}`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+        >
+          {dragHover && (
+            <div className="ai-composer-drop-hint" aria-hidden>
+              <span className="ai-composer-drop-hint-inner">
+                {visionSupported
+                  ? '松开鼠标以上传图片'
+                  : '当前模型不支持图像输入'}
+              </span>
+            </div>
+          )}
+          {pendingImages.length > 0 && (
+            <div className="ai-thumb-strip">
+              {pendingImages.map((img) => (
+                <div key={img.id} className="ai-thumb">
+                  <img src={img.dataUrl} alt="" />
+                  <button
+                    type="button"
+                    className="ai-thumb-remove"
+                    title="移除图像"
+                    aria-label="移除图像"
+                    onClick={() => removeImage(img.id)}
+                  >
+                    <IcoX />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {imageNotice && (
+            <div className="ai-thumb-notice" role="status">
+              {imageNotice}
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              void handleFiles(e.target.files);
+              // Reset so picking the same file twice still triggers onChange.
+              e.target.value = '';
+            }}
+          />
           <textarea
             ref={taRef}
             className="ai-ta"
@@ -859,6 +1150,7 @@ const AIChatPage: React.FC = () => {
             placeholder={isEmpty ? '今天我能帮你做些什么？' : '回复…'}
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -870,8 +1162,15 @@ const AIChatPage: React.FC = () => {
             <div className="ai-actions-left">
               <button
                 className="ai-icon-btn"
-                title="附件（即将支持）"
+                title={attachTitle}
                 type="button"
+                disabled={attachDisabled || pendingImages.length >= MAX_IMAGES}
+                onClick={() => fileInputRef.current?.click()}
+                style={
+                  attachDisabled
+                    ? { opacity: 0.45, cursor: 'not-allowed' }
+                    : undefined
+                }
               >
                 <IcoPlusSm />
               </button>
@@ -962,7 +1261,7 @@ const AIChatPage: React.FC = () => {
                       }}
                     >
                       <div className="ai-model-menu-inner">
-                        {models.map((m) => {
+                        {orderedModels.map((m) => {
                           const isActive = m.model === selectedModel;
                           return (
                             <button

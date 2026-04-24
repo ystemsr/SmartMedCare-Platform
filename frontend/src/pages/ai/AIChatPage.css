@@ -876,30 +876,38 @@
 
 .ai-chips {
   display: flex;
-  gap: 8px;
+  gap: 14px;
   flex-wrap: wrap;
   justify-content: center;
   margin-top: 6px;
 }
-.ai-chip {
+/* Prefixed with `.ai-app` to win against the global
+ * `.ai-app button { padding: 0; }` reset, which would otherwise
+ * collapse the chip's horizontal padding and squash the label
+ * against the rounded edges. */
+.ai-app .ai-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 34px;
-  padding: 0 14px;
+  gap: 8px;
+  height: 36px;
+  padding: 0 18px;
   border: 1px solid var(--ai-line);
   border-radius: 999px;
   background: var(--ai-surface);
   color: var(--ai-ink-2);
   font-size: 13.5px;
-  transition: background 0.15s, border-color 0.15s;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
-.ai-chip:hover {
+.ai-app .ai-chip:hover {
   background: #fdfcf8;
   border-color: #d8d2c6;
+  box-shadow: 0 4px 14px -10px rgba(30, 25, 20, 0.25);
 }
-.ai-chip svg {
+.ai-app .ai-chip svg {
   color: #8a847b;
+  flex-shrink: 0;
 }
 
 /* Conversation state */

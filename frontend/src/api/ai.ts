@@ -106,6 +106,85 @@ export function testAIConfig(
   return http.post('/ai/config/test', payload);
 }
 
+/* =========================================================================
+ * Conversation history (per-user, backend-persisted)
+ * ======================================================================= */
+
+/** Summary row returned by GET /ai/conversations. */
+export interface ConversationSummary {
+  id: number;
+  title: string;
+  updated_at: number;
+}
+
+/** The message payload we round-trip through the backend. Shape matches the
+ * UI's own message type — the backend treats it as opaque JSON except for
+ * `role`, which is validated. */
+export interface ConversationMessagePayload {
+  role: 'user' | 'assistant' | 'system';
+  content?: string;
+  images?: string[];
+  reasoning?: string;
+  thinkingComplete?: boolean;
+  thinkingStopped?: boolean;
+  thinkingDuration?: number | null;
+  errored?: boolean;
+  searches?: unknown[];
+  knowledgeBase?: unknown;
+  [extra: string]: unknown;
+}
+
+export interface ConversationDetail {
+  id: number;
+  title: string;
+  updated_at: number;
+  messages: ConversationMessagePayload[];
+}
+
+export function listConversations(): Promise<ApiResponse<ConversationSummary[]>> {
+  return http.get('/ai/conversations');
+}
+
+export function getConversation(
+  id: number,
+): Promise<ApiResponse<ConversationDetail>> {
+  return http.get(`/ai/conversations/${id}`);
+}
+
+export function createConversation(payload: {
+  title?: string;
+  messages?: ConversationMessagePayload[];
+}): Promise<ApiResponse<ConversationDetail>> {
+  return http.post('/ai/conversations', payload);
+}
+
+export function updateConversation(
+  id: number,
+  payload: { title?: string; messages?: ConversationMessagePayload[] },
+): Promise<ApiResponse<ConversationDetail>> {
+  return http.put(`/ai/conversations/${id}`, payload);
+}
+
+export function deleteConversation(
+  id: number,
+): Promise<ApiResponse<{ id: number }>> {
+  return http.delete(`/ai/conversations/${id}`);
+}
+
+export interface ConversationImportItem {
+  title?: string;
+  updated_at?: number;
+  messages?: ConversationMessagePayload[];
+}
+
+export function importConversations(
+  conversations: ConversationImportItem[],
+): Promise<
+  ApiResponse<{ imported: number; conversations: ConversationDetail[] }>
+> {
+  return http.post('/ai/conversations/import', { conversations });
+}
+
 export interface KnowledgeBaseHit {
   document_id: number | null;
   document_name: string;

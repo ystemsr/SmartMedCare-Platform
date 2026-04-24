@@ -9,10 +9,17 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore, getHomeRoute } from '../../store/auth';
 import {
+  createConversation,
+  deleteConversation,
+  getConversation,
   getPublicConfig,
+  importConversations,
+  listConversations,
   streamChat,
+  updateConversation,
   type AIChatMessage,
   type AIModelEntry,
+  type ConversationMessagePayload,
 } from '../../api/ai';
 import ThinkingBubble from './ThinkingBubble';
 import MarkdownStream from './MarkdownStream';
@@ -54,13 +61,25 @@ const IMAGE_MAX_DIMENSION = 1280;
 const IMAGE_JPEG_QUALITY = 0.85;
 
 interface Conversation {
-  id: string;
+  /** Backend-assigned id. Shared browser localStorage used string UUIDs
+   * here; those are migrated once on first mount and then the assistant
+   * runs entirely against the server, where ids are numeric primary
+   * keys. */
+  id: number;
   title: string;
   messages: UIMsg[];
   updatedAt: number;
+  /** False until messages have been fetched from the backend. The list
+   * endpoint only returns summaries, so we hydrate on demand. */
+  loaded: boolean;
 }
 
-const STORAGE_KEY = 'smc.ai.conversations.v1';
+/** Pre-rework key — the chat UI used to store every user's conversations
+ * in this shared browser bucket. We import it once into the logged-in
+ * user's server-side history and then clear it. */
+const LEGACY_STORAGE_KEY = 'smc.ai.conversations.v1';
+/** Sentinel so the legacy import runs at most once per browser. */
+const MIGRATED_KEY = 'smc.ai.migrated.v1';
 const COLLAPSE_KEY = 'smc.ai.side.collapsed';
 const MODEL_KEY = 'smc.ai.model.selected';
 
@@ -68,23 +87,58 @@ const MODEL_KEY = 'smc.ai.model.selected';
  * Utilities
  * ======================================================================= */
 
-function loadConversations(): Conversation[] {
+/** Legacy localStorage shape from before the per-user migration. */
+interface LegacyConversation {
+  id?: string;
+  title?: string;
+  messages?: UIMsg[];
+  updatedAt?: number;
+}
+
+function readLegacyConversations(): LegacyConversation[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as Conversation[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as LegacyConversation[]) : [];
   } catch {
     return [];
   }
 }
 
-function saveConversations(list: Conversation[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 50)));
-  } catch {
-    /* quota ignored */
-  }
+/** Strip UI-only fields that shouldn't round-trip through the backend.
+ * `pending` and `errored` are streaming/in-flight flags; persisting them
+ * would leave bubbles stuck on the dot-loader after reload. */
+function messagesForPersist(list: UIMsg[]): ConversationMessagePayload[] {
+  return list.map((m) => {
+    const { pending, errored, ...rest } = m;
+    void pending;
+    void errored;
+    return rest as ConversationMessagePayload;
+  });
+}
+
+/** Adopt a backend payload back into the UI shape. Messages lose their
+ * client-side ids on the round-trip, so we re-mint them here. */
+function hydrateMessages(raw: ConversationMessagePayload[] | undefined): UIMsg[] {
+  if (!raw || !Array.isArray(raw)) return [];
+  return raw.map((m) => {
+    const role = (m.role === 'assistant' ? 'assistant' : 'user') as UIMsg['role'];
+    return {
+      id: makeId('m'),
+      role,
+      content: typeof m.content === 'string' ? m.content : '',
+      images: Array.isArray(m.images) ? m.images.slice() : undefined,
+      reasoning: typeof m.reasoning === 'string' ? m.reasoning : undefined,
+      thinkingComplete: !!m.thinkingComplete,
+      thinkingStopped: !!m.thinkingStopped,
+      thinkingDuration:
+        typeof m.thinkingDuration === 'number' ? m.thinkingDuration : null,
+      errored: false,
+      searches: Array.isArray(m.searches) ? (m.searches as UIMsg['searches']) : undefined,
+      knowledgeBase: (m.knowledgeBase as UIMsg['knowledgeBase']) || undefined,
+    };
+  });
 }
 
 function titleFrom(text: string): string {
@@ -106,21 +160,6 @@ function greetingText(name: string): string {
 function makeId(prefix = 'c'): string {
   return `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)
     .toString(36)}`;
-}
-
-/** RFC 4122 v4 UUID. Falls back to a manual impl where the browser
- * doesn't expose `crypto.randomUUID` (e.g. over insecure origins). */
-function makeUuid(): string {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID();
-  }
-  const rand = () => Math.random().toString(16).slice(2).padStart(8, '0');
-  return `${rand().slice(0, 8)}-${rand().slice(0, 4)}-4${rand().slice(0, 3)}-${(
-    (Math.random() * 4) | (0 + 8)
-  ).toString(16)}${rand().slice(0, 3)}-${rand()}${rand().slice(0, 4)}`;
 }
 
 /** Read an image file, downscale so the longest side is ≤ IMAGE_MAX_DIMENSION,
@@ -238,36 +277,35 @@ const IcoBack = () => (
   </svg>
 );
 
-/* chip icons */
-const IcoPencil = () => (
+/* chip icons — domain-aligned for the smart medical-elderly care platform */
+const IcoHeart = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 20h9" />
-    <path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
   </svg>
 );
-const IcoCap = () => (
+const IcoAlert = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 10 12 5 2 10l10 5 10-5z" />
-    <path d="M6 12v5c3 2 9 2 12 0v-5" />
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <path d="M12 9v4" />
+    <path d="M12 17h.01" />
   </svg>
 );
-const IcoCode = () => (
+const IcoCalendar = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m8 6-6 6 6 6" />
-    <path d="m16 6 6 6-6 6" />
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4M8 2v4M3 10h18" />
   </svg>
 );
-const IcoBag = () => (
+const IcoPill = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8a2 2 0 0 1 2 2v9H4v-9a2 2 0 0 1 2-2" />
-    <path d="M8 8V6a4 4 0 1 1 8 0v2" />
+    <path d="M10.5 20.5a4.95 4.95 0 1 1-7-7l9-9a4.95 4.95 0 1 1 7 7z" />
+    <path d="m8.5 8.5 7 7" />
   </svg>
 );
-const IcoBulb = () => (
+const IcoBook = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 18h6" />
-    <path d="M10 22h4" />
-    <path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z" />
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
   </svg>
 );
 
@@ -275,13 +313,170 @@ const IcoBulb = () => (
  * Component
  * ======================================================================= */
 
-const PRESET_CHIPS = [
-  { label: '写作', prompt: '帮我起草一份', icon: <IcoPencil /> },
-  { label: '学习', prompt: '帮我学习', icon: <IcoCap /> },
-  { label: '代码', prompt: '我遇到一个代码问题：', icon: <IcoCode /> },
-  { label: '生活', prompt: '推荐一些', icon: <IcoBag /> },
-  { label: '灵感推荐', prompt: '今天最适合做什么？', icon: <IcoBulb /> },
-];
+type RoleCode = 'admin' | 'doctor' | 'elder' | 'family';
+
+interface ChipDef {
+  label: string;
+  prompt: string;
+  icon: React.ReactNode;
+}
+
+/** Per-role inspiration chips. Each role sees prompts tuned for the
+ * tasks they typically open the assistant for. The fallback list is
+ * used when the user has no recognised role (e.g. a future viewer
+ * role that hasn't been wired in yet). */
+const PRESET_CHIPS_BY_ROLE: Record<RoleCode | 'default', ChipDef[]> = {
+  doctor: [
+    {
+      label: '健康评估',
+      prompt:
+        '请协助我为一位老人完成综合健康评估，需要采集哪些关键指标，并给出风险研判建议。',
+      icon: <IcoHeart />,
+    },
+    {
+      label: '风险研判',
+      prompt:
+        '近期需要重点关注哪些高风险老人信号？请给出排查清单与处置建议。',
+      icon: <IcoAlert />,
+    },
+    {
+      label: '随访计划',
+      prompt:
+        '请为一位高血压、糖尿病的老人制定一份月度随访计划，包含频次、检查项与沟通要点。',
+      icon: <IcoCalendar />,
+    },
+    {
+      label: '用药指导',
+      prompt: '老年人多重用药需要注意哪些常见相互作用与禁忌？请举例说明。',
+      icon: <IcoPill />,
+    },
+    {
+      label: '干预建议',
+      prompt: '请给出针对一位轻度认知障碍老人的非药物干预建议清单。',
+      icon: <IcoBook />,
+    },
+  ],
+  admin: [
+    {
+      label: '数据看板',
+      prompt: '本月平台的关键运营指标有哪些值得关注的变化？请帮我梳理重点。',
+      icon: <IcoHeart />,
+    },
+    {
+      label: '权限梳理',
+      prompt: '请帮我梳理当前各角色的权限边界，是否有需要收紧或放开的地方？',
+      icon: <IcoAlert />,
+    },
+    {
+      label: '运维巡检',
+      prompt: '日常运维巡检应覆盖哪些关键项？请按服务模块给出清单。',
+      icon: <IcoCalendar />,
+    },
+    {
+      label: '配置建议',
+      prompt: '数据采集频率与告警阈值如何设置才更合理？请给出参考范围。',
+      icon: <IcoPill />,
+    },
+    {
+      label: '使用引导',
+      prompt: '请帮我准备一份面向新机构的快速上手指南要点。',
+      icon: <IcoBook />,
+    },
+  ],
+  elder: [
+    {
+      label: '用药提醒',
+      prompt: '怎么帮我记住每天按时吃药？有哪些简单的方法？',
+      icon: <IcoPill />,
+    },
+    {
+      label: '居家锻炼',
+      prompt: '请给我推荐几个适合老年人在家做的轻度锻炼。',
+      icon: <IcoHeart />,
+    },
+    {
+      label: '饮食建议',
+      prompt: '我有高血压，平时饮食上需要注意什么？哪些食物要少吃？',
+      icon: <IcoBook />,
+    },
+    {
+      label: '就医准备',
+      prompt: '下次去医院复诊之前，我需要提前准备好哪些东西？',
+      icon: <IcoCalendar />,
+    },
+    {
+      label: '身体不适',
+      prompt: '最近早上起床偶尔头晕，可能是什么原因？需要看医生吗？',
+      icon: <IcoAlert />,
+    },
+  ],
+  family: [
+    {
+      label: '老人状况',
+      prompt: '怎样能更快地了解父母最近的健康变化？我应该重点关注哪些指标？',
+      icon: <IcoHeart />,
+    },
+    {
+      label: '照护建议',
+      prompt: '糖尿病老人日常照护需要注意哪些细节？请给出清单。',
+      icon: <IcoBook />,
+    },
+    {
+      label: '沟通技巧',
+      prompt: '老人对按时吃药比较抵触，怎么沟通才能让他配合？',
+      icon: <IcoPill />,
+    },
+    {
+      label: '紧急应对',
+      prompt: '老人突发胸痛或晕倒时，家属应该如何第一时间应对？',
+      icon: <IcoAlert />,
+    },
+    {
+      label: '远程关怀',
+      prompt: '每周和远在老家的父母通电话，可以聊些什么内容更有帮助？',
+      icon: <IcoCalendar />,
+    },
+  ],
+  default: [
+    {
+      label: '健康评估',
+      prompt: '请介绍老年人综合健康评估通常包含哪些维度。',
+      icon: <IcoHeart />,
+    },
+    {
+      label: '风险预警',
+      prompt: '老年人常见的健康风险信号有哪些？',
+      icon: <IcoAlert />,
+    },
+    {
+      label: '随访计划',
+      prompt: '一份典型的老年慢病随访计划应该如何安排？',
+      icon: <IcoCalendar />,
+    },
+    {
+      label: '用药咨询',
+      prompt: '老年人多重用药需要注意哪些常见相互作用与禁忌？',
+      icon: <IcoPill />,
+    },
+    {
+      label: '健康科普',
+      prompt: '用通俗的语言介绍一种适合老人的居家健康管理方式。',
+      icon: <IcoBook />,
+    },
+  ],
+};
+
+/** Mirror of backend's `_primary_role`: admin > doctor > elder > family.
+ * Returns the most-privileged matching role code, or null if none of the
+ * known role codes are present. */
+function pickPrimaryRole(roles: string[] | undefined): RoleCode | null {
+  if (!roles || roles.length === 0) return null;
+  const ORDER: RoleCode[] = ['admin', 'doctor', 'elder', 'family'];
+  for (const code of ORDER) {
+    if (roles.includes(code)) return code;
+  }
+  return null;
+}
 
 const AIChatPage: React.FC = () => {
   const navigate = useNavigate();
@@ -289,6 +484,10 @@ const AIChatPage: React.FC = () => {
   const user = useAuthStore((s) => s.user);
   const displayName =
     user?.real_name || user?.username || '朋友';
+  const presetChips = useMemo(() => {
+    const role = pickPrimaryRole(user?.roles);
+    return PRESET_CHIPS_BY_ROLE[role ?? 'default'];
+  }, [user?.roles]);
 
   const [sideCollapsed, setSideCollapsed] = useState<boolean>(
     () => localStorage.getItem(COLLAPSE_KEY) === '1',
@@ -297,16 +496,25 @@ const AIChatPage: React.FC = () => {
     localStorage.setItem(COLLAPSE_KEY, sideCollapsed ? '1' : '0');
   }, [sideCollapsed]);
 
-  const [conversations, setConversations] = useState<Conversation[]>(() =>
-    loadConversations(),
-  );
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Mirror of `conversations` so async callbacks (stream finish,
+  // save-on-complete) can read the latest state without retriggering
+  // renders via a `setConversations` closure.
+  const conversationsRef = useRef<Conversation[]>([]);
   useEffect(() => {
-    saveConversations(conversations);
+    conversationsRef.current = conversations;
   }, [conversations]);
 
   // activeId is derived from the URL — `/ai/<id>` selects the conv;
-  // `/ai` bare means "empty / new chat" screen.
-  const activeId = routeId ?? null;
+  // `/ai` bare means "empty / new chat" screen. Backend ids are numeric
+  // primary keys; non-numeric route params (stale UUID bookmarks from
+  // the localStorage era) are treated as "no active conversation" and
+  // cleaned up by the redirect effect below.
+  const activeId = useMemo(() => {
+    if (!routeId) return null;
+    const n = Number(routeId);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [routeId]);
   const activeConv = useMemo(
     () => conversations.find((c) => c.id === activeId) || null,
     [conversations, activeId],
@@ -317,17 +525,116 @@ const AIChatPage: React.FC = () => {
   // them so the brief window between `navigate(newId)` and the next
   // commit that carries the conversation into state doesn't bounce back
   // to `/ai`. Cleared once the conversation shows up in `conversations`.
-  const freshIdsRef = useRef<Set<string>>(new Set());
+  const freshIdsRef = useRef<Set<number>>(new Set());
+
+  /* ---- initial load + one-shot legacy localStorage migration ----
+   * On first mount we import any pre-rework localStorage data into the
+   * logged-in user's server-side history (at most once per browser),
+   * then list the user's conversations from the backend. Errors are
+   * non-fatal — the UI still works, just without history. */
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    const bootstrap = async () => {
+      if (localStorage.getItem(MIGRATED_KEY) !== '1') {
+        const legacy = readLegacyConversations();
+        if (legacy.length > 0) {
+          try {
+            await importConversations(
+              legacy.map((c) => ({
+                title: c.title,
+                updated_at: c.updatedAt,
+                messages: messagesForPersist(c.messages || []),
+              })),
+            );
+          } catch {
+            /* swallow — we'll try again next load if the flag stays unset */
+            localStorage.setItem(MIGRATED_KEY, '1');
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+            if (!cancelled) setHistoryError('历史对话导入失败，部分记录可能已丢失');
+          }
+        }
+        localStorage.setItem(MIGRATED_KEY, '1');
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      }
+      try {
+        const res = await listConversations();
+        if (cancelled) return;
+        const summaries = res.data || [];
+        setConversations(
+          summaries.map((s) => ({
+            id: s.id,
+            title: s.title,
+            updatedAt: s.updated_at,
+            messages: [],
+            loaded: false,
+          })),
+        );
+      } catch {
+        if (!cancelled) setHistoryError('无法加载历史对话');
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    };
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* ---- lazy-hydrate the active conversation's messages ---- */
+  useEffect(() => {
+    if (!activeId) return;
+    const conv = conversations.find((c) => c.id === activeId);
+    if (!conv || conv.loaded) return;
+    let cancelled = false;
+    getConversation(activeId)
+      .then((res) => {
+        if (cancelled) return;
+        const detail = res.data;
+        setConversations((list) =>
+          list.map((c) =>
+            c.id === activeId
+              ? {
+                  ...c,
+                  title: detail.title,
+                  updatedAt: detail.updated_at,
+                  messages: hydrateMessages(detail.messages),
+                  loaded: true,
+                }
+              : c,
+          ),
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Conversation was deleted (possibly on another device) — drop
+        // it from the sidebar and bounce back to the empty screen.
+        setConversations((list) => list.filter((c) => c.id !== activeId));
+        navigate('/ai', { replace: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId, conversations, navigate]);
 
   useEffect(() => {
+    if (historyLoading) return;
     if (!routeId) return;
-    if (conversations.some((c) => c.id === routeId)) {
-      freshIdsRef.current.delete(routeId);
+    if (activeId === null) {
+      // Non-numeric / invalid id in the URL (stale bookmark from the
+      // localStorage era). Send the user back to the empty screen.
+      navigate('/ai', { replace: true });
       return;
     }
-    if (freshIdsRef.current.has(routeId)) return;
+    if (conversations.some((c) => c.id === activeId)) {
+      freshIdsRef.current.delete(activeId);
+      return;
+    }
+    if (freshIdsRef.current.has(activeId)) return;
     navigate('/ai', { replace: true });
-  }, [routeId, conversations, navigate]);
+  }, [routeId, activeId, conversations, navigate, historyLoading]);
 
   /* ---- composer state ---- */
   const [draftEmpty, setDraftEmpty] = useState('');
@@ -517,14 +824,21 @@ const AIChatPage: React.FC = () => {
     setTimeout(() => taEmptyRef.current?.focus(), 40);
   };
 
-  const openConv = (id: string) => {
+  const openConv = (id: number) => {
     navigate(`/ai/${id}`);
     setTimeout(() => taConvRef.current?.focus(), 40);
   };
 
-  const deleteConv = (id: string) => {
+  const deleteConv = (id: number) => {
+    // Optimistic removal — if the DELETE fails we roll back from the
+    // snapshot so the sidebar doesn't silently lose an entry that's
+    // still on the server.
+    const snapshot = conversationsRef.current;
     setConversations((list) => list.filter((c) => c.id !== id));
     if (activeId === id) navigate('/ai', { replace: true });
+    void deleteConversation(id).catch(() => {
+      setConversations(snapshot);
+    });
   };
 
   const beginTitleEdit = () => {
@@ -534,12 +848,33 @@ const AIChatPage: React.FC = () => {
   };
   const commitTitleEdit = () => {
     if (!activeConv) return;
-    const next = (titleDraft || '').trim() || activeConv.title || '新对话';
+    const prev = activeConv.title;
+    const next = (titleDraft || '').trim() || prev || '新对话';
+    setEditingTitle(false);
+    if (next === prev) return;
     setConversations((list) =>
       list.map((c) => (c.id === activeConv.id ? { ...c, title: next } : c)),
     );
-    setEditingTitle(false);
+    void updateConversation(activeConv.id, { title: next }).catch(() => {
+      // Roll back on failure so the sidebar doesn't diverge from the server.
+      setConversations((list) =>
+        list.map((c) => (c.id === activeConv.id ? { ...c, title: prev } : c)),
+      );
+    });
   };
+
+  /** Persist the latest message list for `convId` to the backend.
+   * Fire-and-forget; errors are swallowed so a transient failure
+   * doesn't block the UI. */
+  const persistMessages = useCallback((convId: number) => {
+    const conv = conversationsRef.current.find((c) => c.id === convId);
+    if (!conv) return;
+    void updateConversation(convId, {
+      messages: messagesForPersist(conv.messages),
+    }).catch(() => {
+      /* silent — the next successful save will reconcile */
+    });
+  }, []);
 
   /* ---- send / stream ---- */
 
@@ -801,17 +1136,21 @@ const AIChatPage: React.FC = () => {
         flushNow();
         setStreaming(false);
         abortRef.current = null;
+        // Snapshot the conversation to the backend now that the stream
+        // has settled. Skipping per-token saves keeps the write volume
+        // low; the cost is that a mid-stream browser refresh loses the
+        // in-flight reply — an acceptable trade given how cheap it is
+        // to regenerate.
+        persistMessages(conv.id);
       }
     },
-    [selectedModel],
+    [selectedModel, persistMessages],
   );
 
-  const sendFromEmpty = () => {
+  const sendFromEmpty = async () => {
     const v = draftEmpty.trim();
     const imgs = pendingImagesEmpty;
     if ((!v && imgs.length === 0) || streaming) return;
-    const convId = makeUuid();
-    freshIdsRef.current.add(convId);
 
     const userMsg: UIMsg = {
       id: makeId('m'),
@@ -826,23 +1165,51 @@ const AIChatPage: React.FC = () => {
       content: '',
       pending: true,
     };
-    const newConv: Conversation = {
-      id: convId,
-      title: titleFrom(v),
-      messages: [userMsg, aiMsg],
-      updatedAt: Date.now(),
-    };
 
-    // React 18 auto-batches the state update + the router navigation
-    // into a single commit. Updating state first guarantees that when
-    // the router's new URL lands, `conversations` already contains
-    // the new conv — no flicker, no unknown-id redirect.
-    setConversations((list) => [newConv, ...list]);
+    // Eagerly clear the composer — if the POST fails we keep the error
+    // local and the user can retype, but keeping the draft visible while
+    // a pending create is in flight is worse UX than clearing now.
     setDraftEmpty('');
     setPendingImagesEmpty([]);
     setImageNoticeEmpty('');
-    navigate(`/ai/${convId}`);
-    runStream(newConv, [userMsg, aiMsg], placeholderId, {
+    // Flip the "streaming" flag upfront so the send button disables
+    // during the create round-trip. runStream's finally clause will
+    // flip it back when the stream ends.
+    setStreaming(true);
+    let created: { id: number; title: string; updatedAt: number };
+    try {
+      const res = await createConversation({
+        title: titleFrom(v),
+        // Persist only the user's turn — the assistant placeholder is a
+        // UI-only streaming artefact. If the user refreshes mid-stream
+        // they'll see their question preserved without an empty AI bubble.
+        messages: messagesForPersist([userMsg]),
+      });
+      created = {
+        id: res.data.id,
+        title: res.data.title,
+        updatedAt: res.data.updated_at,
+      };
+    } catch {
+      setStreaming(false);
+      setImageNoticeEmpty('新建对话失败，请稍后重试');
+      // Restore the user's draft so they don't have to retype.
+      setDraftEmpty(v);
+      setPendingImagesEmpty(imgs);
+      return;
+    }
+
+    freshIdsRef.current.add(created.id);
+    const newConv: Conversation = {
+      id: created.id,
+      title: created.title,
+      messages: [userMsg, aiMsg],
+      updatedAt: created.updatedAt,
+      loaded: true,
+    };
+    setConversations((list) => [newConv, ...list]);
+    navigate(`/ai/${created.id}`);
+    void runStream(newConv, [userMsg, aiMsg], placeholderId, {
       webSearch: forceWebSearch && webSearchAvailable,
       useKnowledgeBase: useKnowledgeBase && knowledgeBaseAvailable,
     });
@@ -878,7 +1245,14 @@ const AIChatPage: React.FC = () => {
     setDraftConv('');
     setPendingImagesConv([]);
     setImageNoticeConv('');
-    runStream(updated, nextMsgs, placeholderId, {
+    // Save the user's turn immediately so a mid-stream refresh doesn't
+    // drop the question. Fire-and-forget; the post-stream snapshot will
+    // reconcile any transient failure.
+    const msgsWithoutPlaceholder = [...activeConv.messages, userMsg];
+    void updateConversation(activeConv.id, {
+      messages: messagesForPersist(msgsWithoutPlaceholder),
+    }).catch(() => {});
+    void runStream(updated, nextMsgs, placeholderId, {
       webSearch: forceWebSearch && webSearchAvailable,
       useKnowledgeBase: useKnowledgeBase && knowledgeBaseAvailable,
     });
@@ -1317,7 +1691,7 @@ const AIChatPage: React.FC = () => {
         </div>
         {isEmpty && (
           <div className="ai-chips" style={{ marginTop: 18 }}>
-            {PRESET_CHIPS.map((c) => (
+            {presetChips.map((c) => (
               <button
                 key={c.label}
                 className="ai-chip"
@@ -1389,7 +1763,9 @@ const AIChatPage: React.FC = () => {
                   color: 'var(--ai-muted)',
                 }}
               >
-                还没有历史对话
+                {historyLoading
+                  ? '正在加载历史对话…'
+                  : historyError || '还没有历史对话'}
               </div>
             )}
             {conversations.map((r) => (

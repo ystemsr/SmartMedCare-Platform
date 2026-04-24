@@ -28,6 +28,9 @@ from app.models.family_member import FamilyMember  # noqa: F401
 # ===== AI Knowledge Base (RAG) =====
 from app.models.knowledge_base import KBDocument, KBChunk  # noqa: F401
 
+# ===== AI Chat (per-user conversations) =====
+from app.models.ai_chat import AIConversation, AIMessage  # noqa: F401
+
 # ===== Big Data & ML models (feat/bigdata-backend) =====
 from app.models.bigdata import BigDataJob, PredictionResult  # noqa: F401
 from app.models.hive_history import HiveQueryHistory, HiveSavedQuery  # noqa: F401

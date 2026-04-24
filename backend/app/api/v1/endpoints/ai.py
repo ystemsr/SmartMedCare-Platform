@@ -14,11 +14,13 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db, require_permission
+from app.models.ai_chat import AIConversation, AIMessage
 from app.models.audit_log import SystemConfig
+from app.models.base import _utcnow
 from app.models.user import User
 from app.services.brave_search import (
     BRAVE_TOOL_SCHEMA,
@@ -413,19 +415,38 @@ async def chat_stream(
             except Exception as e:  # noqa: BLE001
                 logger.warning("kb retrieve failed: %s", e)
                 hits = []
-            wrapped_text = build_rag_prompt(user_query, hits)
-            new_content: Union[str, List[Dict[str, Any]]]
-            if image_parts:
-                new_content = [
-                    {"type": "text", "text": wrapped_text},
-                    *image_parts,
-                ]
+            # Only wrap the user's turn when we actually have relevant
+            # context to inject. Previously the "(no relevant context)"
+            # branch of the RAG template still went out, combined with
+            # "don't try to make up an answer" — that actively suppressed
+            # the model's general knowledge, so users saw the assistant
+            # refuse to answer when KB simply had no match. Skipping the
+            # wrap lets the assistant answer normally in that case while
+            # still surfacing a "no match" indicator in the UI.
+            if hits:
+                wrapped_text = build_rag_prompt(user_query, hits)
+                new_content: Union[str, List[Dict[str, Any]]]
+                if image_parts:
+                    new_content = [
+                        {"type": "text", "text": wrapped_text},
+                        *image_parts,
+                    ]
+                else:
+                    new_content = wrapped_text
+                messages[last_user_idx] = {
+                    "role": "user",
+                    "content": new_content,
+                }
+                logger.info(
+                    "AI chat RAG: role=%s hits=%d injected into user turn",
+                    role_code,
+                    len(hits),
+                )
             else:
-                new_content = wrapped_text
-            messages[last_user_idx] = {
-                "role": "user",
-                "content": new_content,
-            }
+                logger.info(
+                    "AI chat RAG: role=%s no relevant hits — passing user turn through unchanged",
+                    role_code,
+                )
             kb_event = {
                 "knowledge_base": {
                     "role_code": role_code,
@@ -781,3 +802,285 @@ async def test_config(
     except Exception:  # noqa: BLE001
         reply = ""
     return success_response({"ok": True, "model": model, "reply": reply})
+
+
+# ---------- Per-user chat history ----------
+
+
+class ConversationMessage(BaseModel):
+    """A message payload as stored/returned to the chat UI.
+
+    We accept/return the opaque UI-shape dict (role, content, images,
+    reasoning, searches, knowledge_base, …) so the frontend can round-
+    trip without losing bubble metadata. Only `role` is validated here.
+    """
+
+    role: str = Field(pattern=r"^(user|assistant|system)$")
+    # Arbitrary UI payload (everything else a bubble needs to render).
+    # Kept extensible so we don't have to version the schema each time
+    # the chat UI learns a new trick.
+    model_config = {"extra": "allow"}
+
+
+class ConversationCreate(BaseModel):
+    title: Optional[str] = None
+    messages: Optional[List[Dict[str, Any]]] = None
+
+
+class ConversationUpdate(BaseModel):
+    title: Optional[str] = None
+    messages: Optional[List[Dict[str, Any]]] = None
+
+
+class ConversationImportItem(BaseModel):
+    title: Optional[str] = None
+    updated_at: Optional[int] = None  # unix millis from client
+    messages: Optional[List[Dict[str, Any]]] = None
+
+
+class ConversationImport(BaseModel):
+    conversations: List[ConversationImportItem]
+
+
+_DEFAULT_TITLE = "新对话"
+
+
+def _sanitize_message(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip server-only / transient flags before persisting.
+
+    `pending` is a UI-streaming flag and must never round-trip back as
+    true after reload (otherwise the bubble gets stuck on the dot-
+    loader). Everything else is kept verbatim.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    cleaned = {k: v for k, v in raw.items() if k != "pending"}
+    role = cleaned.get("role")
+    if role not in ("user", "assistant", "system"):
+        cleaned["role"] = "user"
+    return cleaned
+
+
+def _serialize_conv(conv: AIConversation, messages: List[AIMessage]) -> Dict[str, Any]:
+    parsed: List[Dict[str, Any]] = []
+    for m in messages:
+        try:
+            obj = json.loads(m.payload or "{}")
+        except json.JSONDecodeError:
+            obj = {}
+        if not isinstance(obj, dict):
+            obj = {}
+        # Ensure role is always present (the canonical copy lives in the
+        # column; `payload` is a snapshot and may drift if an older
+        # client wrote it without the role field).
+        obj.setdefault("role", m.role)
+        parsed.append(obj)
+    return {
+        "id": conv.id,
+        "title": conv.title or _DEFAULT_TITLE,
+        "updated_at": int(conv.updated_at.timestamp() * 1000)
+        if conv.updated_at
+        else 0,
+        "messages": parsed,
+    }
+
+
+async def _load_owned_conversation(
+    db: AsyncSession, conv_id: int, user_id: int
+) -> AIConversation:
+    stmt = select(AIConversation).where(
+        AIConversation.id == conv_id,
+        AIConversation.user_id == user_id,
+        AIConversation.deleted_at.is_(None),
+    )
+    conv = (await db.execute(stmt)).scalar_one_or_none()
+    if conv is None:
+        raise HTTPException(status_code=404, detail="对话不存在")
+    return conv
+
+
+async def _write_messages(
+    db: AsyncSession, conv: AIConversation, messages: List[Dict[str, Any]]
+) -> List[AIMessage]:
+    # Full replace. Conversations stay small (dozens of messages), so the
+    # simplicity of "wipe + insert" beats diffing, and keeps the ordering
+    # stable without us juggling positions across partial edits.
+    await db.execute(
+        sa_delete(AIMessage).where(AIMessage.conversation_id == conv.id)
+    )
+    rows: List[AIMessage] = []
+    for idx, raw in enumerate(messages):
+        cleaned = _sanitize_message(raw)
+        row = AIMessage(
+            conversation_id=conv.id,
+            position=idx,
+            role=str(cleaned.get("role") or "user"),
+            payload=json.dumps(cleaned, ensure_ascii=False),
+        )
+        db.add(row)
+        rows.append(row)
+    return rows
+
+
+@router.get("/conversations")
+async def list_conversations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return the caller's conversations (title + timestamp only).
+
+    Messages are fetched lazily via GET /ai/conversations/{id}; keeping
+    the list response small means the sidebar loads instantly even for
+    users with hundreds of past chats.
+    """
+    stmt = (
+        select(AIConversation)
+        .where(
+            AIConversation.user_id == current_user.id,
+            AIConversation.deleted_at.is_(None),
+        )
+        .order_by(AIConversation.updated_at.desc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return success_response(
+        [
+            {
+                "id": c.id,
+                "title": c.title or _DEFAULT_TITLE,
+                "updated_at": int(c.updated_at.timestamp() * 1000)
+                if c.updated_at
+                else 0,
+            }
+            for c in rows
+        ]
+    )
+
+
+@router.get("/conversations/{conv_id}")
+async def get_conversation(
+    conv_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    conv = await _load_owned_conversation(db, conv_id, current_user.id)
+    stmt = (
+        select(AIMessage)
+        .where(AIMessage.conversation_id == conv.id)
+        .order_by(AIMessage.position.asc(), AIMessage.id.asc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return success_response(_serialize_conv(conv, list(rows)))
+
+
+@router.post("/conversations")
+async def create_conversation(
+    body: ConversationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    title = (body.title or "").strip() or _DEFAULT_TITLE
+    conv = AIConversation(user_id=current_user.id, title=title)
+    db.add(conv)
+    await db.flush()  # populate conv.id
+    rows: List[AIMessage] = []
+    if body.messages:
+        rows = await _write_messages(db, conv, body.messages)
+    await db.commit()
+    await db.refresh(conv)
+    return success_response(_serialize_conv(conv, rows))
+
+
+@router.put("/conversations/{conv_id}")
+async def update_conversation(
+    conv_id: int,
+    body: ConversationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    conv = await _load_owned_conversation(db, conv_id, current_user.id)
+    touched = False
+    if body.title is not None:
+        new_title = body.title.strip() or _DEFAULT_TITLE
+        if new_title != conv.title:
+            conv.title = new_title
+            touched = True
+    rows: List[AIMessage] = []
+    if body.messages is not None:
+        rows = await _write_messages(db, conv, body.messages)
+        touched = True
+    if touched:
+        conv.updated_at = _utcnow()
+    # When `messages` wasn't in the patch, we still need to return the
+    # existing messages for parity with GET so the caller can reuse the
+    # response without a follow-up fetch.
+    if body.messages is None:
+        stmt = (
+            select(AIMessage)
+            .where(AIMessage.conversation_id == conv.id)
+            .order_by(AIMessage.position.asc(), AIMessage.id.asc())
+        )
+        rows = list((await db.execute(stmt)).scalars().all())
+    await db.commit()
+    await db.refresh(conv)
+    return success_response(_serialize_conv(conv, rows))
+
+
+@router.delete("/conversations/{conv_id}")
+async def delete_conversation(
+    conv_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    conv = await _load_owned_conversation(db, conv_id, current_user.id)
+    now = _utcnow()
+    conv.deleted_at = now
+    conv.updated_at = now
+    await db.commit()
+    return success_response({"id": conv_id})
+
+
+@router.post("/conversations/import")
+async def import_conversations(
+    body: ConversationImport,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """One-shot import of legacy browser-localStorage conversations.
+
+    Called by the chat UI the first time a user opens the assistant
+    after the per-user migration. Each imported conversation becomes a
+    fresh server-side record owned by the caller; the client then
+    discards its local cache. Order is preserved by using the client's
+    `updated_at` when present.
+    """
+    created: List[Dict[str, Any]] = []
+    # Oldest first so the newest ends up at the top of the list when we
+    # sort by `updated_at` on the next fetch.
+    items = sorted(
+        body.conversations,
+        key=lambda c: c.updated_at or 0,
+    )
+    for item in items:
+        title = (item.title or "").strip() or _DEFAULT_TITLE
+        conv = AIConversation(user_id=current_user.id, title=title)
+        db.add(conv)
+        await db.flush()
+        rows: List[AIMessage] = []
+        if item.messages:
+            rows = await _write_messages(db, conv, item.messages)
+        # Preserve the client's wall-clock so the sidebar ordering after
+        # import matches what the user saw before the upgrade.
+        if item.updated_at:
+            try:
+                from datetime import datetime, timezone
+
+                conv.updated_at = (
+                    datetime.fromtimestamp(item.updated_at / 1000, tz=timezone.utc)
+                    .replace(tzinfo=None)
+                )
+            except (ValueError, OSError, OverflowError):
+                pass
+        await db.flush()
+        created.append(_serialize_conv(conv, rows))
+    await db.commit()
+    return success_response({"imported": len(created), "conversations": created})

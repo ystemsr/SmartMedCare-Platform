@@ -204,17 +204,55 @@ async def delete_document(db: AsyncSession, document_id: int) -> bool:
     return True
 
 
+def _filter_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Trim a vector-search result list down to high-signal context only.
+
+    Qdrant returns candidates pre-sorted by similarity desc, so we walk
+    forward and stop at the first point that fails any quality gate:
+
+    1. ``KB_MIN_SCORE`` — anything below this is topically unrelated and
+       would just confuse the model.
+    2. ``KB_SCORE_GAP_THRESHOLD`` — if an adjacent pair's score drops by
+       more than this, the ordering crossed a relevance cliff; keeping
+       whatever sits below the cliff would mix in weakly-related noise.
+       Example: ``[0.91, 0.88, 0.86, 0.61, 0.59]`` → keep first three.
+    3. ``KB_MAX_CONTEXT_CHUNKS`` — a hard cap so the prompt never bloats
+       regardless of how evenly-ranked the candidates are.
+    """
+    if not hits:
+        return []
+    min_score = settings.KB_MIN_SCORE
+    gap = settings.KB_SCORE_GAP_THRESHOLD
+    max_chunks = settings.KB_MAX_CONTEXT_CHUNKS
+
+    kept: List[Dict[str, Any]] = []
+    for h in hits:
+        score = float(h.get("score") or 0.0)
+        if score < min_score:
+            break
+        if kept:
+            prev = float(kept[-1].get("score") or 0.0)
+            if prev - score > gap:
+                break
+        kept.append(h)
+        if len(kept) >= max_chunks:
+            break
+    return kept
+
+
 async def retrieve(
     role_code: str,
     query: str,
     *,
     top_k: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """Return the top-k matching chunks for `query` in the role's collection.
+    """Return the filtered top matches for `query` in the role's collection.
 
     Each entry is `{id, score, document_id, document_name, chunk_index,
-    content}`. Returns an empty list if the role has no documents or
-    retrieval fails — callers should degrade gracefully.
+    content}`. Candidates are pulled from Qdrant and then passed through
+    ``_filter_hits`` so the caller receives only high-signal context.
+    Returns an empty list if the role has no documents, retrieval fails,
+    or every candidate was filtered out.
     """
     if role_code not in ROLE_CODES:
         return []
@@ -241,7 +279,20 @@ async def retrieve(
                 "content": payload.get("content") or "",
             }
         )
-    return out
+    filtered = _filter_hits(out)
+    if out:
+        top_score = float(out[0].get("score") or 0.0)
+        logger.info(
+            "kb retrieve role=%s q=%r candidates=%d kept=%d top=%.3f",
+            role_code,
+            query[:80],
+            len(out),
+            len(filtered),
+            top_score,
+        )
+    else:
+        logger.info("kb retrieve role=%s q=%r candidates=0", role_code, query[:80])
+    return filtered
 
 
 def build_rag_prompt(user_query: str, hits: List[Dict[str, Any]]) -> str:

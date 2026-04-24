@@ -17,6 +17,21 @@ export interface AIPublicConfig {
   models: AIModelEntry[];
   configured: boolean;
   reasoning_enabled: boolean;
+  web_search_available: boolean;
+}
+
+export interface SearchResult {
+  title: string;
+  url: string;
+  description: string;
+  age?: string;
+  favicon?: string;
+  hostname?: string;
+}
+
+export interface SearchGroup {
+  query: string;
+  results: SearchResult[];
 }
 
 export interface AIFullConfig {
@@ -81,6 +96,18 @@ export interface ChatDelta {
   content?: string;
   reasoning?: string;
   finish_reason?: string;
+  /** Fired when the model invokes a tool; emitted once per call. */
+  tool_call_start?: {
+    id: string;
+    name: string;
+    queries: string[];
+  };
+  /** Fired once the tool returns; `groups` is one entry per query. */
+  tool_call_result?: {
+    id: string;
+    queries: string[];
+    groups: SearchGroup[];
+  };
 }
 
 export interface ChatStreamHandlers {
@@ -88,6 +115,11 @@ export interface ChatStreamHandlers {
   onDone?: () => void;
   onError?: (message: string) => void;
   signal?: AbortSignal;
+}
+
+export interface StreamChatOptions extends ChatStreamHandlers {
+  /** When true, force the model to invoke the web-search tool first. */
+  webSearch?: boolean;
 }
 
 /**
@@ -98,9 +130,11 @@ export interface ChatStreamHandlers {
 export async function streamChat(
   messages: AIChatMessage[],
   model: string | undefined,
-  handlers: ChatStreamHandlers,
+  handlers: StreamChatOptions,
 ): Promise<void> {
   const token = getToken();
+  const body: Record<string, unknown> = { messages, model };
+  if (handlers.webSearch) body.web_search = true;
   const res = await fetch('/api/v1/ai/chat/stream', {
     method: 'POST',
     headers: {
@@ -108,7 +142,7 @@ export async function streamChat(
       Authorization: token ? `Bearer ${token}` : '',
       Accept: 'text/event-stream',
     },
-    body: JSON.stringify({ messages, model }),
+    body: JSON.stringify(body),
     signal: handlers.signal,
   });
 

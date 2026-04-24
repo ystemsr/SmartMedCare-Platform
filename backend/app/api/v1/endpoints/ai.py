@@ -20,6 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db, require_permission
 from app.models.audit_log import SystemConfig
 from app.models.user import User
+from app.services.brave_search import (
+    BRAVE_TOOL_SCHEMA,
+    brave_search_many,
+    format_results_for_model,
+    is_available as brave_is_available,
+)
 from app.utils.response import error_response, success_response
 
 logger = logging.getLogger(__name__)
@@ -251,6 +257,9 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     model: Optional[str] = None
+    # When True, force the model to invoke the web-search tool on the
+    # first turn. When None/False, the model decides whether to search.
+    web_search: Optional[bool] = None
 
 
 class ModelEntry(BaseModel):
@@ -295,6 +304,7 @@ async def get_public_config(
             "models": cfg["models"],
             "configured": bool(cfg["base_url"] and cfg["api_key"]),
             "reasoning_enabled": cfg["reasoning_enabled"],
+            "web_search_available": brave_is_available(),
         }
     )
 
@@ -327,15 +337,23 @@ async def chat_stream(
             status_code=400, detail="AI 模型尚未配置，请联系管理员在「AI 模型配置」中填写"
         )
 
-    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    messages: List[Dict[str, Any]] = [
+        {"role": m.role, "content": m.content} for m in body.messages
+    ]
     role_code = _primary_role(current_user)
     system_prompt = _resolve_prompt(cfg, role_code)
     if system_prompt and (not messages or messages[0]["role"] != "system"):
         messages.insert(0, {"role": "system", "content": system_prompt})
 
-    payload: Dict[str, Any] = {
+    # --- Tool-use wiring ---------------------------------------------------
+    # The Brave-search tool is attached whenever a BRAVE_API_KEY is
+    # configured; the model then decides when to call it. `web_search=true`
+    # forces the first turn to invoke the tool; subsequent turns fall back
+    # to "auto" so the model can reply naturally after reading results.
+    brave_enabled = brave_is_available()
+    force_first_search = bool(body.web_search) and brave_enabled
+    base_payload: Dict[str, Any] = {
         "model": model,
-        "messages": messages,
         "stream": True,
         "temperature": cfg["temperature"],
         "max_tokens": cfg["max_tokens"],
@@ -343,7 +361,9 @@ async def chat_stream(
     if cfg.get("reasoning_enabled"):
         # OpenRouter-compatible reasoning flag; harmless for providers that
         # ignore it.
-        payload["reasoning"] = {"enabled": True}
+        base_payload["reasoning"] = {"enabled": True}
+    if brave_enabled:
+        base_payload["tools"] = [BRAVE_TOOL_SCHEMA]
 
     url = f"{base_url}/chat/completions"
     headers = {
@@ -354,60 +374,202 @@ async def chat_stream(
         "X-Title": "SmartMedCare",
     }
 
+    MAX_TOOL_ITERATIONS = 3
+
+    def _sse(obj: Dict[str, Any]) -> str:
+        return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
     async def event_stream():
         try:
             async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream(
-                    "POST", url, headers=headers, json=payload
-                ) as resp:
-                    if resp.status_code != 200:
-                        err_bytes = await resp.aread()
-                        err_text = err_bytes.decode("utf-8", errors="replace")[:500]
-                        logger.warning(
-                            "AI upstream %s: %s", resp.status_code, err_text
-                        )
-                        yield (
-                            "event: error\n"
-                            f"data: {json.dumps({'message': f'上游错误 HTTP {resp.status_code}: {err_text}'}, ensure_ascii=False)}\n\n"
-                        )
-                        return
+                iteration = 0
+                while True:
+                    payload = dict(base_payload)
+                    payload["messages"] = messages
+                    if brave_enabled:
+                        if iteration == 0 and force_first_search:
+                            payload["tool_choice"] = {
+                                "type": "function",
+                                "function": {"name": "web_search"},
+                            }
+                        else:
+                            payload["tool_choice"] = "auto"
 
-                    async for raw_line in resp.aiter_lines():
-                        if not raw_line:
-                            continue
-                        line = raw_line.strip()
-                        if not line.startswith("data:"):
-                            continue
-                        data_part = line[5:].strip()
-                        if data_part == "[DONE]":
-                            yield "event: done\ndata: {}\n\n"
-                            return
-                        try:
-                            obj = json.loads(data_part)
-                        except json.JSONDecodeError:
-                            continue
-                        choices = obj.get("choices") or []
-                        if not choices:
-                            continue
-                        delta = choices[0].get("delta") or {}
-                        out: Dict[str, Any] = {}
-                        content = delta.get("content")
-                        reasoning = delta.get("reasoning")
-                        # Some providers nest reasoning under a dict
-                        if isinstance(reasoning, dict):
-                            reasoning = reasoning.get("content") or reasoning.get(
-                                "text"
+                    tool_calls_buf: Dict[int, Dict[str, str]] = {}
+                    finish_reason: Optional[str] = None
+
+                    async with client.stream(
+                        "POST", url, headers=headers, json=payload
+                    ) as resp:
+                        if resp.status_code != 200:
+                            err_bytes = await resp.aread()
+                            err_text = err_bytes.decode(
+                                "utf-8", errors="replace"
+                            )[:500]
+                            logger.warning(
+                                "AI upstream %s: %s", resp.status_code, err_text
                             )
-                        if content:
-                            out["content"] = content
-                        if reasoning:
-                            out["reasoning"] = reasoning
-                        finish = choices[0].get("finish_reason")
-                        if finish:
-                            out["finish_reason"] = finish
-                        if out:
-                            yield f"data: {json.dumps(out, ensure_ascii=False)}\n\n"
-            yield "event: done\ndata: {}\n\n"
+                            yield (
+                                "event: error\n"
+                                f"data: {json.dumps({'message': f'上游错误 HTTP {resp.status_code}: {err_text}'}, ensure_ascii=False)}\n\n"
+                            )
+                            return
+
+                        async for raw_line in resp.aiter_lines():
+                            if not raw_line:
+                                continue
+                            line = raw_line.strip()
+                            if not line.startswith("data:"):
+                                continue
+                            data_part = line[5:].strip()
+                            if data_part == "[DONE]":
+                                break
+                            try:
+                                obj = json.loads(data_part)
+                            except json.JSONDecodeError:
+                                continue
+                            choices = obj.get("choices") or []
+                            if not choices:
+                                continue
+                            delta = choices[0].get("delta") or {}
+                            out: Dict[str, Any] = {}
+                            content = delta.get("content")
+                            reasoning = delta.get("reasoning")
+                            # Some providers nest reasoning under a dict
+                            if isinstance(reasoning, dict):
+                                reasoning = reasoning.get(
+                                    "content"
+                                ) or reasoning.get("text")
+                            if content:
+                                out["content"] = content
+                            if reasoning:
+                                out["reasoning"] = reasoning
+                            # Tool-call streaming: accumulate name + args
+                            for tc in delta.get("tool_calls") or []:
+                                if not isinstance(tc, dict):
+                                    continue
+                                idx = tc.get("index")
+                                if idx is None:
+                                    idx = 0
+                                buf = tool_calls_buf.setdefault(
+                                    int(idx),
+                                    {"id": "", "name": "", "arguments": ""},
+                                )
+                                if tc.get("id"):
+                                    buf["id"] = tc["id"]
+                                fn = tc.get("function") or {}
+                                if fn.get("name"):
+                                    buf["name"] = fn["name"]
+                                if fn.get("arguments"):
+                                    buf["arguments"] += fn["arguments"]
+                            fr = choices[0].get("finish_reason")
+                            if fr:
+                                finish_reason = fr
+                                out["finish_reason"] = fr
+                            if out:
+                                yield _sse(out)
+
+                    # End of one upstream stream. Decide next step.
+                    if finish_reason == "tool_calls" and tool_calls_buf:
+                        ordered = [
+                            tool_calls_buf[k]
+                            for k in sorted(tool_calls_buf.keys())
+                        ]
+                        # Synthesize the assistant turn that triggered the
+                        # tool call so the upstream model can match it to
+                        # the tool results we're about to feed back.
+                        tool_calls_msg = []
+                        for i, b in enumerate(ordered):
+                            tool_calls_msg.append(
+                                {
+                                    "id": b["id"] or f"call_{iteration}_{i}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": b["name"] or "web_search",
+                                        "arguments": b["arguments"] or "{}",
+                                    },
+                                }
+                            )
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": "",
+                                "tool_calls": tool_calls_msg,
+                            }
+                        )
+
+                        for tc in tool_calls_msg:
+                            name = tc["function"]["name"]
+                            try:
+                                args = json.loads(
+                                    tc["function"]["arguments"] or "{}"
+                                )
+                            except json.JSONDecodeError:
+                                args = {}
+                            if name == "web_search":
+                                # Accept batch form (`queries`) and the
+                                # legacy single `query` form some models
+                                # may still emit.
+                                raw_queries = args.get("queries")
+                                if raw_queries is None and args.get("query"):
+                                    raw_queries = [args.get("query")]
+                                if isinstance(raw_queries, str):
+                                    raw_queries = [raw_queries]
+                                if not isinstance(raw_queries, list):
+                                    raw_queries = []
+                                queries = [
+                                    str(q).strip()
+                                    for q in raw_queries
+                                    if str(q).strip()
+                                ]
+                                yield _sse(
+                                    {
+                                        "tool_call_start": {
+                                            "id": tc["id"],
+                                            "name": name,
+                                            "queries": queries,
+                                        }
+                                    }
+                                )
+                                groups = await brave_search_many(queries)
+                                yield _sse(
+                                    {
+                                        "tool_call_result": {
+                                            "id": tc["id"],
+                                            "queries": [
+                                                g["query"] for g in groups
+                                            ],
+                                            "groups": groups,
+                                        }
+                                    }
+                                )
+                                # Content fed back to the LLM MUST be
+                                # delivered under the `tool` role, keyed
+                                # by `tool_call_id` — this matches the
+                                # assistant's preceding tool_calls entry.
+                                tool_content = format_results_for_model(groups)
+                            else:
+                                tool_content = "[unknown tool]"
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc["id"],
+                                    "content": tool_content,
+                                }
+                            )
+
+                        iteration += 1
+                        if iteration >= MAX_TOOL_ITERATIONS:
+                            yield (
+                                "event: error\n"
+                                f"data: {json.dumps({'message': '已达到工具调用次数上限'}, ensure_ascii=False)}\n\n"
+                            )
+                            return
+                        continue  # next iteration: send tool results back
+
+                    # Normal completion (or upstream sent [DONE]).
+                    yield "event: done\ndata: {}\n\n"
+                    return
         except httpx.HTTPError as e:
             logger.error("AI stream HTTP error: %s", e)
             yield (

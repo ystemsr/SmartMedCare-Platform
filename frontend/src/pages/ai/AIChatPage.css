@@ -570,27 +570,158 @@
   color: #e2640f;
 }
 
-.ai-model {
+.ai-app .ai-model-pop {
+  position: relative;
+}
+.ai-app .ai-model {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  width: auto;
+  font: inherit;
   font-size: 13px;
+  line-height: 1;
   color: var(--ai-ink-2);
-  padding: 4px 8px;
-  border-radius: 8px;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--ai-line);
+  border-radius: 999px;
+  background: var(--ai-surface);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(25, 22, 18, 0.04);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.22s ease,
+    transform 0.18s ease,
+    color 0.18s ease;
+}
+.ai-app .ai-model:hover:not(:disabled) {
+  background: var(--ai-surface);
+  border-color: #d8d2c6;
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 28px rgba(25, 22, 18, 0.14),
+    0 3px 8px rgba(25, 22, 18, 0.09);
+}
+.ai-app .ai-model.open {
+  background: var(--ai-surface);
+  border-color: #d8d2c6;
+  box-shadow:
+    0 14px 32px rgba(25, 22, 18, 0.16),
+    0 4px 10px rgba(25, 22, 18, 0.1);
+}
+.ai-app .ai-model:disabled {
   cursor: default;
-  max-width: 260px;
+  opacity: 0.6;
 }
 .ai-model b {
   font-weight: 600;
   color: var(--ai-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ai-model .ai-tag {
   color: var(--ai-muted);
   font-weight: 400;
+}
+.ai-model-caret {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ai-muted);
+  transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.ai-model.open .ai-model-caret {
+  transform: rotate(180deg);
+}
+
+/* ===== Model dropdown ===== */
+.ai-model-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: min(360px, 90vw);
+  background: var(--ai-surface);
+  border: 1px solid var(--ai-line);
+  border-radius: 14px;
+  padding: 6px;
+  z-index: 30;
+  box-shadow:
+    0 18px 48px rgba(25, 22, 18, 0.14),
+    0 2px 8px rgba(25, 22, 18, 0.06);
+  transform-origin: top right;
+  /* The motion component animates transform+opacity; overflow is hidden
+   * by the inner scroll container so the popover's rounded corners stay
+   * clean during animation. */
+}
+.ai-model-menu-inner {
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #d9d4ca transparent;
+  padding-right: 2px;
+}
+.ai-model-menu-inner::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-model-menu-inner::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.ai-model-menu-inner::-webkit-scrollbar-thumb {
+  background: #d9d4ca;
+  border-radius: 999px;
+}
+.ai-model-menu-inner::-webkit-scrollbar-thumb:hover {
+  background: #b5afa4;
+}
+
+.ai-app .ai-model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background 0.15s ease;
+}
+.ai-app .ai-model-option + .ai-model-option {
+  margin-top: 4px;
+}
+.ai-app .ai-model-option:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.ai-app .ai-model-option.active {
+  background: var(--ai-accent-soft);
+}
+.ai-app .ai-model-option.active:hover {
+  background: var(--ai-accent-soft);
+  filter: brightness(0.98);
+}
+.ai-model-option-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ai-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-model-option-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ai-accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px var(--ai-accent-soft);
 }
 
 .ai-app .ai-send {
@@ -711,6 +842,11 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Reserve the scrollbar gutter so the centered thread does not shift
+   * horizontally when content grows tall enough to introduce (or tall
+   * enough to drop) a scrollbar — e.g. expanding a search / thinking
+   * card mid-reply. */
+  scrollbar-gutter: stable;
   padding: 10px 0 20px;
 }
 .ai-messages::-webkit-scrollbar {
@@ -1326,6 +1462,384 @@
 .ai-think-details::-webkit-scrollbar-thumb {
   background: #d8d2c6;
   border-radius: 999px;
+}
+
+/* ===== Search bubble ===== */
+.ai-search-wrap {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+.ai-search {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 80%;
+  background: #fbf7f2;
+  border: 1px solid #efe4d6;
+  color: #8a7a66;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02);
+  /* Keep horizontal padding identical between collapsed and expanded so
+   * the spinner / label / caret don't drift sideways when the user
+   * toggles the card. Only vertical padding changes on expand. */
+  padding: 8px 14px;
+  transition:
+    padding 0.25s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+.ai-search.expanded {
+  width: 100%;
+  padding: 12px 14px;
+  background: #faf4ec;
+  border-color: #ead9c2;
+}
+.ai-search-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a8870;
+  user-select: none;
+  -webkit-user-select: none;
+  width: 100%;
+}
+.ai-search-head.clickable {
+  cursor: pointer;
+}
+.ai-search-head.clickable:hover {
+  color: var(--ai-ink-2);
+}
+.ai-search-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-accent);
+  flex-shrink: 0;
+}
+.ai-search-globe {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-accent);
+  flex-shrink: 0;
+}
+.ai-search-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-search-caret {
+  display: inline-flex;
+  align-items: center;
+  color: #b8a78f;
+}
+
+.ai-search-details-wrap {
+  overflow: hidden;
+}
+.ai-search-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  /* Inset the scrollbar so it sits clearly apart from the result cards
+   * rather than hugging their right edge. */
+  padding-right: 6px;
+  border-top: 1px dashed #e4d4bb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #e4d4bb transparent;
+}
+.ai-search-details::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-search-details::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.ai-search-details::-webkit-scrollbar-thumb {
+  background: #e4d4bb;
+  border-radius: 999px;
+}
+.ai-search-details::-webkit-scrollbar-thumb:hover {
+  background: #d9c4a4;
+}
+
+.ai-search-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-search-group + .ai-search-group {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed #eadfca;
+}
+.ai-search-group-head {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 2px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a8870;
+}
+.ai-search-group-q {
+  color: var(--ai-ink-2);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
+}
+.ai-search-group-q::before {
+  content: '「';
+  opacity: 0.6;
+}
+.ai-search-group-q::after {
+  content: '」';
+  opacity: 0.6;
+}
+.ai-search-group-count {
+  color: #b8a78f;
+  font-weight: 500;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.ai-search-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fffdf9;
+  border: 1px solid #efe4d6;
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.ai-search-item:hover {
+  background: #fff;
+  border-color: #d9c4a4;
+  transform: translateY(-1px);
+}
+.ai-search-item-idx {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--ai-accent-soft);
+  color: var(--ai-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.ai-search-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.ai-search-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ai-ink);
+  line-height: 1.45;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+.ai-search-item-desc {
+  font-size: 12.5px;
+  color: #6d6862;
+  line-height: 1.55;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+.ai-search-item-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #a59f93;
+  min-width: 0;
+}
+.ai-search-item-fav {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.ai-search-item-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+.ai-search-item-age {
+  flex-shrink: 0;
+}
+
+/* ===== Citation pill ===== */
+.ai-cite-wrap {
+  position: relative;
+  display: inline-flex;
+  /* Keeps the pill baseline-aligned with surrounding body copy. */
+  vertical-align: baseline;
+  margin: 0 1px;
+}
+.ai-cite {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  /* Intentionally smaller than body copy per design direction. */
+  font-size: 0.78em;
+  font-weight: 500;
+  line-height: 1.25;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid #ecdcc5;
+  border-radius: 999px;
+  background: #fbf4e9;
+  color: #6d6862;
+  text-decoration: none;
+  white-space: nowrap;
+  max-width: 220px;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+/* Color-invert on hover: pill fills with the accent, text + icon flip
+ * to white. No vertical translate so the text baseline stays put. */
+.ai-cite:hover,
+.ai-cite:focus-visible {
+  background: var(--ai-accent);
+  border-color: var(--ai-accent);
+  color: #ffffff;
+  outline: none;
+}
+.ai-cite:hover .ai-cite-icon,
+.ai-cite:focus-visible .ai-cite-icon {
+  color: #ffffff;
+}
+.ai-cite-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-accent);
+  flex-shrink: 0;
+  margin-top: -1px;
+  transition: color 0.18s ease;
+}
+.ai-cite-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.ai-cite-card {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  /* Anchor the card's LEFT edge to the pill's horizontal center; the
+   * `-50%` translation (driven by framer-motion's `x` prop) then pulls
+   * it back by half its own width, leaving it centered over the pill. */
+  left: 50%;
+  z-index: 40;
+  min-width: 240px;
+  max-width: min(340px, 70vw);
+  padding: 10px 12px;
+  background: var(--ai-surface);
+  color: var(--ai-ink);
+  border: 1px solid var(--ai-line);
+  border-radius: 12px;
+  box-shadow:
+    0 14px 36px rgba(25, 22, 18, 0.14),
+    0 2px 6px rgba(25, 22, 18, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  /* Pop animation grows from the arrow tip (bottom-center of the card). */
+  transform-origin: bottom center;
+  pointer-events: auto;
+}
+.ai-cite-card::after {
+  /* Subtle arrow pointing at the pill, centered on the card. */
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  transform: translateY(-55%) rotate(45deg);
+  background: var(--ai-surface);
+  border-right: 1px solid var(--ai-line);
+  border-bottom: 1px solid var(--ai-line);
+}
+.ai-cite-card-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ai-muted);
+}
+.ai-cite-card-fav {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.ai-cite-card-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-cite-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ai-ink);
+  word-break: break-word;
+}
+.ai-cite-card-url {
+  font-size: 11.5px;
+  color: var(--ai-accent);
+  word-break: break-all;
+  /* Clamp to 2 lines so very long URLs don't blow up the card. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Dot loader shown when waiting for first token */

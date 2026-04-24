@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore, getHomeRoute } from '../../store/auth';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../../api/ai';
 import ThinkingBubble from './ThinkingBubble';
 import MarkdownStream from './MarkdownStream';
+import SearchBubble, { type SearchCall } from './SearchBubble';
 import './AIChatPage.css';
 
 /* =========================================================================
@@ -33,6 +35,8 @@ interface UIMsg {
   thinkingStopped?: boolean;
   thinkingDuration?: number | null;
   errored?: boolean;
+  /** Web-search tool invocations produced while generating this reply. */
+  searches?: SearchCall[];
 }
 
 interface Conversation {
@@ -165,8 +169,8 @@ const IcoArrowUp = () => (
   </svg>
 );
 const IcoStop = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="6" y="6" width="12" height="12" rx="2" />
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="5" y="5" width="14" height="14" rx="2.5" />
   </svg>
 );
 const IcoTrash = () => (
@@ -281,9 +285,14 @@ const AIChatPage: React.FC = () => {
   useAutosize(taEmptyRef, draftEmpty);
   useAutosize(taConvRef, draftConv);
 
-  /* ---- pills (visual-only for now) ---- */
-  const [pillOn1, setPillOn1] = useState<string | null>(null);
-  const [pillOn2, setPillOn2] = useState<string | null>(null);
+  /* ---- pills ----
+   * `forceWebSearch` shared across composers: once the user toggles it
+   * on the empty screen, it carries into the conversation. The knowledge-
+   * base pill is still visual-only and kept per-composer. */
+  const [forceWebSearch, setForceWebSearch] = useState(false);
+  const [kbPillEmpty, setKbPillEmpty] = useState(false);
+  const [kbPillConv, setKbPillConv] = useState(false);
+  const [webSearchAvailable, setWebSearchAvailable] = useState(false);
 
   /* ---- streaming state ---- */
   const [streaming, setStreaming] = useState(false);
@@ -315,6 +324,7 @@ const AIChatPage: React.FC = () => {
         const list = res.data.models || [];
         setModels(list);
         setConfigured(res.data.configured);
+        setWebSearchAvailable(!!res.data.web_search_available);
         // Ensure current selection is valid; otherwise adopt server default
         // or first entry.
         setSelectedModel((prev) => {
@@ -439,7 +449,12 @@ const AIChatPage: React.FC = () => {
   /* ---- send / stream ---- */
 
   const runStream = useCallback(
-    async (conv: Conversation, newMessages: UIMsg[], placeholderId: string) => {
+    async (
+      conv: Conversation,
+      newMessages: UIMsg[],
+      placeholderId: string,
+      opts: { webSearch?: boolean } = {},
+    ) => {
       setStreaming(true);
       const controller = new AbortController();
       abortRef.current = controller;
@@ -510,10 +525,65 @@ const AIChatPage: React.FC = () => {
           ? Math.max((Date.now() - reasoningStartedAt) / 1000, 0)
           : undefined;
 
+      // Tool-call bookkeeping — we mutate the bubble's `searches` array
+      // directly so pending/done transitions stay ordered even when tokens
+      // interleave.
+      const upsertSearch = (patch: SearchCall) => {
+        setConversations((list) =>
+          list.map((c) =>
+            c.id === conv.id
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) => {
+                    if (m.id !== placeholderId) return m;
+                    const prev = m.searches || [];
+                    const idx = prev.findIndex((s) => s.id === patch.id);
+                    const next =
+                      idx === -1
+                        ? [...prev, patch]
+                        : prev.map((s, i) => (i === idx ? { ...s, ...patch } : s));
+                    return { ...m, searches: next };
+                  }),
+                  updatedAt: Date.now(),
+                }
+              : c,
+          ),
+        );
+      };
+
       try {
         await streamChat(payload, selectedModel || undefined, {
           signal: controller.signal,
+          webSearch: opts.webSearch,
           onDelta: (delta) => {
+            if (delta.tool_call_start) {
+              // Clear the "awaiting first token" placeholder so the
+              // dot-loader doesn't sit underneath the search bubble.
+              if (firstToken) {
+                firstToken = false;
+                patchBubbleNow({ pending: false });
+              }
+              upsertSearch({
+                id: delta.tool_call_start.id,
+                queries: delta.tool_call_start.queries,
+                status: 'pending',
+              });
+              return;
+            }
+            if (delta.tool_call_result) {
+              upsertSearch({
+                id: delta.tool_call_result.id,
+                queries: delta.tool_call_result.queries,
+                status: 'done',
+                groups: delta.tool_call_result.groups,
+              });
+              // After the tool round-trip the model will start streaming
+              // the real reply — keep `pending` true so the dot-loader
+              // shows while we wait for the first post-tool token.
+              patchBubbleNow({ pending: true });
+              firstToken = true;
+              return;
+            }
             if (firstToken) {
               firstToken = false;
               patchBubbleNow({ pending: false });
@@ -641,7 +711,9 @@ const AIChatPage: React.FC = () => {
     setConversations((list) => [newConv, ...list]);
     setDraftEmpty('');
     navigate(`/ai/${convId}`);
-    runStream(newConv, [userMsg, aiMsg], placeholderId);
+    runStream(newConv, [userMsg, aiMsg], placeholderId, {
+      webSearch: forceWebSearch && webSearchAvailable,
+    });
   };
 
   const sendFromConv = () => {
@@ -666,7 +738,9 @@ const AIChatPage: React.FC = () => {
       list.map((c) => (c.id === activeConv.id ? updated : c)),
     );
     setDraftConv('');
-    runStream(updated, nextMsgs, placeholderId);
+    runStream(updated, nextMsgs, placeholderId, {
+      webSearch: forceWebSearch && webSearchAvailable,
+    });
   };
 
   const stopStreaming = () => {
@@ -692,8 +766,13 @@ const AIChatPage: React.FC = () => {
     const hasContent = !!m.content;
     const stillStreamingContent = !!m.pending && hasContent;
 
+    const searches = m.searches || [];
+
     return (
       <div key={m.id} className="ai-msg-ai">
+        {searches.map((sc) => (
+          <SearchBubble key={sc.id} call={sc} />
+        ))}
         {hasReasoning && (
           <ThinkingBubble
             content={m.reasoning || ''}
@@ -702,7 +781,7 @@ const AIChatPage: React.FC = () => {
             thinkingDuration={m.thinkingDuration ?? null}
           />
         )}
-        {m.pending && !hasContent && !hasReasoning && (
+        {m.pending && !hasContent && !hasReasoning && searches.length === 0 && (
           <div className="ai-body">
             <div className="ai-dots">
               <span />
@@ -729,14 +808,16 @@ const AIChatPage: React.FC = () => {
     const setValue = isEmpty ? setDraftEmpty : setDraftConv;
     const taRef = isEmpty ? taEmptyRef : taConvRef;
     const sendFn = isEmpty ? sendFromEmpty : sendFromConv;
-    const pillState = isEmpty ? pillOn1 : pillOn2;
-    const setPill = isEmpty ? setPillOn1 : setPillOn2;
+    const kbOn = isEmpty ? kbPillEmpty : kbPillConv;
+    const setKbOn = isEmpty ? setKbPillEmpty : setKbPillConv;
     const canSend = value.trim().length > 0 && !streaming;
     const showStop = streaming && !isEmpty;
-
-    const togglePill = (key: string) => {
-      setPill((prev) => (prev === key ? null : key));
-    };
+    const searchDisabled = !webSearchAvailable;
+    const searchTitle = searchDisabled
+      ? '联网搜索不可用（未配置 BRAVE_API_KEY）'
+      : forceWebSearch
+        ? '已开启联网搜索：回答时将强制调用搜索'
+        : '开启联网搜索：让 AI 在回答时查询最新网络信息';
 
     return (
       <div className="ai-composer-wrap">
@@ -765,10 +846,20 @@ const AIChatPage: React.FC = () => {
                 <IcoPlusSm />
               </button>
               <button
-                className={`ai-pill v-search${pillState === 'search' ? ' on' : ''}`}
-                title="联网搜索（即将支持）"
+                className={`ai-pill v-search${forceWebSearch && !searchDisabled ? ' on' : ''}`}
+                title={searchTitle}
                 type="button"
-                onClick={() => togglePill('search')}
+                disabled={searchDisabled}
+                aria-pressed={forceWebSearch && !searchDisabled}
+                onClick={() => {
+                  if (searchDisabled) return;
+                  setForceWebSearch((v) => !v);
+                }}
+                style={
+                  searchDisabled
+                    ? { opacity: 0.45, cursor: 'not-allowed' }
+                    : undefined
+                }
               >
                 <span className="ai-icon-wrap">
                   <IcoGlobe />
@@ -776,10 +867,10 @@ const AIChatPage: React.FC = () => {
                 <span className="ai-label">联网搜索</span>
               </button>
               <button
-                className={`ai-pill v-kb${pillState === 'kb' ? ' on' : ''}`}
+                className={`ai-pill v-kb${kbOn ? ' on' : ''}`}
                 title="知识库（即将支持）"
                 type="button"
-                onClick={() => togglePill('kb')}
+                onClick={() => setKbOn((v) => !v)}
               >
                 <span className="ai-icon-wrap">
                   <IcoKb />
@@ -788,126 +879,67 @@ const AIChatPage: React.FC = () => {
               </button>
             </div>
             <div className="ai-actions-right">
-              <div
-                data-ai-model-pop
-                className="ai-model-pop"
-                style={{ position: 'relative' }}
-              >
+              <div data-ai-model-pop className="ai-model-pop">
                 <button
                   type="button"
-                  className="ai-model"
+                  className={`ai-model${modelMenuOpen ? ' open' : ''}`}
                   title="切换模型"
                   onClick={() => setModelMenuOpen((v) => !v)}
                   disabled={models.length === 0}
-                  style={{
-                    border: 0,
-                    background: 'transparent',
-                    cursor: models.length === 0 ? 'default' : 'pointer',
-                    font: 'inherit',
-                    color: 'inherit',
-                  }}
+                  aria-haspopup="listbox"
+                  aria-expanded={modelMenuOpen}
                 >
                   <b>{modelDisplay}</b>
                   <span className="ai-tag">Chat</span>
-                  <IcoCaretDown />
+                  <span className="ai-model-caret">
+                    <IcoCaretDown />
+                  </span>
                 </button>
-                {modelMenuOpen && models.length > 0 && (
-                  <div
-                    role="listbox"
-                    className="ai-model-menu"
-                    style={{
-                      position: 'absolute',
-                      bottom: 'calc(100% + 8px)',
-                      right: 0,
-                      minWidth: 260,
-                      maxHeight: 320,
-                      overflowY: 'auto',
-                      padding: 6,
-                      background: 'var(--ai-surface, #fff)',
-                      border: '1px solid var(--ai-border, #e5e5e5)',
-                      borderRadius: 12,
-                      boxShadow:
-                        '0 12px 32px rgba(15, 15, 15, 0.12), 0 2px 6px rgba(15, 15, 15, 0.06)',
-                      zIndex: 20,
-                    }}
-                  >
-                    {models.map((m) => {
-                      const isActive = m.model === selectedModel;
-                      return (
-                        <button
-                          key={m.model}
-                          type="button"
-                          role="option"
-                          aria-selected={isActive}
-                          onClick={() => {
-                            setSelectedModel(m.model);
-                            setModelMenuOpen(false);
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 10,
-                            width: '100%',
-                            padding: '9px 10px',
-                            border: 0,
-                            borderRadius: 8,
-                            background: isActive
-                              ? 'var(--ai-accent-soft, rgba(92, 141, 93, 0.12))'
-                              : 'transparent',
-                            color: 'inherit',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                            font: 'inherit',
-                          }}
-                        >
-                          <span
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              minWidth: 0,
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontWeight: 600,
-                                fontSize: 13,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
+                <AnimatePresence>
+                  {modelMenuOpen && models.length > 0 && (
+                    <motion.div
+                      key="ai-model-menu"
+                      role="listbox"
+                      className="ai-model-menu"
+                      initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                      transition={{
+                        duration: 0.18,
+                        ease: [0.22, 0.61, 0.36, 1],
+                      }}
+                    >
+                      <div className="ai-model-menu-inner">
+                        {models.map((m) => {
+                          const isActive = m.model === selectedModel;
+                          return (
+                            <button
+                              key={m.model}
+                              type="button"
+                              role="option"
+                              aria-selected={isActive}
+                              className={`ai-model-option${isActive ? ' active' : ''}`}
+                              onClick={() => {
+                                setSelectedModel(m.model);
+                                setModelMenuOpen(false);
                               }}
                             >
-                              {m.display_name || m.model}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: 11.5,
-                                color: 'var(--ai-muted, #8a847b)',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {m.model}
-                            </span>
-                          </span>
-                          {isActive && (
-                            <span
-                              aria-hidden
-                              style={{
-                                width: 6,
-                                height: 6,
-                                borderRadius: '50%',
-                                background: 'var(--ai-accent, #5c8d5d)',
-                                flexShrink: 0,
-                              }}
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                              <span className="ai-model-option-name">
+                                {m.display_name || m.model}
+                              </span>
+                              {isActive && (
+                                <span
+                                  aria-hidden
+                                  className="ai-model-option-dot"
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
               {showStop ? (
                 <button

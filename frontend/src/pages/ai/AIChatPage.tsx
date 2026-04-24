@@ -25,11 +25,56 @@ import ThinkingBubble from './ThinkingBubble';
 import MarkdownStream from './MarkdownStream';
 import SearchBubble, { type SearchCall } from './SearchBubble';
 import KnowledgeBubble, { type KnowledgeBaseCall } from './KnowledgeBubble';
+import ToolBubble, { type ToolCall } from './ToolBubble';
 import './AIChatPage.css';
 
 /* =========================================================================
  * Types
  * ======================================================================= */
+
+/**
+ * An assistant reply is no longer a single {reasoning, content, searches,
+ * toolCalls} bundle — that layout forced bubbles into a fixed order
+ * (tools-then-thinking-then-content) that didn't match reality when the
+ * model interleaves think / tool / think / content / tool / content.
+ *
+ * We now model it as an ordered list of typed segments. Streaming
+ * handlers append to (or seal) the *last* segment or push a new one.
+ * The renderer walks segments in insertion order so bubbles show up
+ * exactly where they happened in the stream.
+ *
+ * Segment kinds:
+ *  - thinking: a contiguous burst of `reasoning` deltas. Sealed when a
+ *    content delta or tool event arrives. `duration` is locked in on
+ *    seal so it stays stable across reloads.
+ *  - tool: one tool invocation (web_search → SearchBubble, everything
+ *    else → ToolBubble). `data` is the full bubble state.
+ *  - content: a contiguous burst of `content` deltas. Sealed implicitly
+ *    when a tool event arrives (next content delta spawns a new
+ *    segment).
+ */
+type ThinkingSegment = {
+  kind: 'thinking';
+  id: string;
+  text: string;
+  complete: boolean;
+  stopped: boolean;
+  duration: number | null;
+  /** Locally-held clock for live duration rendering; not persisted meaningfully. */
+  startedAt?: number;
+};
+type ToolSegment = {
+  kind: 'tool';
+  id: string;
+  callKind: 'search' | 'tool';
+  data: SearchCall | ToolCall;
+};
+type ContentSegment = {
+  kind: 'content';
+  id: string;
+  text: string;
+};
+type Segment = ThinkingSegment | ToolSegment | ContentSegment;
 
 interface UIMsg {
   id: string;
@@ -45,8 +90,15 @@ interface UIMsg {
   thinkingStopped?: boolean;
   thinkingDuration?: number | null;
   errored?: boolean;
-  /** Web-search tool invocations produced while generating this reply. */
+  /** NEW source-of-truth for assistant replies: an ordered list of
+   *  thinking / tool / content segments. When present, the renderer
+   *  uses this and ignores the legacy `reasoning` / `searches` /
+   *  `toolCalls` fields below. */
+  segments?: Segment[];
+  /** DEPRECATED (kept for backward-compat reads of older conversations
+   *  persisted before segments existed). Never written going forward. */
   searches?: SearchCall[];
+  toolCalls?: ToolCall[];
   /** Knowledge-base lookup performed for this reply (at most one). */
   knowledgeBase?: KnowledgeBaseCall;
 }
@@ -118,12 +170,50 @@ function messagesForPersist(list: UIMsg[]): ConversationMessagePayload[] {
   });
 }
 
+/** Synthesize a legacy assistant message (no `segments`) into the new
+ *  segment list. Legacy order was always: tools → thinking → content,
+ *  which is what we reproduce here. Once a message has `segments` set,
+ *  that's always the source of truth. */
+function synthesizeSegments(m: ConversationMessagePayload): Segment[] {
+  const segs: Segment[] = [];
+  const searches = Array.isArray(m.searches) ? (m.searches as SearchCall[]) : [];
+  const tools = Array.isArray(m.toolCalls) ? (m.toolCalls as ToolCall[]) : [];
+  for (const s of searches) {
+    segs.push({ kind: 'tool', id: `seg-${s.id}`, callKind: 'search', data: s });
+  }
+  for (const t of tools) {
+    segs.push({ kind: 'tool', id: `seg-${t.id}`, callKind: 'tool', data: t });
+  }
+  if (typeof m.reasoning === 'string' && m.reasoning) {
+    segs.push({
+      kind: 'thinking',
+      id: makeId('seg'),
+      text: m.reasoning,
+      complete: !!m.thinkingComplete || true, // always sealed after reload
+      stopped: !!m.thinkingStopped,
+      duration:
+        typeof m.thinkingDuration === 'number' ? m.thinkingDuration : null,
+    });
+  }
+  if (typeof m.content === 'string' && m.content) {
+    segs.push({ kind: 'content', id: makeId('seg'), text: m.content });
+  }
+  return segs;
+}
+
 /** Adopt a backend payload back into the UI shape. Messages lose their
  * client-side ids on the round-trip, so we re-mint them here. */
 function hydrateMessages(raw: ConversationMessagePayload[] | undefined): UIMsg[] {
   if (!raw || !Array.isArray(raw)) return [];
   return raw.map((m) => {
     const role = (m.role === 'assistant' ? 'assistant' : 'user') as UIMsg['role'];
+    let segments: Segment[] | undefined;
+    if (Array.isArray(m.segments)) {
+      segments = m.segments as Segment[];
+    } else if (role === 'assistant') {
+      const synthesized = synthesizeSegments(m);
+      segments = synthesized.length > 0 ? synthesized : undefined;
+    }
     return {
       id: makeId('m'),
       role,
@@ -136,6 +226,8 @@ function hydrateMessages(raw: ConversationMessagePayload[] | undefined): UIMsg[]
         typeof m.thinkingDuration === 'number' ? m.thinkingDuration : null,
       errored: false,
       searches: Array.isArray(m.searches) ? (m.searches as UIMsg['searches']) : undefined,
+      toolCalls: Array.isArray(m.toolCalls) ? (m.toolCalls as UIMsg['toolCalls']) : undefined,
+      segments,
       knowledgeBase: (m.knowledgeBase as UIMsg['knowledgeBase']) || undefined,
     };
   });
@@ -681,7 +773,6 @@ const AIChatPage: React.FC = () => {
   // RAF-batched patch queue: multiple deltas within one frame collapse
   // into a single setState, keeping React re-renders at ≤60fps even when
   // the upstream stream fires tokens much faster.
-  const pendingPatchRef = useRef<Partial<UIMsg> | null>(null);
   const rafRef = useRef<number | null>(null);
 
   /* ---- title rename ---- */
@@ -925,76 +1016,164 @@ const AIChatPage: React.FC = () => {
         );
       };
 
-      // RAF-throttled patch. The pendingPatchRef accumulates the latest
-      // content/reasoning snapshots; the rAF callback flushes them in a
-      // single setState per frame.
-      const scheduleFlush = () => {
-        if (rafRef.current !== null) return;
-        rafRef.current = window.requestAnimationFrame(() => {
-          rafRef.current = null;
-          const patch = pendingPatchRef.current;
-          pendingPatchRef.current = null;
-          if (patch) patchBubbleNow(patch);
-        });
-      };
-
-      const queuePatch = (patch: Partial<UIMsg>) => {
-        pendingPatchRef.current = { ...(pendingPatchRef.current || {}), ...patch };
-        scheduleFlush();
-      };
-
-      const flushNow = () => {
-        if (rafRef.current !== null) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-        }
-        const patch = pendingPatchRef.current;
-        pendingPatchRef.current = null;
-        if (patch) patchBubbleNow(patch);
-      };
-
-      let acc = '';
-      let reasoning = '';
-      let reasoningStarted = false;
-      let reasoningStartedAt = 0;
-      let contentStarted = false;
+      // Segment-based streaming. A thin RAF buffer coalesces rapid
+      // reasoning/content token bursts into a single setState per frame
+      // so we don't thrash React at ~50 tokens/sec. Tool events and
+      // seal-transitions always flush immediately (they're low-frequency
+      // and ordering-critical).
       let firstToken = true;
+      let bufKind: 'reasoning' | 'content' | null = null;
+      let bufText = '';
 
-      // Compute and return the locked-in thinking duration (seconds).
-      // Called at the moment the reasoning phase logically ends —
-      // either because content started, the stream completed, errored,
-      // or was aborted — so the value we persist is stable across
-      // reloads and no longer depends on the bubble's local timer.
-      const finalizeThinking = (): number | undefined =>
-        reasoningStarted
-          ? Math.max((Date.now() - reasoningStartedAt) / 1000, 0)
-          : undefined;
+      /** Seal any in-progress thinking segment. Called when a tool
+       *  arrives or the stream ends — the "thinking duration" is
+       *  locked in here so it stays stable across reloads. `stopped`
+       *  marks aborted-before-content cases. */
+      const sealThinking = (m: UIMsg, stopped: boolean): UIMsg => {
+        const segs = m.segments || [];
+        const last = segs[segs.length - 1];
+        if (!last || last.kind !== 'thinking' || last.complete) return m;
+        const duration = last.startedAt
+          ? Math.max((Date.now() - last.startedAt) / 1000, 0)
+          : last.duration;
+        const sealed: ThinkingSegment = {
+          ...last,
+          complete: true,
+          stopped,
+          duration,
+        };
+        return { ...m, segments: [...segs.slice(0, -1), sealed] };
+      };
 
-      // Tool-call bookkeeping — we mutate the bubble's `searches` array
-      // directly so pending/done transitions stay ordered even when tokens
-      // interleave.
-      const upsertSearch = (patch: SearchCall) => {
+      /** Append a reasoning/content chunk to the last same-kind segment
+       *  or start a new one. If the new kind differs from the last
+       *  segment, any pending thinking segment is sealed first. */
+      const appendTextChunk = (
+        m: UIMsg,
+        kind: 'reasoning' | 'content',
+        chunk: string,
+      ): UIMsg => {
+        let work = m;
+        const segs = work.segments ? [...work.segments] : [];
+        const last = segs[segs.length - 1];
+        if (kind === 'reasoning') {
+          if (last && last.kind === 'thinking' && !last.complete) {
+            segs[segs.length - 1] = { ...last, text: last.text + chunk };
+          } else {
+            segs.push({
+              kind: 'thinking',
+              id: makeId('seg'),
+              text: chunk,
+              complete: false,
+              stopped: false,
+              duration: null,
+              startedAt: Date.now(),
+            });
+          }
+        } else {
+          if (last && last.kind === 'content') {
+            segs[segs.length - 1] = { ...last, text: last.text + chunk };
+          } else {
+            // Content always seals a preceding unfinished thinking bubble.
+            work = sealThinking(work, false);
+            const segs2 = work.segments ? [...work.segments] : [];
+            segs2.push({ kind: 'content', id: makeId('seg'), text: chunk });
+            return { ...work, segments: segs2 };
+          }
+        }
+        return { ...work, segments: segs };
+      };
+
+      const patchMessage = (fn: (m: UIMsg) => UIMsg) => {
         setConversations((list) =>
           list.map((c) =>
             c.id === conv.id
               ? {
                   ...c,
-                  messages: c.messages.map((m) => {
-                    if (m.id !== placeholderId) return m;
-                    const prev = m.searches || [];
-                    const idx = prev.findIndex((s) => s.id === patch.id);
-                    const next =
-                      idx === -1
-                        ? [...prev, patch]
-                        : prev.map((s, i) => (i === idx ? { ...s, ...patch } : s));
-                    return { ...m, searches: next };
-                  }),
+                  messages: c.messages.map((m) =>
+                    m.id === placeholderId ? fn(m) : m,
+                  ),
                   updatedAt: Date.now(),
                 }
               : c,
           ),
         );
       };
+
+      const flushBuf = () => {
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
+        if (!bufKind || !bufText) return;
+        const kind = bufKind;
+        const chunk = bufText;
+        bufText = '';
+        patchMessage((m) => appendTextChunk(m, kind, chunk));
+      };
+
+      const scheduleBufFlush = () => {
+        if (rafRef.current !== null) return;
+        rafRef.current = window.requestAnimationFrame(() => {
+          rafRef.current = null;
+          if (!bufKind || !bufText) return;
+          const kind = bufKind;
+          const chunk = bufText;
+          bufText = '';
+          patchMessage((m) => appendTextChunk(m, kind, chunk));
+        });
+      };
+
+      const pushToolSegment = (
+        toolId: string,
+        callKind: 'search' | 'tool',
+        data: SearchCall | ToolCall,
+      ) => {
+        flushBuf();
+        patchMessage((m) => {
+          // Seal the latest thinking segment so the incoming tool
+          // bubble appears *after* that think-bubble in the UI.
+          const sealed = sealThinking(m, false);
+          const segs = sealed.segments ? [...sealed.segments] : [];
+          // Guard against duplicate inserts if a start event arrives
+          // twice (some providers re-emit on reconnect).
+          const exists = segs.some(
+            (s) => s.kind === 'tool' && s.data.id === toolId,
+          );
+          if (exists) return sealed;
+          segs.push({ kind: 'tool', id: `seg-${toolId}`, callKind, data });
+          return { ...sealed, segments: segs };
+        });
+      };
+
+      const updateToolSegment = (
+        toolId: string,
+        patch: Partial<SearchCall> & Partial<ToolCall>,
+      ) => {
+        flushBuf();
+        patchMessage((m) => {
+          const segs = m.segments ? [...m.segments] : [];
+          for (let i = 0; i < segs.length; i++) {
+            const s = segs[i];
+            if (s.kind === 'tool' && s.data.id === toolId) {
+              segs[i] = {
+                ...s,
+                data: { ...s.data, ...patch } as SearchCall | ToolCall,
+              };
+              return { ...m, segments: segs };
+            }
+          }
+          return m;
+        });
+      };
+
+      /** Accumulate the concatenated content text for error / abort
+       *  paths that need the text-so-far for the errored bubble. */
+      const currentContentText = (m: UIMsg): string =>
+        (m.segments || [])
+          .filter((s): s is ContentSegment => s.kind === 'content')
+          .map((s) => s.text)
+          .join('');
 
       try {
         await streamChat(payload, selectedModel || undefined, {
@@ -1003,9 +1182,9 @@ const AIChatPage: React.FC = () => {
           useKnowledgeBase: opts.useKnowledgeBase,
           onDelta: (delta) => {
             if (delta.knowledge_base) {
-              // One-shot event fired at the start of the stream. Attach
-              // the retrieval result to the assistant bubble so the user
-              // can inspect which chunks informed the reply.
+              // One-shot event — attached to the message, not a segment,
+              // since it's fired once at stream start before any model
+              // output. Shown above all segments in the renderer.
               const kbCall: KnowledgeBaseCall = {
                 id: `kb-${placeholderId}`,
                 query: delta.knowledge_base.query,
@@ -1014,126 +1193,131 @@ const AIChatPage: React.FC = () => {
               patchBubbleNow({ knowledgeBase: kbCall });
               return;
             }
+
             if (delta.tool_call_start) {
-              // Clear the "awaiting first token" placeholder so the
-              // dot-loader doesn't sit underneath the search bubble.
               if (firstToken) {
                 firstToken = false;
                 patchBubbleNow({ pending: false });
               }
-              upsertSearch({
-                id: delta.tool_call_start.id,
-                queries: delta.tool_call_start.queries,
-                status: 'pending',
-              });
+              const name = delta.tool_call_start.name;
+              if (name === 'web_search') {
+                pushToolSegment(delta.tool_call_start.id, 'search', {
+                  id: delta.tool_call_start.id,
+                  queries: delta.tool_call_start.queries || [],
+                  status: 'pending',
+                });
+              } else {
+                pushToolSegment(delta.tool_call_start.id, 'tool', {
+                  id: delta.tool_call_start.id,
+                  name,
+                  status: 'pending',
+                  ui_bubble_type: 'text',
+                  argsPreview: delta.tool_call_start.args_preview,
+                });
+              }
               return;
             }
+
             if (delta.tool_call_result) {
-              upsertSearch({
-                id: delta.tool_call_result.id,
-                queries: delta.tool_call_result.queries,
-                status: 'done',
-                groups: delta.tool_call_result.groups,
-              });
-              // After the tool round-trip the model will start streaming
-              // the real reply — keep `pending` true so the dot-loader
-              // shows while we wait for the first post-tool token.
+              const bubble = delta.tool_call_result.ui_bubble_type;
+              const name = delta.tool_call_result.name;
+              const id = delta.tool_call_result.id;
+              if (bubble === 'search' || name === 'web_search') {
+                updateToolSegment(id, {
+                  queries: delta.tool_call_result.queries || [],
+                  status: 'done',
+                  groups: delta.tool_call_result.groups,
+                } as Partial<SearchCall>);
+              } else {
+                updateToolSegment(id, {
+                  name: name || 'tool',
+                  status:
+                    delta.tool_call_result.ok === false ? 'error' : 'done',
+                  ui_bubble_type: bubble || 'text',
+                  payload: delta.tool_call_result.payload || {},
+                  ok: delta.tool_call_result.ok,
+                } as Partial<ToolCall>);
+              }
+              // Reset the first-token flag so the dot-loader shows again
+              // while we wait for the next chunk of reasoning/content.
               patchBubbleNow({ pending: true });
               firstToken = true;
               return;
             }
+
             if (firstToken) {
               firstToken = false;
               patchBubbleNow({ pending: false });
             }
+
+            // Reasoning / content text deltas: coalesce into bufText,
+            // RAF-flush into a single setState. Switching kind mid-
+            // stream immediately flushes the prior kind so segments
+            // stay properly separated.
             if (delta.reasoning) {
-              reasoning += delta.reasoning;
-              if (!reasoningStarted) {
-                reasoningStarted = true;
-                reasoningStartedAt = Date.now();
-                patchBubbleNow({
-                  reasoning,
-                  thinkingComplete: false,
-                  thinkingStopped: false,
-                });
-              } else {
-                queuePatch({ reasoning });
-              }
+              if (bufKind && bufKind !== 'reasoning') flushBuf();
+              bufKind = 'reasoning';
+              bufText += delta.reasoning;
+              scheduleBufFlush();
             }
             if (delta.content) {
-              acc += delta.content;
-              if (!contentStarted) {
-                contentStarted = true;
-                flushNow();
-                const duration = finalizeThinking();
-                patchBubbleNow({
-                  content: acc,
-                  thinkingComplete: reasoningStarted ? true : undefined,
-                  thinkingDuration:
-                    duration !== undefined ? duration : undefined,
-                });
-              } else {
-                queuePatch({ content: acc });
-              }
+              if (bufKind && bufKind !== 'content') flushBuf();
+              bufKind = 'content';
+              bufText += delta.content;
+              scheduleBufFlush();
             }
           },
           onDone: () => {
-            flushNow();
-            // If the model never produced content after reasoning (rare),
-            // still close the timer here.
-            const patch: Partial<UIMsg> = { pending: false };
-            if (reasoningStarted) {
-              patch.thinkingComplete = true;
-              if (!contentStarted) {
-                const duration = finalizeThinking();
-                if (duration !== undefined) patch.thinkingDuration = duration;
-              }
-            }
-            patchBubbleNow(patch);
+            flushBuf();
+            patchMessage((m) => ({
+              ...sealThinking(m, false),
+              pending: false,
+            }));
           },
           onError: (msg) => {
-            flushNow();
-            const patch: Partial<UIMsg> = {
-              pending: false,
-              errored: true,
-              content: acc || `⚠️ ${msg}`,
-            };
-            if (reasoningStarted) {
-              patch.thinkingComplete = true;
-              if (!contentStarted) {
-                const duration = finalizeThinking();
-                if (duration !== undefined) patch.thinkingDuration = duration;
+            flushBuf();
+            patchMessage((m) => {
+              const sealed = sealThinking(m, false);
+              const existing = currentContentText(sealed);
+              // Append an error marker as a fresh content segment so the
+              // partial reply (if any) stays visible above it.
+              const segs = sealed.segments ? [...sealed.segments] : [];
+              if (!existing) {
+                segs.push({
+                  kind: 'content',
+                  id: makeId('seg'),
+                  text: `⚠️ ${msg}`,
+                });
               }
-            }
-            patchBubbleNow(patch);
+              return { ...sealed, segments: segs, pending: false, errored: true };
+            });
           },
         });
       } catch (err) {
-        flushNow();
-        const patch: Partial<UIMsg> = { pending: false };
-        const duration = finalizeThinking();
+        flushBuf();
         if ((err as { name?: string })?.name === 'AbortError') {
-          patch.content = acc;
-          if (reasoningStarted) {
-            patch.thinkingStopped = !contentStarted;
-            patch.thinkingComplete = true;
-            if (!contentStarted && duration !== undefined) {
-              patch.thinkingDuration = duration;
-            }
-          }
+          patchMessage((m) => ({
+            ...sealThinking(m, true),
+            pending: false,
+          }));
         } else {
-          patch.errored = true;
-          patch.content = acc || `⚠️ ${(err as Error).message || '请求失败'}`;
-          if (reasoningStarted) {
-            patch.thinkingComplete = true;
-            if (!contentStarted && duration !== undefined) {
-              patch.thinkingDuration = duration;
+          const msg = (err as Error).message || '请求失败';
+          patchMessage((m) => {
+            const sealed = sealThinking(m, false);
+            const existing = currentContentText(sealed);
+            const segs = sealed.segments ? [...sealed.segments] : [];
+            if (!existing) {
+              segs.push({
+                kind: 'content',
+                id: makeId('seg'),
+                text: `⚠️ ${msg}`,
+              });
             }
-          }
+            return { ...sealed, segments: segs, pending: false, errored: true };
+          });
         }
-        patchBubbleNow(patch);
       } finally {
-        flushNow();
+        flushBuf();
         setStreaming(false);
         abortRef.current = null;
         // Snapshot the conversation to the backend now that the stream
@@ -1285,30 +1469,58 @@ const AIChatPage: React.FC = () => {
       );
     }
 
-    // Streaming: reasoning is in-flight iff thinkingComplete is false AND
-    // content hasn't started (contentStarted flips thinkingComplete → true).
-    const hasReasoning = !!m.reasoning;
-    const hasContent = !!m.content;
-    const stillStreamingContent = !!m.pending && hasContent;
-
-    const searches = m.searches || [];
+    const segments = m.segments || [];
     const kb = m.knowledgeBase;
+
+    // The dot-loader only shows while the stream is pending AND the
+    // assistant hasn't produced any segment yet.
+    const showDots = !!m.pending && segments.length === 0 && !kb;
+
+    // The last content segment is the one that's actively streaming
+    // (if any); `isStreaming` on MarkdownStream draws the trailing
+    // cursor only for that bubble.
+    let lastContentIdx = -1;
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (segments[i].kind === 'content') {
+        lastContentIdx = i;
+        break;
+      }
+    }
 
     return (
       <div key={m.id} className="ai-msg-ai">
         {kb && <KnowledgeBubble call={kb} />}
-        {searches.map((sc) => (
-          <SearchBubble key={sc.id} call={sc} />
-        ))}
-        {hasReasoning && (
-          <ThinkingBubble
-            content={m.reasoning || ''}
-            isComplete={!!m.thinkingComplete}
-            isStopped={!!m.thinkingStopped}
-            thinkingDuration={m.thinkingDuration ?? null}
-          />
-        )}
-        {m.pending && !hasContent && !hasReasoning && searches.length === 0 && !kb && (
+        {segments.map((seg, idx) => {
+          if (seg.kind === 'thinking') {
+            return (
+              <ThinkingBubble
+                key={seg.id}
+                content={seg.text}
+                isComplete={seg.complete}
+                isStopped={seg.stopped}
+                thinkingDuration={seg.duration}
+              />
+            );
+          }
+          if (seg.kind === 'tool') {
+            return seg.callKind === 'search' ? (
+              <SearchBubble key={seg.id} call={seg.data as SearchCall} />
+            ) : (
+              <ToolBubble key={seg.id} call={seg.data as ToolCall} />
+            );
+          }
+          // content
+          const isStreamingThis =
+            !!m.pending && idx === lastContentIdx && !m.errored;
+          return (
+            <MarkdownStream
+              key={seg.id}
+              content={seg.text}
+              isStreaming={isStreamingThis}
+            />
+          );
+        })}
+        {showDots && (
           <div className="ai-body">
             <div className="ai-dots">
               <span />
@@ -1316,12 +1528,6 @@ const AIChatPage: React.FC = () => {
               <span />
             </div>
           </div>
-        )}
-        {hasContent && (
-          <MarkdownStream
-            content={m.content}
-            isStreaming={stillStreamingContent}
-          />
         )}
       </div>
     );

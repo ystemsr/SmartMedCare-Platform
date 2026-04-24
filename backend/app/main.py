@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.logger import setup_logging
 from app.core.minio_client import init_minio
 from app.core.redis_client import close_redis, init_redis
+from app.services.ai_tools import bootstrap as ai_tools_bootstrap
 from app.services.weather import WeatherService
 from app.tasks.pipeline_scheduler import PipelineScheduler
 from app.api.v1.router import api_router
@@ -41,6 +42,7 @@ HTTP_TO_APP_CODE = {
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     logger.info("Starting %s application", settings.APP_NAME)
+    ai_tools_bootstrap.register_all()
     await init_redis()
     await init_minio()
     await WeatherService.start()

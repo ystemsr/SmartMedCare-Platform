@@ -1637,9 +1637,15 @@
   margin-bottom: 14px;
 }
 .ai-search {
+  /* Same layout contract as `.ai-think` — width is NOT animated. The
+   * bubble snaps between its collapsed (hug-content) and expanded
+   * (100% of max-width) states instantly; only height + opacity on the
+   * body animate. Attempting to animate width produced too many edge
+   * cases (BFC interactions, intrinsic-width leaks, two-stage opening
+   * feels). Mirror the thinking bubble exactly. */
   display: inline-flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: flex-start;
   max-width: 80%;
   background: #fbf7f2;
   border: 1px solid #efe4d6;
@@ -1648,9 +1654,6 @@
   font-size: 13.5px;
   line-height: 1.55;
   box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02);
-  /* Keep horizontal padding identical between collapsed and expanded so
-   * the spinner / label / caret don't drift sideways when the user
-   * toggles the card. Only vertical padding changes on expand. */
   padding: 8px 14px;
   transition:
     padding 0.25s ease,
@@ -1708,7 +1711,17 @@
 }
 
 .ai-search-details-wrap {
+  /* framer-motion animates height on this element; overflow: hidden
+   * is what turns the height animation into a smooth slide. */
   overflow: hidden;
+  /* Explicit full-width so structured bodies (tables, kv grids) fill
+   * the expanded card. ThinkingBubble gets away without this because
+   * its content is pure text — which naturally line-wraps to the
+   * container width. Our bodies have flex/grid children whose
+   * intrinsic size is often narrower than the container, so we force
+   * the fill here. `.ai-search`'s `align-items: flex-start` would
+   * otherwise sit them at their natural (narrow) width. */
+  width: 100%;
 }
 .ai-search-details {
   margin-top: 10px;
@@ -1720,12 +1733,29 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 420px;
+  /* Take the full width of the (now explicitly 100%) wrap. */
+  width: 100%;
+  box-sizing: border-box;
+  /* Hard ceiling for the scrollable body. Anything taller gets a
+   * proper inner scrollbar rather than stretching the card. */
+  max-height: 280px;
   overflow-y: auto;
   scrollbar-gutter: stable;
   /* Firefox */
   scrollbar-width: thin;
   scrollbar-color: #e4d4bb transparent;
+  /* Pre-exit fade: the JS toggles `.body-hidden` *before* AnimatePresence
+   * begins collapsing the wrap, so the content vanishes without the
+   * height changing. opacity is a layout-neutral property so this
+   * doesn't cause the "height drop" — the rectangle keeps its size,
+   * then the wrap folds it shut over 0.3s. */
+  transition: opacity 0.15s ease;
+}
+.ai-search-details.body-hidden {
+  opacity: 0;
+  /* Stop invisible content from receiving pointer events during the
+   * brief window where it's fading out. */
+  pointer-events: none;
 }
 .ai-search-details::-webkit-scrollbar {
   width: 4px;
@@ -2325,4 +2355,275 @@
   background: #eaf1e7;
   border-color: #b5cbad;
   color: #4e6a4a;
+}
+
+/* ============================================================
+   Generic tool bubbles (ToolBubble.tsx) — live inside the same
+   .ai-search wrapper as SearchBubble so the collapse animation
+   and sidebar alignment stay consistent.
+   ============================================================ */
+
+.ai-tool-empty {
+  padding: 6px 2px;
+  color: var(--ai-ink-3, #9a8870);
+  font-size: 13px;
+}
+.ai-tool-json {
+  margin: 0;
+  padding: 4px 0;
+  font-family: var(--ai-mono);
+  font-size: 12px;
+  color: var(--ai-ink-2);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Key-value list (elder_profile / alert_card / assessment / weather / ...) */
+.ai-tool-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0;
+}
+.ai-tool-kv-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  align-items: baseline;
+}
+.ai-tool-kv-label {
+  color: #9a8870;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.ai-tool-kv-value {
+  color: var(--ai-ink-2);
+  word-break: break-word;
+}
+.ai-tool-sugg {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Table layout used for list_*/table-mode results. */
+.ai-tool-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  color: var(--ai-ink-2);
+  overflow-x: auto;
+}
+.ai-tool-thead {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(70px, 1fr);
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f4ecdf;
+  font-weight: 600;
+  color: #8a7a66;
+}
+.ai-tool-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(70px, 1fr);
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px dashed #eadfca;
+}
+.ai-tool-row:last-child {
+  border-bottom: none;
+}
+.ai-tool-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Status / risk-level badges inside table cells. */
+.ai-tool-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #eee3d2;
+  color: #7a6a56;
+}
+.ai-tool-badge.risk-high {
+  background: #f6d9d9;
+  color: #9a3a3a;
+}
+.ai-tool-badge.risk-medium {
+  background: #f5e7c9;
+  color: #8c6a28;
+}
+.ai-tool-badge.risk-low {
+  background: #e3eddb;
+  color: #4e6a4a;
+}
+.ai-tool-badge.status-pending {
+  background: #f5e2c8;
+  color: #8a5a23;
+}
+.ai-tool-badge.status-acknowledged {
+  background: #e0e6ed;
+  color: #3e5570;
+}
+.ai-tool-badge.status-resolved {
+  background: #e3eddb;
+  color: #4e6a4a;
+}
+
+/* Dashboard stat cards — minimal editorial layout.
+ *
+ * Earlier iterations rendered each metric in its own filled card with
+ * a rounded border, which made the dashboard-overview bubble feel
+ * dense and competed visually with the surrounding chat turn. The
+ * overview is glanceable by nature (6 numbers), so we drop the card
+ * chrome entirely: just a clean 3-column grid of "label above, serif
+ * number below". The overall bubble stays framed by the already-
+ * present `.ai-search` container — no need to re-border each stat.
+ */
+.ai-tool-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 14px;
+  row-gap: 14px;
+  padding: 4px 2px 2px;
+}
+.ai-tool-stat-card {
+  background: none;
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ai-tool-stat-label {
+  font-size: 11.5px;
+  color: #9a8870;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-tool-stat-value {
+  font-size: 22px;
+  font-family: var(--ai-serif);
+  font-weight: 500;
+  color: var(--ai-ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-tool-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.ai-tool-bar-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 50px;
+  align-items: center;
+  gap: 8px;
+}
+.ai-tool-bar-label {
+  color: #8a7a66;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-tool-bar-wrap {
+  height: 8px;
+  background: #f3eadb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.ai-tool-bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #cfa97b, #b58a54);
+  border-radius: 999px;
+}
+.ai-tool-bar-value {
+  text-align: right;
+  color: var(--ai-ink-2);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+/* ---------- Weather bubble: icon + 2x3 metric grid ---------- */
+.ai-tool-weather {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-tool-weather-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+.ai-tool-weather-icon {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  /* OpenWeatherMap PNGs have a fair amount of transparent padding; pull
+   * them slightly negative on the margin so the city text sits closer. */
+  margin: -8px 0;
+}
+.ai-tool-weather-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ai-tool-weather-city {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ai-ink);
+}
+.ai-tool-weather-desc {
+  font-size: 12.5px;
+  color: #9a8870;
+}
+
+.ai-tool-weather-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  padding: 6px 0 2px;
+  border-top: 1px dashed #e4d4bb;
+}
+.ai-tool-weather-cell {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #faf4ea;
+  border: 1px solid #eadfca;
+  border-radius: 8px;
+}
+.ai-tool-weather-cell-label {
+  font-size: 12px;
+  color: #9a8870;
+  font-weight: 600;
+}
+.ai-tool-weather-cell-value {
+  font-size: 13px;
+  color: var(--ai-ink-2);
+  font-variant-numeric: tabular-nums;
 }

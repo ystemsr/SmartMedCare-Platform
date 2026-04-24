@@ -22,12 +22,13 @@ from app.models.ai_chat import AIConversation, AIMessage
 from app.models.audit_log import SystemConfig
 from app.models.base import _utcnow
 from app.models.user import User
-from app.services.brave_search import (
-    BRAVE_TOOL_SCHEMA,
-    brave_search_many,
-    format_results_for_model,
-    is_available as brave_is_available,
+from app.services.ai_tools import (
+    build_context as build_tool_context,
+    dispatch as dispatch_tool,
+    schemas_for as tool_schemas_for,
 )
+from app.services.ai_tools import bootstrap as ai_tools_bootstrap
+from app.services.brave_search import is_available as brave_is_available
 from app.services.kb import build_rag_prompt, retrieve as kb_retrieve
 from app.services.kb.embedding import is_available as kb_embedding_is_available
 from app.utils.response import error_response, success_response
@@ -465,11 +466,19 @@ async def chat_stream(
             }
 
     # --- Tool-use wiring ---------------------------------------------------
-    # The Brave-search tool is attached whenever a BRAVE_API_KEY is
-    # configured; the model then decides when to call it. `web_search=true`
-    # forces the first turn to invoke the tool; subsequent turns fall back
-    # to "auto" so the model can reply naturally after reading results.
-    brave_enabled = brave_is_available()
+    # Build a ToolContext for this turn — carries role, permissions, and
+    # (for elder/family) the pre-resolved elder_ids they may legitimately
+    # touch. Handlers enforce scope independently as defense-in-depth.
+    ai_tools_bootstrap.register_all()
+    tool_ctx = await build_tool_context(db, current_user)
+    tool_schemas = tool_schemas_for(tool_ctx)
+
+    # `web_search=true` forces the first turn to invoke the tool. We still
+    # need Brave itself to be configured for that to produce useful output;
+    # otherwise the tool schema isn't even registered for the caller.
+    brave_enabled = brave_is_available() and any(
+        s["function"]["name"] == "web_search" for s in tool_schemas
+    )
     force_first_search = bool(body.web_search) and brave_enabled
     base_payload: Dict[str, Any] = {
         "model": model,
@@ -481,8 +490,8 @@ async def chat_stream(
         # OpenRouter-compatible reasoning flag; harmless for providers that
         # ignore it.
         base_payload["reasoning"] = {"enabled": True}
-    if brave_enabled:
-        base_payload["tools"] = [BRAVE_TOOL_SCHEMA]
+    if tool_schemas:
+        base_payload["tools"] = tool_schemas
 
     url = f"{base_url}/chat/completions"
     headers = {
@@ -721,50 +730,58 @@ async def chat_stream(
                                 )
                             except json.JSONDecodeError:
                                 args = {}
-                            if name == "web_search":
-                                # Accept batch form (`queries`) and the
-                                # legacy single `query` form some models
-                                # may still emit.
-                                raw_queries = args.get("queries")
-                                if raw_queries is None and args.get("query"):
-                                    raw_queries = [args.get("query")]
-                                if isinstance(raw_queries, str):
-                                    raw_queries = [raw_queries]
-                                if not isinstance(raw_queries, list):
-                                    raw_queries = []
-                                queries = [
-                                    str(q).strip()
-                                    for q in raw_queries
-                                    if str(q).strip()
-                                ]
-                                yield _sse(
-                                    {
-                                        "tool_call_start": {
-                                            "id": tc["id"],
-                                            "name": name,
-                                            "queries": queries,
-                                        }
+                            # Emit tool_call_start first so the UI can
+                            # show a pending bubble while the handler
+                            # runs. `args_preview` is opaque — each
+                            # bubble interprets it per-tool (web_search
+                            # uses `queries`; other tools may ignore it).
+                            args_preview = {
+                                k: v
+                                for k, v in args.items()
+                                if k in ("queries", "query", "elder_id", "alert_id", "assessment_id", "followup_id")
+                            }
+                            yield _sse(
+                                {
+                                    "tool_call_start": {
+                                        "id": tc["id"],
+                                        "name": name,
+                                        "args_preview": args_preview,
+                                        # Backwards-compat for existing
+                                        # search bubble UI that keys off
+                                        # the flat `queries` field.
+                                        "queries": args_preview.get("queries") or (
+                                            [args_preview["query"]] if args_preview.get("query") else []
+                                        ),
                                     }
+                                }
+                            )
+                            tool_result = await dispatch_tool(name, args, tool_ctx)
+                            result_event: Dict[str, Any] = {
+                                "tool_call_result": {
+                                    "id": tc["id"],
+                                    "name": name,
+                                    "ok": tool_result.ok,
+                                    "ui_bubble_type": tool_result.ui_bubble_type,
+                                    "payload": tool_result.ui_payload,
+                                }
+                            }
+                            # Backwards-compat: web_search's UI bubble
+                            # expects the legacy flat shape. Re-flatten.
+                            if (
+                                name == "web_search"
+                                and tool_result.ok
+                                and isinstance(tool_result.ui_payload, dict)
+                            ):
+                                result_event["tool_call_result"]["queries"] = (
+                                    tool_result.ui_payload.get("queries") or []
                                 )
-                                groups = await brave_search_many(queries)
-                                yield _sse(
-                                    {
-                                        "tool_call_result": {
-                                            "id": tc["id"],
-                                            "queries": [
-                                                g["query"] for g in groups
-                                            ],
-                                            "groups": groups,
-                                        }
-                                    }
+                                result_event["tool_call_result"]["groups"] = (
+                                    tool_result.ui_payload.get("groups") or []
                                 )
-                                # Content fed back to the LLM MUST be
-                                # delivered under the `tool` role, keyed
-                                # by `tool_call_id` — this matches the
-                                # assistant's preceding tool_calls entry.
-                                tool_content = format_results_for_model(groups)
-                            else:
-                                tool_content = "[unknown tool]"
+                            yield _sse(result_event)
+                            tool_content = tool_result.model_text or (
+                                f"[tool {name} returned no content]"
+                            )
                             messages.append(
                                 {
                                     "role": "tool",

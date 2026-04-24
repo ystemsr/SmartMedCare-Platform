@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import type { SearchGroup, SearchResult } from '../../api/ai';
@@ -65,7 +65,21 @@ function summarizeQueries(queries: string[]): string {
  * multiple queries, so the expanded state renders one section per query.
  */
 const SearchBubble: React.FC<SearchBubbleProps> = ({ call }) => {
+  // Same collapse model as ToolBubble: thinking-bubble-style simple
+  // height+opacity exit, preceded by a CSS opacity fade of the inner
+  // body so the close doesn't look like a sudden narrowing.
   const [expanded, setExpanded] = useState(false);
+  const [bodyVisible, setBodyVisible] = useState(false);
+  const collapseTimer = useRef<number | null>(null);
+  const BODY_FADE_MS = 150;
+  useEffect(
+    () => () => {
+      if (collapseTimer.current != null) {
+        window.clearTimeout(collapseTimer.current);
+      }
+    },
+    [],
+  );
   const groups = call.groups || [];
   const totalResults = useMemo(
     () => groups.reduce((n, g) => n + (g.results?.length || 0), 0),
@@ -94,7 +108,20 @@ const SearchBubble: React.FC<SearchBubbleProps> = ({ call }) => {
   const onHeaderClick = (e: React.MouseEvent) => {
     if (disabled) return;
     e.stopPropagation();
-    setExpanded((v) => !v);
+    if (collapseTimer.current != null) {
+      window.clearTimeout(collapseTimer.current);
+      collapseTimer.current = null;
+    }
+    if (!expanded) {
+      setBodyVisible(true);
+      setExpanded(true);
+    } else {
+      setBodyVisible(false);
+      collapseTimer.current = window.setTimeout(() => {
+        collapseTimer.current = null;
+        setExpanded(false);
+      }, BODY_FADE_MS);
+    }
   };
 
   return (
@@ -139,6 +166,10 @@ const SearchBubble: React.FC<SearchBubbleProps> = ({ call }) => {
           )}
         </div>
 
+        {/* Conditionally mounted (AnimatePresence) so the collapsed
+         *  bubble isn't carrying the intrinsic width of a hidden
+         *  result list. Card overall height is bounded by
+         *  `.ai-search-details` `max-height: 280px`. */}
         <AnimatePresence initial={false}>
           {expanded && totalResults > 0 && (
             <motion.div
@@ -149,7 +180,11 @@ const SearchBubble: React.FC<SearchBubbleProps> = ({ call }) => {
               transition={{ duration: 0.3, ease: 'easeInOut' }}
               className="ai-search-details-wrap"
             >
-              <div className="ai-search-details">
+              <div
+                className={`ai-search-details${
+                  bodyVisible ? '' : ' body-hidden'
+                }`}
+              >
                 {groups.map((g, gi) => {
                   const results = g.results || [];
                   if (results.length === 0) return null;

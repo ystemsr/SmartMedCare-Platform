@@ -199,6 +199,22 @@ export interface KnowledgeBasePayload {
   hits: KnowledgeBaseHit[];
 }
 
+/** Shape of a generic tool result emitted by the registry dispatch path. */
+export type ToolBubbleType =
+  | 'search'
+  | 'elder_list'
+  | 'elder_profile'
+  | 'alert_list'
+  | 'alert_card'
+  | 'health_records'
+  | 'assessment'
+  | 'followup_list'
+  | 'intervention_list'
+  | 'chart'
+  | 'table'
+  | 'weather'
+  | 'text';
+
 /** Chat-stream delta object emitted on each SSE `data:` line. */
 export interface ChatDelta {
   content?: string;
@@ -208,13 +224,27 @@ export interface ChatDelta {
   tool_call_start?: {
     id: string;
     name: string;
-    queries: string[];
+    /** Legacy (web_search): flattened queries list. */
+    queries?: string[];
+    /** Generic tool: a small preview of the args for the pending bubble. */
+    args_preview?: Record<string, unknown>;
   };
-  /** Fired once the tool returns; `groups` is one entry per query. */
+  /** Fired once the tool returns. Always carries `ui_bubble_type` + `payload`
+   *  for generic tools; `queries` + `groups` are kept for backward
+   *  compatibility with the original SearchBubble wiring. */
   tool_call_result?: {
     id: string;
-    queries: string[];
-    groups: SearchGroup[];
+    /** Tool name (e.g. "web_search", "list_alerts"). */
+    name?: string;
+    /** Whether the tool succeeded — false means the payload is an error object. */
+    ok?: boolean;
+    /** Which bubble renderer should display this result. */
+    ui_bubble_type?: ToolBubbleType;
+    /** Structured data for the bubble; shape keyed by ui_bubble_type. */
+    payload?: Record<string, unknown>;
+    /** Legacy flat fields for SearchBubble compatibility. */
+    queries?: string[];
+    groups?: SearchGroup[];
   };
   /** Fired once at the start of the stream when the knowledge base was used. */
   knowledge_base?: KnowledgeBasePayload;

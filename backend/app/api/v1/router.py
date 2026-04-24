@@ -51,3 +51,7 @@ api_router.include_router(weather.router, prefix="/weather", tags=["天气"])
 # ===== AI assistant (chat + model config) =====
 from app.api.v1.endpoints import ai
 api_router.include_router(ai.router, prefix="/ai", tags=["AI 助手"])
+
+# ===== AI knowledge base (RAG) =====
+from app.api.v1.endpoints import kb
+api_router.include_router(kb.router, prefix="/ai/kb", tags=["AI 知识库"])

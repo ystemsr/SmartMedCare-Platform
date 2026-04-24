@@ -37,6 +37,7 @@ const HiveQueryPage = lazy(() => import('../pages/bigdata/HiveQueryPage'));
 const BigDataAnalyticsPage = lazy(() => import('../pages/bigdata/BigDataAnalyticsPage'));
 const AIChatPage = lazy(() => import('../pages/ai/AIChatPage'));
 const AIConfigPage = lazy(() => import('../pages/ai/AIConfigPage'));
+const KnowledgeBasePage = lazy(() => import('../pages/kb/KnowledgeBasePage'));
 
 const PageLoading: React.FC = () => (
   <div
@@ -103,6 +104,7 @@ const AppRouter: React.FC = () => {
           <Route path="/bigdata/hive" element={<HiveQueryPage />} />
           <Route path="/bigdata/analytics" element={<BigDataAnalyticsPage />} />
           <Route path="/ai/config" element={<AIConfigPage />} />
+          <Route path="/ai/knowledge-base" element={<KnowledgeBasePage />} />
         </Route>
 
         {/* Full-screen AI chat — open to every authenticated role.

@@ -17,6 +17,7 @@ import {
   LineChart,
   Sparkles,
   Cog,
+  BookOpen,
 } from 'lucide-react';
 import AppShell, { type AppShellMenuItem } from '../components/AppShell';
 import { usePermission } from '../hooks/usePermission';
@@ -137,6 +138,14 @@ const BasicLayout: React.FC = () => {
         key: '/ai/config',
         icon: <Cog size={18} />,
         label: 'AI 模型配置',
+      });
+    }
+
+    if (hasAnyPermission(['ai:kb:manage'])) {
+      items.push({
+        key: '/ai/knowledge-base',
+        icon: <BookOpen size={18} />,
+        label: 'AI 知识库',
       });
     }
 

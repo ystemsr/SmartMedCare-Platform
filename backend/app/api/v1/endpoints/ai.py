@@ -26,6 +26,8 @@ from app.services.brave_search import (
     format_results_for_model,
     is_available as brave_is_available,
 )
+from app.services.kb import build_rag_prompt, retrieve as kb_retrieve
+from app.services.kb.embedding import is_available as kb_embedding_is_available
 from app.utils.response import error_response, success_response
 
 logger = logging.getLogger(__name__)
@@ -260,6 +262,10 @@ class ChatRequest(BaseModel):
     # When True, force the model to invoke the web-search tool on the
     # first turn. When None/False, the model decides whether to search.
     web_search: Optional[bool] = None
+    # When True, retrieve relevant chunks from the user's role-scoped
+    # knowledge base and wrap the latest user question with the RAG
+    # prompt template before forwarding to the upstream model.
+    use_knowledge_base: Optional[bool] = None
 
 
 class ModelEntry(BaseModel):
@@ -305,6 +311,7 @@ async def get_public_config(
             "configured": bool(cfg["base_url"] and cfg["api_key"]),
             "reasoning_enabled": cfg["reasoning_enabled"],
             "web_search_available": brave_is_available(),
+            "knowledge_base_available": kb_embedding_is_available(),
         }
     )
 
@@ -345,6 +352,47 @@ async def chat_stream(
     if system_prompt and (not messages or messages[0]["role"] != "system"):
         messages.insert(0, {"role": "system", "content": system_prompt})
 
+    # --- Knowledge base retrieval (RAG) ------------------------------------
+    # When enabled, retrieve chunks for the user's role and wrap the
+    # latest user turn with the RAG prompt template. Retrieval failure
+    # is non-fatal — we fall back to a plain chat. The `kb_event`
+    # payload is emitted once at the start of the SSE stream so the UI
+    # can render a knowledge-base bubble with the matched documents.
+    kb_event: Optional[Dict[str, Any]] = None
+    if body.use_knowledge_base and role_code:
+        last_user_idx = next(
+            (i for i in range(len(messages) - 1, -1, -1)
+             if messages[i]["role"] == "user"),
+            -1,
+        )
+        if last_user_idx >= 0:
+            user_query = messages[last_user_idx]["content"] or ""
+            try:
+                hits = await kb_retrieve(role_code, user_query)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("kb retrieve failed: %s", e)
+                hits = []
+            messages[last_user_idx] = {
+                "role": "user",
+                "content": build_rag_prompt(user_query, hits),
+            }
+            kb_event = {
+                "knowledge_base": {
+                    "role_code": role_code,
+                    "query": user_query,
+                    "hits": [
+                        {
+                            "document_id": h.get("document_id"),
+                            "document_name": h.get("document_name") or "",
+                            "chunk_index": h.get("chunk_index"),
+                            "score": float(h.get("score") or 0.0),
+                            "content": h.get("content") or "",
+                        }
+                        for h in hits
+                    ],
+                }
+            }
+
     # --- Tool-use wiring ---------------------------------------------------
     # The Brave-search tool is attached whenever a BRAVE_API_KEY is
     # configured; the model then decides when to call it. `web_search=true`
@@ -381,6 +429,8 @@ async def chat_stream(
 
     async def event_stream():
         try:
+            if kb_event is not None:
+                yield _sse(kb_event)
             async with httpx.AsyncClient(timeout=None) as client:
                 iteration = 0
                 while True:

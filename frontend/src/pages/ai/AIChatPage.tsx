@@ -17,6 +17,7 @@ import {
 import ThinkingBubble from './ThinkingBubble';
 import MarkdownStream from './MarkdownStream';
 import SearchBubble, { type SearchCall } from './SearchBubble';
+import KnowledgeBubble, { type KnowledgeBaseCall } from './KnowledgeBubble';
 import './AIChatPage.css';
 
 /* =========================================================================
@@ -37,6 +38,8 @@ interface UIMsg {
   errored?: boolean;
   /** Web-search tool invocations produced while generating this reply. */
   searches?: SearchCall[];
+  /** Knowledge-base lookup performed for this reply (at most one). */
+  knowledgeBase?: KnowledgeBaseCall;
 }
 
 interface Conversation {
@@ -286,13 +289,18 @@ const AIChatPage: React.FC = () => {
   useAutosize(taConvRef, draftConv);
 
   /* ---- pills ----
-   * `forceWebSearch` shared across composers: once the user toggles it
-   * on the empty screen, it carries into the conversation. The knowledge-
-   * base pill is still visual-only and kept per-composer. */
+   * Both toggles are shared across the empty and conversation composers:
+   * once the user turns a pill on for a new chat, it stays on as the
+   * conversation continues. */
   const [forceWebSearch, setForceWebSearch] = useState(false);
-  const [kbPillEmpty, setKbPillEmpty] = useState(false);
-  const [kbPillConv, setKbPillConv] = useState(false);
+  // Default to on — most users of this assistant benefit from the KB
+  // context and we'd rather they opt out than forget to opt in. If the
+  // server reports the KB as unavailable the pill is disabled and the
+  // `&& knowledgeBaseAvailable` guard below stops the flag from being
+  // sent, so this default is safe even when embeddings aren't wired up.
+  const [useKnowledgeBase, setUseKnowledgeBase] = useState(true);
   const [webSearchAvailable, setWebSearchAvailable] = useState(false);
+  const [knowledgeBaseAvailable, setKnowledgeBaseAvailable] = useState(false);
 
   /* ---- streaming state ---- */
   const [streaming, setStreaming] = useState(false);
@@ -325,6 +333,7 @@ const AIChatPage: React.FC = () => {
         setModels(list);
         setConfigured(res.data.configured);
         setWebSearchAvailable(!!res.data.web_search_available);
+        setKnowledgeBaseAvailable(!!res.data.knowledge_base_available);
         // Ensure current selection is valid; otherwise adopt server default
         // or first entry.
         setSelectedModel((prev) => {
@@ -453,7 +462,7 @@ const AIChatPage: React.FC = () => {
       conv: Conversation,
       newMessages: UIMsg[],
       placeholderId: string,
-      opts: { webSearch?: boolean } = {},
+      opts: { webSearch?: boolean; useKnowledgeBase?: boolean } = {},
     ) => {
       setStreaming(true);
       const controller = new AbortController();
@@ -555,7 +564,20 @@ const AIChatPage: React.FC = () => {
         await streamChat(payload, selectedModel || undefined, {
           signal: controller.signal,
           webSearch: opts.webSearch,
+          useKnowledgeBase: opts.useKnowledgeBase,
           onDelta: (delta) => {
+            if (delta.knowledge_base) {
+              // One-shot event fired at the start of the stream. Attach
+              // the retrieval result to the assistant bubble so the user
+              // can inspect which chunks informed the reply.
+              const kbCall: KnowledgeBaseCall = {
+                id: `kb-${placeholderId}`,
+                query: delta.knowledge_base.query,
+                hits: delta.knowledge_base.hits,
+              };
+              patchBubbleNow({ knowledgeBase: kbCall });
+              return;
+            }
             if (delta.tool_call_start) {
               // Clear the "awaiting first token" placeholder so the
               // dot-loader doesn't sit underneath the search bubble.
@@ -713,6 +735,7 @@ const AIChatPage: React.FC = () => {
     navigate(`/ai/${convId}`);
     runStream(newConv, [userMsg, aiMsg], placeholderId, {
       webSearch: forceWebSearch && webSearchAvailable,
+      useKnowledgeBase: useKnowledgeBase && knowledgeBaseAvailable,
     });
   };
 
@@ -740,6 +763,7 @@ const AIChatPage: React.FC = () => {
     setDraftConv('');
     runStream(updated, nextMsgs, placeholderId, {
       webSearch: forceWebSearch && webSearchAvailable,
+      useKnowledgeBase: useKnowledgeBase && knowledgeBaseAvailable,
     });
   };
 
@@ -767,9 +791,11 @@ const AIChatPage: React.FC = () => {
     const stillStreamingContent = !!m.pending && hasContent;
 
     const searches = m.searches || [];
+    const kb = m.knowledgeBase;
 
     return (
       <div key={m.id} className="ai-msg-ai">
+        {kb && <KnowledgeBubble call={kb} />}
         {searches.map((sc) => (
           <SearchBubble key={sc.id} call={sc} />
         ))}
@@ -781,7 +807,7 @@ const AIChatPage: React.FC = () => {
             thinkingDuration={m.thinkingDuration ?? null}
           />
         )}
-        {m.pending && !hasContent && !hasReasoning && searches.length === 0 && (
+        {m.pending && !hasContent && !hasReasoning && searches.length === 0 && !kb && (
           <div className="ai-body">
             <div className="ai-dots">
               <span />
@@ -808,8 +834,6 @@ const AIChatPage: React.FC = () => {
     const setValue = isEmpty ? setDraftEmpty : setDraftConv;
     const taRef = isEmpty ? taEmptyRef : taConvRef;
     const sendFn = isEmpty ? sendFromEmpty : sendFromConv;
-    const kbOn = isEmpty ? kbPillEmpty : kbPillConv;
-    const setKbOn = isEmpty ? setKbPillEmpty : setKbPillConv;
     const canSend = value.trim().length > 0 && !streaming;
     const showStop = streaming && !isEmpty;
     const searchDisabled = !webSearchAvailable;
@@ -818,6 +842,12 @@ const AIChatPage: React.FC = () => {
       : forceWebSearch
         ? '已开启联网搜索：回答时将强制调用搜索'
         : '开启联网搜索：让 AI 在回答时查询最新网络信息';
+    const kbDisabled = !knowledgeBaseAvailable;
+    const kbTitle = kbDisabled
+      ? '知识库不可用（未配置 Embedding API Key）'
+      : useKnowledgeBase
+        ? '已开启知识库：回答时将引用所属角色的知识库内容'
+        : '开启知识库：在作答前检索你所属角色的知识库内容';
 
     return (
       <div className="ai-composer-wrap">
@@ -867,10 +897,20 @@ const AIChatPage: React.FC = () => {
                 <span className="ai-label">联网搜索</span>
               </button>
               <button
-                className={`ai-pill v-kb${kbOn ? ' on' : ''}`}
-                title="知识库（即将支持）"
+                className={`ai-pill v-kb${useKnowledgeBase && !kbDisabled ? ' on' : ''}`}
+                title={kbTitle}
                 type="button"
-                onClick={() => setKbOn((v) => !v)}
+                disabled={kbDisabled}
+                aria-pressed={useKnowledgeBase && !kbDisabled}
+                onClick={() => {
+                  if (kbDisabled) return;
+                  setUseKnowledgeBase((v) => !v);
+                }}
+                style={
+                  kbDisabled
+                    ? { opacity: 0.45, cursor: 'not-allowed' }
+                    : undefined
+                }
               >
                 <span className="ai-icon-wrap">
                   <IcoKb />
@@ -900,10 +940,22 @@ const AIChatPage: React.FC = () => {
                     <motion.div
                       key="ai-model-menu"
                       role="listbox"
-                      className="ai-model-menu"
-                      initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                      className={`ai-model-menu${!isEmpty ? ' drop-up' : ''}`}
+                      // Empty (centered) composer: menu drops DOWN from the
+                      // button. Conversation composer is at the bottom of
+                      // the viewport, so drop UP instead and flip the
+                      // intro/outro offset to match.
+                      initial={{
+                        opacity: 0,
+                        y: isEmpty ? -6 : 6,
+                        scale: 0.96,
+                      }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                      exit={{
+                        opacity: 0,
+                        y: isEmpty ? -4 : 4,
+                        scale: 0.97,
+                      }}
                       transition={{
                         duration: 0.18,
                         ease: [0.22, 0.61, 0.36, 1],

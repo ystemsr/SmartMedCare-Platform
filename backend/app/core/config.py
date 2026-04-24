@@ -53,6 +53,20 @@ class Settings(BaseSettings):
     WEATHER_DEFAULT_CITY: str = "Beijing"
     WEATHER_REFRESH_SECONDS: int = 1800  # 30 minutes
 
+    # Qdrant (vector database for RAG knowledge base)
+    QDRANT_URL: str = "http://qdrant:6333"
+    QDRANT_API_KEY: str = ""
+
+    # RAG knowledge base — chunking + embedding model.
+    # Embedding provider is OpenAI-compatible; defaults to OpenRouter.
+    KB_EMBEDDING_BASE_URL: str = "https://openrouter.ai/api/v1"
+    KB_EMBEDDING_API_KEY: str = ""
+    KB_EMBEDDING_MODEL: str = "qwen/qwen3-embedding-8b"
+    KB_EMBEDDING_DIM: int = 4096
+    KB_CHUNK_SIZE: int = 512
+    KB_CHUNK_OVERLAP: int = 128
+    KB_TOP_K: int = 5
+
     # Big data pipeline scheduler — bootstrap defaults when no DB config exists.
     # After an admin saves a schedule through the UI, the DB value overrides these.
     PIPELINE_SCHEDULE_ENABLED: bool = True

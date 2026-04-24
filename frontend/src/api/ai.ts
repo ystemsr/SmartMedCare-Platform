@@ -18,6 +18,7 @@ export interface AIPublicConfig {
   configured: boolean;
   reasoning_enabled: boolean;
   web_search_available: boolean;
+  knowledge_base_available: boolean;
 }
 
 export interface SearchResult {
@@ -91,6 +92,20 @@ export function testAIConfig(
   return http.post('/ai/config/test', payload);
 }
 
+export interface KnowledgeBaseHit {
+  document_id: number | null;
+  document_name: string;
+  chunk_index: number | null;
+  score: number;
+  content: string;
+}
+
+export interface KnowledgeBasePayload {
+  role_code: string;
+  query: string;
+  hits: KnowledgeBaseHit[];
+}
+
 /** Chat-stream delta object emitted on each SSE `data:` line. */
 export interface ChatDelta {
   content?: string;
@@ -108,6 +123,8 @@ export interface ChatDelta {
     queries: string[];
     groups: SearchGroup[];
   };
+  /** Fired once at the start of the stream when the knowledge base was used. */
+  knowledge_base?: KnowledgeBasePayload;
 }
 
 export interface ChatStreamHandlers {
@@ -120,6 +137,8 @@ export interface ChatStreamHandlers {
 export interface StreamChatOptions extends ChatStreamHandlers {
   /** When true, force the model to invoke the web-search tool first. */
   webSearch?: boolean;
+  /** When true, retrieve from the user's role-scoped knowledge base. */
+  useKnowledgeBase?: boolean;
 }
 
 /**
@@ -135,6 +154,7 @@ export async function streamChat(
   const token = getToken();
   const body: Record<string, unknown> = { messages, model };
   if (handlers.webSearch) body.web_search = true;
+  if (handlers.useKnowledgeBase) body.use_knowledge_base = true;
   const res = await fetch('/api/v1/ai/chat/stream', {
     method: 'POST',
     headers: {

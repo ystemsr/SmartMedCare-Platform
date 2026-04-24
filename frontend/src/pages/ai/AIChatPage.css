@@ -654,6 +654,14 @@
    * by the inner scroll container so the popover's rounded corners stay
    * clean during animation. */
 }
+/* Bottom (in-conversation) composer: pop the menu UPWARD so it doesn't
+ * fall off the viewport edge. Matching transform-origin keeps the
+ * framer-motion scale animation anchored at the correct corner. */
+.ai-model-menu.drop-up {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: bottom right;
+}
 .ai-model-menu-inner {
   max-height: 320px;
   overflow-y: auto;
@@ -991,10 +999,39 @@
   margin-bottom: 0;
 }
 .ai-streamdown [data-streamdown='unordered-list'],
-.ai-streamdown [data-streamdown='ordered-list'] {
+.ai-streamdown [data-streamdown='ordered-list'],
+.ai-streamdown ul,
+.ai-streamdown ol {
   padding-left: 26px;
 }
-.ai-streamdown [data-streamdown='list-item'] {
+/* The global reset at styles/reset.css zeroes out `list-style` on every
+ * <ul>/<ol>, which strips the bullets and numbers markdown relies on.
+ * Re-enable them inside the chat body only — elsewhere on the platform
+ * we still want the reset. `outside` keeps the marker column aligned
+ * with the padding above. */
+.ai-streamdown [data-streamdown='ordered-list'],
+.ai-streamdown ol {
+  list-style: decimal outside;
+}
+.ai-streamdown [data-streamdown='unordered-list'],
+.ai-streamdown ul {
+  list-style: disc outside;
+}
+/* Nested lists — alternate markers the way browsers normally would. */
+.ai-streamdown ol ol {
+  list-style-type: lower-alpha;
+}
+.ai-streamdown ol ol ol {
+  list-style-type: lower-roman;
+}
+.ai-streamdown ul ul {
+  list-style-type: circle;
+}
+.ai-streamdown ul ul ul {
+  list-style-type: square;
+}
+.ai-streamdown [data-streamdown='list-item'],
+.ai-streamdown li {
   margin-bottom: 4px;
 }
 .ai-streamdown a,
@@ -1971,4 +2008,193 @@
   margin: 10px 0;
   overflow-x: auto;
   overflow-y: hidden;
+}
+
+/* ===== Knowledge base bubble =====
+ * Visual language mirrors the search bubble but uses a cooler green tint
+ * so the two "context sources" stay distinguishable at a glance.
+ */
+.ai-kb-wrap {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+.ai-kb {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 80%;
+  background: #f4f8f3;
+  border: 1px solid #dfe9da;
+  color: #6b7f68;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02);
+  padding: 8px 14px;
+  transition:
+    padding 0.25s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+.ai-kb.expanded {
+  width: 100%;
+  padding: 12px 14px;
+  background: #eff5ed;
+  border-color: #cedec7;
+}
+.ai-kb-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c9178;
+  user-select: none;
+  -webkit-user-select: none;
+  width: 100%;
+}
+.ai-kb-head.clickable {
+  cursor: pointer;
+}
+.ai-kb-head.clickable:hover {
+  color: #4e6a4a;
+}
+.ai-kb-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b9467;
+  flex-shrink: 0;
+}
+.ai-kb-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-kb-caret {
+  display: inline-flex;
+  align-items: center;
+  color: #9ab296;
+}
+
+.ai-kb-details-wrap {
+  overflow: hidden;
+}
+.ai-kb-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  padding-right: 6px;
+  border-top: 1px dashed #cedec7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #cedec7 transparent;
+}
+.ai-kb-details::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-kb-details::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.ai-kb-details::-webkit-scrollbar-thumb {
+  background: #cedec7;
+  border-radius: 999px;
+}
+.ai-kb-details::-webkit-scrollbar-thumb:hover {
+  background: #b5cbad;
+}
+
+.ai-kb-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fffdf9;
+  border: 1px solid #dfe9da;
+  border-radius: 12px;
+  color: inherit;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.ai-kb-item:hover {
+  background: #fbfefa;
+  border-color: #b5cbad;
+}
+.ai-kb-item-idx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #dfe9da;
+  color: #4e6a4a;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+.ai-kb-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.ai-kb-item-title {
+  font-weight: 600;
+  color: var(--ai-ink);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+.ai-kb-item-chunk {
+  color: #9ab296;
+  font-weight: 500;
+  margin-left: 6px;
+  font-size: 11.5px;
+}
+.ai-kb-item-desc {
+  font-size: 12.5px;
+  color: #6c7d6a;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.ai-kb-item-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #9ab296;
+}
+.ai-kb-item-score {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eaf1e7;
+  color: #4e6a4a;
+  font-weight: 600;
+}
+
+/* Knowledge-base pill active state — tinted green to match the bubble. */
+.ai-pill.v-kb.on {
+  background: #eaf1e7;
+  border-color: #b5cbad;
+  color: #4e6a4a;
 }

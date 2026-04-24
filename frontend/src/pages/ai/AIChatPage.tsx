@@ -671,7 +671,6 @@ const AIChatPage: React.FC = () => {
           <MarkdownStream
             content={m.content}
             isStreaming={stillStreamingContent}
-            showCursor={stillStreamingContent}
           />
         )}
       </div>

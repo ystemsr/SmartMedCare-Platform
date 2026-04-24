@@ -498,6 +498,51 @@ async def chat_stream(
     def _sse(obj: Dict[str, Any]) -> str:
         return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
+    # Hidden tool-use hint. Appended to the latest user turn ONLY when the
+    # upstream provider rejects the forced `tool_choice` value (some
+    # OpenRouter providers — e.g. Alibaba — support `tools` but not the
+    # forced-function form of `tool_choice`). It is never echoed back to
+    # the UI; it exists only in the outgoing payload to the model.
+    _TOOL_USE_HINT = (
+        "<system>Must call the `web_search` tool to answer the question.</system>\n\n"
+    )
+
+    def _messages_with_tool_hint(
+        msgs: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        out = list(msgs)
+        for i in range(len(out) - 1, -1, -1):
+            if out[i].get("role") != "user":
+                continue
+            content = out[i].get("content")
+            if isinstance(content, list):
+                new_parts = list(content)
+                inserted = False
+                for j, part in enumerate(new_parts):
+                    if (
+                        isinstance(part, dict)
+                        and part.get("type") == "text"
+                    ):
+                        new_parts[j] = {
+                            "type": "text",
+                            "text": _TOOL_USE_HINT + (part.get("text") or ""),
+                        }
+                        inserted = True
+                        break
+                if not inserted:
+                    new_parts.insert(
+                        0,
+                        {"type": "text", "text": _TOOL_USE_HINT.strip()},
+                    )
+                out[i] = {**out[i], "content": new_parts}
+            else:
+                out[i] = {
+                    **out[i],
+                    "content": _TOOL_USE_HINT + (content or ""),
+                }
+            break
+        return out
+
     async def event_stream():
         try:
             if kb_event is not None:
@@ -505,90 +550,139 @@ async def chat_stream(
             async with httpx.AsyncClient(timeout=None) as client:
                 iteration = 0
                 while True:
-                    payload = dict(base_payload)
-                    payload["messages"] = messages
-                    if brave_enabled:
-                        if iteration == 0 and force_first_search:
-                            payload["tool_choice"] = {
-                                "type": "function",
-                                "function": {"name": "web_search"},
-                            }
-                        else:
-                            payload["tool_choice"] = "auto"
+                    # Build payload variants ordered most- to least-featured.
+                    # Primary: forced `tool_choice` (when web_search is on and
+                    # this is the first iteration). Some OpenRouter providers
+                    # reject the forced-function form with HTTP 404
+                    # "No endpoints found that support the provided
+                    # 'tool_choice' value" — in that case we drop
+                    # `tool_choice` AND inject a hidden instruction into
+                    # the latest user turn that tells the model to call
+                    # `web_search`. The hint is never echoed back to the UI.
+                    base_variant: Dict[str, Any] = dict(base_payload)
+                    base_variant["messages"] = messages
+                    forced_this_turn = (
+                        brave_enabled
+                        and iteration == 0
+                        and force_first_search
+                    )
+                    if forced_this_turn:
+                        base_variant["tool_choice"] = {
+                            "type": "function",
+                            "function": {"name": "web_search"},
+                        }
+                    variants: List[Dict[str, Any]] = [base_variant]
+                    if forced_this_turn:
+                        # Fallback A: drop forced tool_choice, inject the
+                        # hidden tool-use instruction so the model still
+                        # invokes web_search on its own.
+                        v = dict(base_variant)
+                        v.pop("tool_choice", None)
+                        v["messages"] = _messages_with_tool_hint(messages)
+                        variants.append(v)
+                    if "tools" in base_variant:
+                        # Fallback B: provider doesn't support tools at all;
+                        # drop them entirely so the request at least lands.
+                        v = dict(base_variant)
+                        v.pop("tool_choice", None)
+                        v.pop("tools", None)
+                        variants.append(v)
 
                     tool_calls_buf: Dict[int, Dict[str, str]] = {}
                     finish_reason: Optional[str] = None
 
-                    async with client.stream(
-                        "POST", url, headers=headers, json=payload
-                    ) as resp:
-                        if resp.status_code != 200:
-                            err_bytes = await resp.aread()
-                            err_text = err_bytes.decode(
-                                "utf-8", errors="replace"
-                            )[:500]
-                            logger.warning(
-                                "AI upstream %s: %s", resp.status_code, err_text
-                            )
-                            yield (
-                                "event: error\n"
-                                f"data: {json.dumps({'message': f'上游错误 HTTP {resp.status_code}: {err_text}'}, ensure_ascii=False)}\n\n"
-                            )
-                            return
-
-                        async for raw_line in resp.aiter_lines():
-                            if not raw_line:
-                                continue
-                            line = raw_line.strip()
-                            if not line.startswith("data:"):
-                                continue
-                            data_part = line[5:].strip()
-                            if data_part == "[DONE]":
-                                break
-                            try:
-                                obj = json.loads(data_part)
-                            except json.JSONDecodeError:
-                                continue
-                            choices = obj.get("choices") or []
-                            if not choices:
-                                continue
-                            delta = choices[0].get("delta") or {}
-                            out: Dict[str, Any] = {}
-                            content = delta.get("content")
-                            reasoning = delta.get("reasoning")
-                            # Some providers nest reasoning under a dict
-                            if isinstance(reasoning, dict):
-                                reasoning = reasoning.get(
-                                    "content"
-                                ) or reasoning.get("text")
-                            if content:
-                                out["content"] = content
-                            if reasoning:
-                                out["reasoning"] = reasoning
-                            # Tool-call streaming: accumulate name + args
-                            for tc in delta.get("tool_calls") or []:
-                                if not isinstance(tc, dict):
-                                    continue
-                                idx = tc.get("index")
-                                if idx is None:
-                                    idx = 0
-                                buf = tool_calls_buf.setdefault(
-                                    int(idx),
-                                    {"id": "", "name": "", "arguments": ""},
+                    for attempt_idx, attempt_payload in enumerate(variants):
+                        is_last_attempt = attempt_idx == len(variants) - 1
+                        async with client.stream(
+                            "POST", url, headers=headers, json=attempt_payload
+                        ) as resp:
+                            if resp.status_code != 200:
+                                err_bytes = await resp.aread()
+                                err_text = err_bytes.decode(
+                                    "utf-8", errors="replace"
+                                )[:500]
+                                err_lower = err_text.lower()
+                                tool_related = (
+                                    resp.status_code in (400, 404)
+                                    and (
+                                        "tool_choice" in err_lower
+                                        or "does not support tool" in err_lower
+                                        or "no endpoints found" in err_lower
+                                    )
                                 )
-                                if tc.get("id"):
-                                    buf["id"] = tc["id"]
-                                fn = tc.get("function") or {}
-                                if fn.get("name"):
-                                    buf["name"] = fn["name"]
-                                if fn.get("arguments"):
-                                    buf["arguments"] += fn["arguments"]
-                            fr = choices[0].get("finish_reason")
-                            if fr:
-                                finish_reason = fr
-                                out["finish_reason"] = fr
-                            if out:
-                                yield _sse(out)
+                                if tool_related and not is_last_attempt:
+                                    logger.info(
+                                        "AI upstream rejected tools/tool_choice (HTTP %s); retrying with reduced payload",
+                                        resp.status_code,
+                                    )
+                                    continue
+                                logger.warning(
+                                    "AI upstream %s: %s",
+                                    resp.status_code,
+                                    err_text,
+                                )
+                                yield (
+                                    "event: error\n"
+                                    f"data: {json.dumps({'message': f'上游错误 HTTP {resp.status_code}: {err_text}'}, ensure_ascii=False)}\n\n"
+                                )
+                                return
+
+                            async for raw_line in resp.aiter_lines():
+                                if not raw_line:
+                                    continue
+                                line = raw_line.strip()
+                                if not line.startswith("data:"):
+                                    continue
+                                data_part = line[5:].strip()
+                                if data_part == "[DONE]":
+                                    break
+                                try:
+                                    obj = json.loads(data_part)
+                                except json.JSONDecodeError:
+                                    continue
+                                choices = obj.get("choices") or []
+                                if not choices:
+                                    continue
+                                delta = choices[0].get("delta") or {}
+                                out: Dict[str, Any] = {}
+                                content = delta.get("content")
+                                reasoning = delta.get("reasoning")
+                                # Some providers nest reasoning under a dict
+                                if isinstance(reasoning, dict):
+                                    reasoning = reasoning.get(
+                                        "content"
+                                    ) or reasoning.get("text")
+                                if content:
+                                    out["content"] = content
+                                if reasoning:
+                                    out["reasoning"] = reasoning
+                                # Tool-call streaming: accumulate name + args
+                                for tc in delta.get("tool_calls") or []:
+                                    if not isinstance(tc, dict):
+                                        continue
+                                    idx = tc.get("index")
+                                    if idx is None:
+                                        idx = 0
+                                    buf = tool_calls_buf.setdefault(
+                                        int(idx),
+                                        {"id": "", "name": "", "arguments": ""},
+                                    )
+                                    if tc.get("id"):
+                                        buf["id"] = tc["id"]
+                                    fn = tc.get("function") or {}
+                                    if fn.get("name"):
+                                        buf["name"] = fn["name"]
+                                    if fn.get("arguments"):
+                                        buf["arguments"] += fn["arguments"]
+                                fr = choices[0].get("finish_reason")
+                                if fr:
+                                    finish_reason = fr
+                                    out["finish_reason"] = fr
+                                if out:
+                                    yield _sse(out)
+                        # Upstream stream finished successfully — no need to
+                        # try the remaining fallback variants.
+                        break
 
                     # End of one upstream stream. Decide next step.
                     if finish_reason == "tool_calls" and tool_calls_buf:

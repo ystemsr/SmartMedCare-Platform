@@ -1,8 +1,15 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Folder, File as FileIcon, RefreshCw, ChevronRight } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Folder,
+  File as FileIcon,
+  RefreshCw,
+  ChevronRight,
+  Copy,
+  ArrowUpDown,
+} from 'lucide-react';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PageHeader from '../../components/bigdata/PageHeader';
-import { Button, Card, Chip, Drawer } from '@/components/ui';
+import { Alert, Button, Card, Chip, Drawer, Select } from '@/components/ui';
 import { listHdfs, previewHdfs } from '../../api/bigdata';
 import { formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
@@ -23,7 +30,10 @@ function parentPath(path: string): string {
 function formatSize(bytes: number): string {
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const exp = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
   return `${(bytes / 1024 ** exp).toFixed(exp === 0 ? 0 : 1)} ${units[exp]}`;
 }
 
@@ -36,23 +46,47 @@ const crumbLinkStyle: React.CSSProperties = {
   fontSize: 'var(--smc-fs-md)',
 };
 
+type SortKey = 'name' | 'size' | 'modified';
+type SortDir = 'asc' | 'desc';
+
+const DEFAULT_PATH = '/warehouse/raw';
+
 const HdfsBrowserPage: React.FC = () => {
-  const [path, setPath] = useState('/');
+  const [path, setPath] = useState(DEFAULT_PATH);
   const [entries, setEntries] = useState<HdfsEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [page, setPage] = useState(1);
+  const pageSize = 30;
+
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewPath, setPreviewPath] = useState('');
-  const [previewContent, setPreviewContent] = useState('');
+  const [previewLines, setPreviewLines] = useState<string[]>([]);
+  const [previewTruncated, setPreviewTruncated] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [lineCount, setLineCount] = useState<number>(200);
 
   const fetchEntries = useCallback(async (target: string) => {
     setLoading(true);
     try {
       const res = await listHdfs(target);
       setEntries(res.data.entries);
+      setPage(1);
     } catch (err) {
       setEntries([]);
+      // Landing path may not exist on a fresh cluster; fall back to root silently.
+      if (target === DEFAULT_PATH) {
+        try {
+          const fallback = await listHdfs('/');
+          setEntries(fallback.data.entries);
+          setPath('/');
+          return;
+        } catch {
+          // fall through to the error message below
+        }
+      }
       message.error(err instanceof Error ? err.message : '加载目录失败');
     } finally {
       setLoading(false);
@@ -63,14 +97,52 @@ const HdfsBrowserPage: React.FC = () => {
     fetchEntries(path);
   }, [path, fetchEntries]);
 
-  const openPreview = async (target: string) => {
+  const sorted = useMemo(() => {
+    const copy = [...entries];
+    copy.sort((a, b) => {
+      // Directories always come first regardless of sort
+      if (a.type !== b.type) return a.type === 'DIRECTORY' ? -1 : 1;
+      let cmp = 0;
+      if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+      else if (sortKey === 'size') cmp = (a.size || 0) - (b.size || 0);
+      else if (sortKey === 'modified') {
+        const am = Date.parse(String(a.modified || 0)) || 0;
+        const bm = Date.parse(String(b.modified || 0)) || 0;
+        cmp = am - bm;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return copy;
+  }, [entries, sortKey, sortDir]);
+
+  const paged = sorted.slice((page - 1) * pageSize, page * pageSize);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const openPreview = async (target: string, lines = lineCount) => {
     setPreviewPath(target);
-    setPreviewContent('');
+    setPreviewLines([]);
+    setPreviewTruncated(false);
     setPreviewOpen(true);
     setPreviewLoading(true);
     try {
-      const res = await previewHdfs(target, 200);
-      setPreviewContent(res.data.content);
+      const res = await previewHdfs(target, lines);
+      const rawLines = (
+        res.data as unknown as { lines?: string[]; content?: string }
+      ).lines;
+      if (Array.isArray(rawLines)) setPreviewLines(rawLines);
+      else if (typeof rawLines === 'string') setPreviewLines(String(rawLines).split('\n'));
+      else if ((res.data as { content?: string }).content) {
+        setPreviewLines(String((res.data as { content?: string }).content).split('\n'));
+      }
+      setPreviewTruncated(Boolean((res.data as { truncated?: boolean }).truncated));
     } catch (err) {
       message.error(err instanceof Error ? err.message : '预览失败');
     } finally {
@@ -78,13 +150,34 @@ const HdfsBrowserPage: React.FC = () => {
     }
   };
 
+  const copyPath = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      message.success('路径已复制');
+    } catch {
+      message.error('复制失败');
+    }
+  };
+
+  const sortArrow = (key: SortKey) =>
+    sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+
   const columns: AppTableColumn<HdfsEntry>[] = [
     {
-      title: '名称',
+      title: (
+        <span
+          role="button"
+          tabIndex={0}
+          style={{ cursor: 'pointer' }}
+          onClick={() => toggleSort('name')}
+        >
+          名称{sortArrow('name')}
+        </span>
+      ) as unknown as string,
       dataIndex: 'name',
       render: (_, record) => (
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {record.type === 'directory' ? (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {record.type === 'DIRECTORY' ? (
             <Folder size={16} color="var(--smc-warning)" />
           ) : (
             <FileIcon size={16} color="var(--smc-text-2)" />
@@ -101,14 +194,24 @@ const HdfsBrowserPage: React.FC = () => {
             }}
             onClick={() => {
               const next = joinPath(path, record.name);
-              if (record.type === 'directory') {
-                setPath(next);
-              } else {
-                openPreview(next);
-              }
+              if (record.type === 'DIRECTORY') setPath(next);
+              else openPreview(next);
             }}
           >
             {record.name}
+          </button>
+          <button
+            type="button"
+            aria-label="复制路径"
+            onClick={() => copyPath(joinPath(path, record.name))}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              color: 'var(--smc-text-3)',
+            }}
+          >
+            <Copy size={13} />
           </button>
         </div>
       ),
@@ -116,21 +219,40 @@ const HdfsBrowserPage: React.FC = () => {
     {
       title: '类型',
       dataIndex: 'type',
-      width: 110,
+      width: 100,
       render: (value) => (
-        <Chip tone={value === 'directory' ? 'warning' : 'default'} outlined>
-          {value === 'directory' ? '目录' : '文件'}
+        <Chip tone={value === 'DIRECTORY' ? 'warning' : 'default'} outlined>
+          {value === 'DIRECTORY' ? '目录' : '文件'}
         </Chip>
       ),
     },
     {
-      title: '大小',
+      title: (
+        <span
+          role="button"
+          tabIndex={0}
+          style={{ cursor: 'pointer' }}
+          onClick={() => toggleSort('size')}
+        >
+          大小{sortArrow('size')}
+        </span>
+      ) as unknown as string,
       dataIndex: 'size',
       width: 120,
-      render: (value, record) => (record.type === 'directory' ? '-' : formatSize(Number(value ?? 0))),
+      render: (value, record) =>
+        record.type === 'DIRECTORY' ? '—' : formatSize(Number(value ?? 0)),
     },
     {
-      title: '修改时间',
+      title: (
+        <span
+          role="button"
+          tabIndex={0}
+          style={{ cursor: 'pointer' }}
+          onClick={() => toggleSort('modified')}
+        >
+          修改时间{sortArrow('modified')}
+        </span>
+      ) as unknown as string,
       dataIndex: 'modified',
       width: 180,
       render: (value) => formatDateTime(value as string),
@@ -143,8 +265,12 @@ const HdfsBrowserPage: React.FC = () => {
     <div>
       <PageHeader
         title="HDFS 浏览"
-        description="浏览 HDFS 文件系统的目录结构与文件内容"
+        description="浏览 HDFS 文件系统，支持排序、面包屑导航与文件预览"
       />
+
+      <Alert severity="info" style={{ marginBottom: 16 }}>
+        此页面用于运维/排障，确认数据刷新任务是否真的写出了文件。普通用户一般不需要进入；触发数据刷新请到「大数据总览」。默认打开业务数据目录 <code style={{ fontFamily: 'monospace' }}>/warehouse/raw</code>，点击目录可层层深入，点击文件可预览前若干行。
+      </Alert>
 
       <Card style={{ padding: 16, marginBottom: 16 }}>
         <div
@@ -165,7 +291,11 @@ const HdfsBrowserPage: React.FC = () => {
               minWidth: 0,
             }}
           >
-            <button type="button" style={crumbLinkStyle} onClick={() => setPath('/')}>
+            <button
+              type="button"
+              style={crumbLinkStyle}
+              onClick={() => setPath('/')}
+            >
               root
             </button>
             {segments.map((segment, index) => {
@@ -178,19 +308,43 @@ const HdfsBrowserPage: React.FC = () => {
                 >
                   <ChevronRight size={14} color="var(--smc-text-3)" />
                   {isLast ? (
-                    <span style={{ color: 'var(--smc-text)', fontWeight: 600 }}>{segment}</span>
+                    <span style={{ color: 'var(--smc-text)', fontWeight: 600 }}>
+                      {segment}
+                    </span>
                   ) : (
-                    <button type="button" style={crumbLinkStyle} onClick={() => setPath(next)}>
+                    <button
+                      type="button"
+                      style={crumbLinkStyle}
+                      onClick={() => setPath(next)}
+                    >
                       {segment}
                     </button>
                   )}
                 </span>
               );
             })}
+            <button
+              type="button"
+              aria-label="复制当前路径"
+              onClick={() => copyPath(path)}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                color: 'var(--smc-text-3)',
+                marginLeft: 6,
+              }}
+            >
+              <Copy size={13} />
+            </button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {path !== '/' && (
-              <Button size="sm" variant="outlined" onClick={() => setPath(parentPath(path))}>
+              <Button
+                size="sm"
+                variant="outlined"
+                onClick={() => setPath(parentPath(path))}
+              >
                 返回上级
               </Button>
             )}
@@ -204,14 +358,38 @@ const HdfsBrowserPage: React.FC = () => {
             </Button>
           </div>
         </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: 'var(--smc-text-2)',
+            display: 'flex',
+            gap: 12,
+            alignItems: 'center',
+          }}
+        >
+          <ArrowUpDown size={12} />
+          共 {entries.length} 项（{entries.filter((e) => e.type === 'DIRECTORY').length}{' '}
+          目录 / {entries.filter((e) => e.type !== 'DIRECTORY').length} 文件）
+        </div>
       </Card>
 
       <AppTable<HdfsEntry>
         columns={columns}
-        dataSource={entries}
+        dataSource={paged}
         loading={loading}
         rowKey="name"
-        pagination={false}
+        pagination={{
+          current: page,
+          pageSize,
+          total: entries.length,
+          showSizeChanger: true,
+          showTotal: (t) => `共 ${t} 项`,
+        }}
+        onChange={(pag) => {
+          if (pag.current) setPage(pag.current);
+        }}
         emptyText="当前目录为空"
       />
 
@@ -219,20 +397,64 @@ const HdfsBrowserPage: React.FC = () => {
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
         placement="right"
-        width={720}
+        width={780}
         title="文件预览"
       >
         <div
           style={{
-            fontSize: 'var(--smc-fs-sm)',
-            color: 'var(--smc-text-2)',
-            marginBottom: 16,
-            fontFamily: 'monospace',
-            wordBreak: 'break-all',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 12,
+            flexWrap: 'wrap',
           }}
         >
-          {previewPath}
+          <div
+            style={{
+              fontSize: 'var(--smc-fs-sm)',
+              color: 'var(--smc-text-2)',
+              fontFamily: 'monospace',
+              wordBreak: 'break-all',
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {previewPath}
+          </div>
+          <Button size="sm" variant="text" onClick={() => copyPath(previewPath)}>
+            <Copy size={13} style={{ marginRight: 4 }} />
+            复制
+          </Button>
+          <div style={{ width: 130 }}>
+            <Select<number>
+              value={lineCount}
+              onChange={(v) => {
+                setLineCount(v);
+                if (previewPath) openPreview(previewPath, v);
+              }}
+              options={[
+                { label: '前 100 行', value: 100 },
+                { label: '前 200 行', value: 200 },
+                { label: '前 500 行', value: 500 },
+                { label: '前 2000 行', value: 2000 },
+              ]}
+            />
+          </div>
         </div>
+
+        {previewTruncated && (
+          <div
+            style={{
+              padding: '6px 10px',
+              background: 'color-mix(in oklab, var(--smc-warning) 15%, transparent)',
+              borderRadius: 6,
+              fontSize: 12,
+              marginBottom: 10,
+            }}
+          >
+            文件较大，预览已截断
+          </div>
+        )}
 
         {previewLoading ? (
           <div style={{ color: 'var(--smc-text-2)' }}>加载中...</div>
@@ -252,7 +474,7 @@ const HdfsBrowserPage: React.FC = () => {
               whiteSpace: 'pre-wrap',
             }}
           >
-            {previewContent || '文件为空或不可预览'}
+            {previewLines.length > 0 ? previewLines.join('\n') : '文件为空或不可预览'}
           </pre>
         )}
       </Drawer>

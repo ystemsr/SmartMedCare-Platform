@@ -18,6 +18,15 @@ _FORBIDDEN_RE = re.compile(
     r"\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|merge|load|msck)\b",
     re.IGNORECASE,
 )
+_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
+_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+def _strip_sql_comments(sql: str) -> str:
+    """Remove -- line comments and /* */ block comments so the SELECT/WITH check
+    and forbidden-keyword scan can see the actual statement body.
+    """
+    return _BLOCK_COMMENT_RE.sub(" ", _LINE_COMMENT_RE.sub("", sql))
 
 
 def _hive_host() -> str:
@@ -39,12 +48,19 @@ def _validate_select(sql: str) -> str:
     stripped = sql.strip().rstrip(";").strip()
     if not stripped:
         raise ValueError("SQL is empty")
-    if ";" in stripped:
+    # Comments can legally precede the statement and can also hide forbidden
+    # keywords from the scan, so strip them before validating the body.
+    comment_free = _strip_sql_comments(stripped).strip()
+    if not comment_free:
+        raise ValueError("SQL is empty")
+    if ";" in comment_free:
         raise ValueError("Multiple statements are not allowed")
-    if not _SELECT_RE.match(stripped):
+    if not _SELECT_RE.match(comment_free):
         raise ValueError("Only SELECT / WITH queries are allowed")
-    if _FORBIDDEN_RE.search(stripped):
+    if _FORBIDDEN_RE.search(comment_free):
         raise ValueError("Only read-only SELECT queries are allowed")
+    # Return the original (still with comments) so Hive sees exactly what the
+    # user intended to run.
     return stripped
 
 

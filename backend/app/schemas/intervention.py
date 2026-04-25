@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class InterventionCreate(BaseModel):
@@ -15,6 +15,15 @@ class InterventionCreate(BaseModel):
     status: str = "planned"
     content: str
     planned_at: Optional[datetime] = None
+
+    @field_validator("followup_id", mode="before")
+    @classmethod
+    def _normalize_followup_id(cls, v):
+        # Coerce missing / empty / zero values to None so the FK column stays
+        # NULL instead of pointing at a non-existent row.
+        if v in (None, "", 0, "0"):
+            return None
+        return v
 
 
 class InterventionUpdate(BaseModel):
@@ -39,12 +48,14 @@ class InterventionResponse(BaseModel):
 
     id: int
     elder_id: int
+    elder_name: Optional[str] = None
     followup_id: Optional[int] = None
     type: str
     status: str
     content: Optional[str] = None
     planned_at: Optional[datetime] = None
     performed_by: Optional[int] = None
+    performed_by_name: Optional[str] = None
     performed_at: Optional[datetime] = None
     result: Optional[str] = None
     created_at: datetime

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.alert import Alert
 from app.models.followup import Followup, FollowupRecord
 from app.schemas.followup import FollowupResponse
 from app.utils.pagination import PaginationParams, paginate
@@ -15,13 +16,29 @@ from app.utils.pagination import PaginationParams, paginate
 logger = logging.getLogger(__name__)
 
 
+async def _load_alerts(db: AsyncSession, alert_ids: list[int]) -> list[Alert]:
+    """Fetch Alert rows for the given IDs, preserving input order."""
+    if not alert_ids:
+        return []
+    rows = await db.execute(
+        select(Alert).where(
+            Alert.id.in_(alert_ids), Alert.deleted_at.is_(None)
+        )
+    )
+    alerts = {a.id: a for a in rows.scalars().all()}
+    return [alerts[i] for i in alert_ids if i in alerts]
+
+
 class FollowupRepository:
     """Data access layer for followups."""
 
     @staticmethod
     async def create(db: AsyncSession, data: dict) -> Followup:
-        """Create a new followup."""
+        """Create a new followup and link any referenced alerts."""
+        alert_ids = data.pop("alert_ids", None) or []
         followup = Followup(**data)
+        if alert_ids:
+            followup.alerts = await _load_alerts(db, alert_ids)
         db.add(followup)
         await db.flush()
         await db.refresh(followup)
@@ -29,14 +46,19 @@ class FollowupRepository:
 
     @staticmethod
     async def get_by_id(db: AsyncSession, followup_id: int) -> Optional[Followup]:
-        """Get a followup by ID with records loaded."""
+        """Get a followup by ID with records and alerts loaded."""
         stmt = (
             select(Followup)
-            .options(selectinload(Followup.records))
+            .options(
+                selectinload(Followup.records),
+                selectinload(Followup.alerts),
+            )
             .where(Followup.id == followup_id, Followup.deleted_at.is_(None))
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
+
+    ACTIVE_STATUSES = ("todo", "in_progress", "overdue")
 
     @staticmethod
     async def get_list(
@@ -48,9 +70,14 @@ class FollowupRepository:
         plan_type: Optional[str] = None,
         date_start: Optional[str] = None,
         date_end: Optional[str] = None,
+        active_only: bool = False,
     ):
         """Get paginated list of followups with filters."""
-        query = select(Followup).where(Followup.deleted_at.is_(None))
+        query = (
+            select(Followup)
+            .options(selectinload(Followup.alerts))
+            .where(Followup.deleted_at.is_(None))
+        )
 
         if elder_id is not None:
             query = query.where(Followup.elder_id == elder_id)
@@ -58,6 +85,8 @@ class FollowupRepository:
             query = query.where(Followup.assigned_to == assigned_to)
         if status is not None:
             query = query.where(Followup.status == status)
+        elif active_only:
+            query = query.where(Followup.status.in_(FollowupRepository.ACTIVE_STATUSES))
         if plan_type is not None:
             query = query.where(Followup.plan_type == plan_type)
         if date_start is not None:
@@ -71,13 +100,17 @@ class FollowupRepository:
     async def update(
         db: AsyncSession, followup_id: int, data: dict
     ) -> Optional[Followup]:
-        """Update a followup's fields."""
+        """Update a followup's fields; replace alerts when alert_ids given."""
         followup = await FollowupRepository.get_by_id(db, followup_id)
         if followup is None:
             return None
+        alert_ids = data.pop("alert_ids", None)
         for key, value in data.items():
             if value is not None:
                 setattr(followup, key, value)
+        if alert_ids is not None:
+            # Explicit list overwrites — pass [] to clear all associations.
+            followup.alerts = await _load_alerts(db, alert_ids)
         await db.flush()
         await db.refresh(followup)
         return followup

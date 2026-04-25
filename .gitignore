@@ -9,8 +9,12 @@
 datasets/
 multitask_health_model_teacher.pt
 
+backend/scripts/
+
 .claude/worktrees/
 .worktrees/
+
+*reference/
 
 # Node.js
 node_modules/

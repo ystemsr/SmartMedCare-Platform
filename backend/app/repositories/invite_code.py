@@ -19,23 +19,18 @@ class InviteCodeRepository:
     async def get_active_by_elder_id(
         db: AsyncSession, elder_id: int
     ) -> Optional[ElderInviteCode]:
-        """Get the active (non-expired, not exhausted) invite code for an elder."""
-        now = datetime.now(timezone.utc)
+        """Get the non-deleted invite code for an elder (permanent per elder)."""
         stmt = (
             select(ElderInviteCode)
             .where(
                 ElderInviteCode.elder_id == elder_id,
                 ElderInviteCode.deleted_at.is_(None),
-                ElderInviteCode.expires_at > now,
             )
             .order_by(ElderInviteCode.created_at.desc())
             .limit(1)
         )
         result = await db.execute(stmt)
-        code = result.scalar_one_or_none()
-        if code and code.used_count >= code.max_uses:
-            return None
-        return code
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def get_by_code(db: AsyncSession, code: str) -> Optional[ElderInviteCode]:

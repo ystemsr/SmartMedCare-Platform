@@ -15,6 +15,7 @@ from app.schemas.elder import (
     AccountStatusUpdate,
     ElderCreate,
     ElderResponse,
+    ElderSelfUpdate,
     ElderUpdate,
 )
 from app.schemas.health_archive import (
@@ -58,6 +59,25 @@ async def get_elder_self(
     return success_response(ElderResponse.model_validate(elder).model_dump())
 
 
+@router.put("/me")
+async def update_elder_self(
+    body: ElderSelfUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("elder:self_read")),
+):
+    """Allow the current elder to update their own contact details."""
+    from app.repositories.elder import ElderRepository
+    elder = await ElderRepository.get_by_user_id(db, current_user.id)
+    if elder is None:
+        return error_response(NOT_FOUND, "未找到关联的老人档案")
+
+    update_payload = ElderUpdate(**body.model_dump(exclude_unset=True))
+    result = await ElderService.update_elder(db, elder.id, update_payload)
+    if result is None:
+        return error_response(NOT_FOUND, "未找到关联的老人档案")
+    return success_response(data=result.model_dump(mode="json"))
+
+
 @router.get("/me/family")
 async def get_elder_family(
     db: AsyncSession = Depends(get_db),
@@ -69,14 +89,17 @@ async def get_elder_family(
     if elder is None:
         return error_response(NOT_FOUND, "未找到关联的老人档案")
 
-    # Query family members
+    # Query family members joined with user profile so the UI can render names.
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     # Import FamilyMember - may not exist yet if family backend hasn't merged
     try:
         from app.models.family_member import FamilyMember
         stmt = (
             select(FamilyMember)
+            .options(selectinload(FamilyMember.user))
             .where(FamilyMember.elder_id == elder.id, FamilyMember.deleted_at.is_(None))
+            .order_by(FamilyMember.created_at.desc())
         )
         result = await db.execute(stmt)
         members = result.scalars().all()
@@ -84,6 +107,9 @@ async def get_elder_family(
             {
                 "id": m.id,
                 "user_id": m.user_id,
+                "username": m.user.username if m.user else None,
+                "real_name": m.user.real_name if m.user else None,
+                "phone": m.user.phone if m.user else None,
                 "relationship": m.relationship,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
@@ -102,10 +128,10 @@ async def get_elder_family(
 async def create_elder(
     body: ElderCreate,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(require_permission("elder:create")),
+    current_user=Depends(require_permission("elder:create")),
 ):
     """Create a new elder profile."""
-    result = await ElderService.create_elder(db, body)
+    result = await ElderService.create_elder(db, body, creator=current_user)
     return success_response(data=result.model_dump(mode="json"))
 
 
@@ -117,13 +143,14 @@ async def list_elders(
     account_status: Optional[str] = Query(None),
     risk_level: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    _user=Depends(require_permission("elder:read")),
+    current_user=Depends(require_permission("elder:read")),
 ):
     """List elders with pagination and filters."""
     result = await ElderService.list_elders(
         db, pagination,
         gender=gender, tag=tag,
         account_status=account_status, risk_level=risk_level,
+        viewer=current_user,
     )
     return success_response(data=result.model_dump(mode="json"))
 
@@ -142,10 +169,10 @@ async def get_tags(
 async def get_elder(
     elder_id: int,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(require_permission("elder:read")),
+    current_user=Depends(require_permission("elder:read")),
 ):
     """Get elder details by ID."""
-    result = await ElderService.get_elder(db, elder_id)
+    result = await ElderService.get_elder(db, elder_id, viewer=current_user)
     if result is None:
         return error_response(NOT_FOUND, "Elder not found")
     return success_response(data=result.model_dump(mode="json"))
@@ -156,10 +183,12 @@ async def update_elder(
     elder_id: int,
     body: ElderUpdate,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(require_permission("elder:update")),
+    current_user=Depends(require_permission("elder:update")),
 ):
     """Update elder information."""
-    result = await ElderService.update_elder(db, elder_id, body)
+    result = await ElderService.update_elder(
+        db, elder_id, body, editor=current_user
+    )
     if result is None:
         return error_response(NOT_FOUND, "Elder not found")
     return success_response(data=result.model_dump(mode="json"))
@@ -169,10 +198,10 @@ async def update_elder(
 async def delete_elder(
     elder_id: int,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(require_permission("elder:delete")),
+    current_user=Depends(require_permission("elder:delete")),
 ):
     """Soft delete an elder profile."""
-    result = await ElderService.delete_elder(db, elder_id)
+    result = await ElderService.delete_elder(db, elder_id, editor=current_user)
     if not result:
         return error_response(NOT_FOUND, "Elder not found")
     return success_response(message="Elder deleted")
@@ -182,10 +211,12 @@ async def delete_elder(
 async def reset_password(
     elder_id: int,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(require_permission("elder:update")),
+    current_user=Depends(require_permission("elder:update")),
 ):
     """Reset elder account password."""
-    plain_password = await ElderService.reset_password(db, elder_id)
+    plain_password = await ElderService.reset_password(
+        db, elder_id, editor=current_user
+    )
     if plain_password is None:
         return error_response(NOT_FOUND, "Elder not found")
     return success_response(data={"new_password": plain_password})
@@ -196,12 +227,14 @@ async def update_account_status(
     elder_id: int,
     body: AccountStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(require_permission("elder:update")),
+    current_user=Depends(require_permission("elder:update")),
 ):
     """Enable or disable an elder account."""
     if body.account_status not in ("active", "disabled"):
         return error_response(PARAM_ERROR, "account_status must be 'active' or 'disabled'")
-    result = await ElderService.update_account_status(db, elder_id, body.account_status)
+    result = await ElderService.update_account_status(
+        db, elder_id, body.account_status, editor=current_user
+    )
     if not result:
         return error_response(NOT_FOUND, "Elder not found")
     return success_response(message="Account status updated")
@@ -217,7 +250,9 @@ async def activate_elder_account(
     current_user: User = Depends(require_permission("elder:update")),
 ):
     """Create a user account for an elder, enabling them to log in."""
-    result = await ElderService.activate_account(db, elder_id)
+    result = await ElderService.activate_account(
+        db, elder_id, editor=current_user
+    )
     if isinstance(result, str):
         return error_response(BUSINESS_VALIDATION_FAILED, result)
     return success_response(result, message="账户激活成功")

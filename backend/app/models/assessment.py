@@ -26,6 +26,15 @@ class Assessment(BaseModel):
     )
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     suggestions: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Full 20-feature snapshot used to drive ML inference when the assessment
+    # is created via the AI-powered flow. NULL for legacy / manually-entered
+    # assessments. Keys correspond to `FEATURE_CATALOG` entries.
+    feature_inputs: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Link to the prediction_results row the ML inference produced, so a
+    # single mirror-to-prediction_results exists per AI assessment.
+    prediction_result_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True
+    )
     created_by: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("users.id"), nullable=True
     )

@@ -97,14 +97,29 @@ def _result_row(hr_prob: float, fu_prob: float, hs_value: float) -> dict:
     }
 
 
+def _coerce(v, fallback: float) -> float:
+    """Return a usable float for feature `col`. Missing/empty/non-numeric → fallback.
+
+    The fallback is the feature's population mean, so after standardization the
+    column contributes z=0 (i.e. "average") — much safer than raw 0 for
+    features whose mean isn't zero.
+    """
+    if v is None or v == "":
+        return fallback
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return fallback
+
+
 def predict(features: dict) -> dict:
-    """Run inference on a single record. Missing feature keys default to 0."""
+    """Run inference on a single record. Missing feature keys are mean-imputed."""
     _ensure_loaded()
     np = _NP
     torch = _TORCH
 
     x = np.array(
-        [[float(features.get(col, 0.0) or 0.0) for col in FEATURE_COLS]],
+        [[_coerce(features.get(col), _SCALER_MEAN_RAW[j]) for j, col in enumerate(FEATURE_COLS)]],
         dtype=np.float64,
     )
     x_scaled = _scale(x).astype(np.float32)
@@ -121,7 +136,7 @@ def predict(features: dict) -> dict:
 
 
 def predict_batch(records: list[dict]) -> list[dict]:
-    """Run inference on a batch of records."""
+    """Run inference on a batch of records. Missing feature keys are mean-imputed."""
     if not records:
         return []
     _ensure_loaded()
@@ -132,7 +147,7 @@ def predict_batch(records: list[dict]) -> list[dict]:
     x = np.zeros((n, len(FEATURE_COLS)), dtype=np.float64)
     for i, rec in enumerate(records):
         for j, col in enumerate(FEATURE_COLS):
-            x[i, j] = float(rec.get(col, 0.0) or 0.0)
+            x[i, j] = _coerce(rec.get(col), _SCALER_MEAN_RAW[j])
 
     x_scaled = _scale(x).astype(np.float32)
     x_tensor = torch.tensor(x_scaled)

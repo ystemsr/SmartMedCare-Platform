@@ -1,0 +1,2629 @@
+/* =========================================================================
+ * AI Chat page — faithful port of chat-example.html.
+ * All rules are scoped under `.ai-app` so they cannot leak into the rest
+ * of the platform.
+ * ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300..600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+.ai-app {
+  --ai-bg: #f7f6f2;
+  --ai-surface: #ffffff;
+  --ai-surface-2: #fbfaf6;
+  --ai-ink: #1f1e1c;
+  --ai-ink-2: #3c3a36;
+  --ai-muted: #8a847b;
+  --ai-muted-2: #b5afa4;
+  --ai-line: #e7e3db;
+  --ai-line-2: #efebe2;
+  --ai-accent: #d97757;
+  --ai-accent-soft: #f3e6de;
+  --ai-bubble-user: #efece4;
+  --ai-side-bg: #f1efe8;
+  --ai-side-hover: #e7e3db;
+  --ai-radius: 22px;
+  --ai-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ai-serif: 'Source Serif 4', Georgia, serif;
+  --ai-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ai-side-w: 248px;
+  --ai-side-w-collapsed: 60px;
+
+  width: 100%;
+  height: 100vh;
+  background: var(--ai-bg);
+  display: flex;
+  overflow: hidden;
+  font-family: var(--ai-sans);
+  color: var(--ai-ink);
+  -webkit-font-smoothing: antialiased;
+}
+.ai-app *,
+.ai-app *::before,
+.ai-app *::after {
+  box-sizing: border-box;
+}
+.ai-app button {
+  font-family: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+.ai-app input,
+.ai-app textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+/* ===== SIDEBAR ===== */
+.ai-side {
+  flex-shrink: 0;
+  width: var(--ai-side-w);
+  background: var(--ai-side-bg);
+  display: flex;
+  flex-direction: column;
+  transition: width 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+  position: relative;
+  border-right: 1px solid rgba(0, 0, 0, 0.03);
+}
+.ai-side.collapsed {
+  width: var(--ai-side-w-collapsed);
+}
+
+.ai-side-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 14px 8px 18px;
+  height: 56px;
+}
+.ai-side.collapsed .ai-side-top {
+  padding: 16px 0 8px 0;
+  justify-content: center;
+}
+.ai-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ai-serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ai-ink);
+  letter-spacing: -0.01em;
+}
+.ai-side.collapsed .ai-brand {
+  display: none;
+}
+
+.ai-side-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6d6862;
+  transition: background 0.15s;
+}
+.ai-side-toggle:hover {
+  background: var(--ai-side-hover);
+  color: var(--ai-ink);
+}
+
+/* Nav list */
+.ai-side-nav {
+  padding: 4px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ai-side.collapsed .ai-side-nav {
+  padding: 4px 0;
+  align-items: center;
+}
+
+.ai-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--ai-ink-2);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  width: 100%;
+  text-align: left;
+}
+.ai-nav-item:hover {
+  background: var(--ai-side-hover);
+  color: var(--ai-ink);
+}
+.ai-nav-item .ai-nav-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #5c5852;
+}
+.ai-nav-item .ai-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-side.collapsed .ai-nav-item {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 999px;
+  justify-content: center;
+}
+.ai-side.collapsed .ai-nav-label {
+  display: none;
+}
+
+/* New chat icon-in-circle */
+.ai-nav-item.new-chat .ai-nav-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #e3ded2;
+  color: var(--ai-ink);
+  transition: background 0.15s;
+}
+.ai-nav-item.new-chat:hover .ai-nav-icon {
+  background: #d6d0c0;
+}
+.ai-side.collapsed .ai-nav-item.new-chat {
+  background: var(--ai-side-hover);
+}
+.ai-side.collapsed .ai-nav-item.new-chat:hover {
+  background: #ddd7cb;
+}
+.ai-side.collapsed .ai-nav-item.new-chat .ai-nav-icon {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+}
+.ai-side.collapsed .ai-nav-item.new-chat:hover .ai-nav-icon {
+  background: transparent;
+}
+
+.ai-side-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 10px 10px;
+}
+.ai-side-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.ai-side-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ai-side-scroll::-webkit-scrollbar-thumb {
+  background: #d4cec2;
+  border-radius: 10px;
+  border: 2px solid var(--ai-side-bg);
+}
+.ai-side.collapsed .ai-side-scroll {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ai-recents-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ai-muted);
+  letter-spacing: 0.02em;
+  padding: 10px 10px 6px;
+}
+.ai-recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 10px;
+  font-size: 13.5px;
+  color: var(--ai-ink-2);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.ai-recent-item:hover {
+  background: var(--ai-side-hover);
+  color: var(--ai-ink);
+}
+.ai-recent-item.active {
+  background: var(--ai-side-hover);
+  color: var(--ai-ink);
+  font-weight: 500;
+}
+.ai-recent-item .ai-recent-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-recent-item .ai-recent-del {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-muted);
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.ai-recent-item:hover .ai-recent-del {
+  opacity: 1;
+}
+.ai-recent-item .ai-recent-del:hover {
+  background: #d8d2c6;
+  color: var(--ai-ink);
+}
+
+/* Bottom user block */
+.ai-side-bottom {
+  flex-shrink: 0;
+  padding: 10px 12px 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+}
+.ai-user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ai-user-row:hover {
+  background: var(--ai-side-hover);
+}
+.ai-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #2c2a26;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.ai-user-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ai-user-name {
+  font-size: 13.5px;
+  color: var(--ai-ink);
+  font-weight: 500;
+  line-height: 1.2;
+}
+.ai-user-plan {
+  font-size: 11.5px;
+  color: var(--ai-muted);
+  line-height: 1.3;
+}
+.ai-user-caret {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-muted);
+}
+.ai-side.collapsed .ai-side-bottom {
+  padding: 10px 0 14px;
+  display: flex;
+  justify-content: center;
+}
+.ai-side.collapsed .ai-user-row {
+  padding: 0;
+}
+.ai-side.collapsed .ai-user-meta,
+.ai-side.collapsed .ai-user-caret {
+  display: none;
+}
+
+/* ===== MAIN ===== */
+.ai-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--ai-bg);
+}
+.ai-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Top-right "返回" button */
+.ai-back {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--ai-ink-2);
+  border-radius: 999px;
+  background: var(--ai-surface);
+  border: 1px solid var(--ai-line);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ai-back:hover {
+  background: var(--ai-surface-2);
+  border-color: #d8d2c6;
+  color: var(--ai-ink);
+}
+
+/* Empty state */
+.ai-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px 80px;
+  gap: 24px;
+}
+.ai-greet {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--ai-serif);
+  font-weight: 400;
+  font-size: 36px;
+  letter-spacing: -0.01em;
+  color: var(--ai-ink);
+}
+.ai-greet img {
+  width: 32px;
+  height: 32px;
+}
+
+/* Composer */
+.ai-composer-wrap {
+  width: min(680px, 92%);
+}
+.ai-composer {
+  position: relative;
+  background: var(--ai-surface);
+  border: 1px solid var(--ai-line);
+  border-radius: var(--ai-radius);
+  padding: 14px 14px 10px;
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02),
+    0 12px 28px -18px rgba(30, 25, 20, 0.18);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.ai-composer.dragging {
+  border-color: var(--ai-accent);
+  background: var(--ai-accent-soft);
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02),
+    0 14px 32px -16px rgba(217, 119, 87, 0.35);
+}
+.ai-composer-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ai-radius);
+  background: rgba(243, 230, 222, 0.88);
+  pointer-events: none;
+  z-index: 5;
+  border: 1.5px dashed var(--ai-accent);
+}
+.ai-composer-drop-hint-inner {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ai-accent);
+  letter-spacing: 0.02em;
+}
+.ai-composer:focus-within {
+  border-color: #d8d2c6;
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02),
+    0 14px 32px -18px rgba(30, 25, 20, 0.22);
+}
+.ai-ta {
+  width: 100%;
+  min-height: 44px;
+  max-height: 220px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ai-ink);
+  padding: 4px 4px 6px;
+  overflow: hidden;
+}
+.ai-ta::placeholder {
+  color: #a59f93;
+}
+.ai-ta::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.ai-ta::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ai-ta::-webkit-scrollbar-thumb {
+  background: #d8d2c6;
+  border-radius: 999px;
+}
+.ai-ta::-webkit-scrollbar-thumb:hover {
+  background: #c2bbae;
+}
+.ai-ta {
+  scrollbar-width: thin;
+  scrollbar-color: #d8d2c6 transparent;
+}
+
+.ai-composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+.ai-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ai-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #7a756c;
+  transition: background 0.15s, color 0.15s;
+}
+.ai-icon-btn:hover {
+  background: #efebe2;
+  color: var(--ai-ink);
+}
+.ai-icon-btn:disabled {
+  background: transparent;
+  color: #b5afa4;
+  cursor: not-allowed;
+}
+
+/* Composer thumbnail strip (staged image attachments) */
+.ai-thumb-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 4px 12px;
+}
+.ai-thumb {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 16px;
+  overflow: visible;
+  background: #efebe2;
+  border: 1px solid var(--ai-line);
+  flex: 0 0 auto;
+}
+.ai-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 16px;
+}
+.ai-app .ai-thumb-remove,
+.ai-app .ai-thumb-remove:hover,
+.ai-app .ai-thumb-remove:focus,
+.ai-app .ai-thumb-remove:active,
+.ai-app .ai-thumb-remove:focus-visible {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 0;
+  background: #000;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 1px 4px rgba(31, 30, 28, 0.25);
+  transition: none;
+  transform: none;
+  outline: none;
+}
+.ai-app .ai-thumb-remove svg {
+  stroke: #fff;
+}
+.ai-thumb-notice {
+  font-size: 12px;
+  color: var(--ai-muted);
+  padding: 0 4px 8px;
+}
+
+/* Image thumbnails on the user bubble (post-send) */
+.ai-msg-user-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.ai-msg-thumb {
+  width: 88px;
+  height: 88px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--ai-line);
+  background: #efebe2;
+  flex: 0 0 auto;
+}
+.ai-msg-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ai-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #7a756c;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 0;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease,
+    padding 0.25s ease;
+}
+.ai-pill .ai-icon-wrap {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  transition: background 0.18s ease;
+}
+.ai-pill:not(.on):hover .ai-icon-wrap {
+  background: #efebe2;
+}
+.ai-pill:not(.on):hover {
+  color: var(--ai-ink);
+}
+.ai-pill svg {
+  flex-shrink: 0;
+  transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ai-pill:not(.on):hover svg {
+  transform: rotate(15deg) scale(1.1);
+}
+.ai-pill .ai-label {
+  display: inline-block;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: max-width 0.3s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.2s ease, padding-right 0.3s ease;
+  padding-right: 0;
+}
+.ai-pill.on {
+  border-color: currentColor;
+  padding-right: 10px;
+}
+.ai-pill.on .ai-label {
+  max-width: 90px;
+  opacity: 1;
+  padding-right: 0;
+}
+.ai-pill.on svg {
+  transform: rotate(360deg) scale(1.1);
+}
+.ai-pill.on:hover svg {
+  transform: rotate(360deg) scale(1.1);
+}
+.ai-pill.v-search.on {
+  background: rgba(30, 174, 219, 0.13);
+  border-color: rgba(30, 174, 219, 0.9);
+  color: #1eaedb;
+}
+.ai-pill.v-kb.on {
+  background: rgba(249, 115, 22, 0.13);
+  border-color: rgba(249, 115, 22, 0.9);
+  color: #e2640f;
+}
+
+.ai-app .ai-model-pop {
+  position: relative;
+}
+.ai-app .ai-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ai-ink-2);
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--ai-line);
+  border-radius: 999px;
+  background: var(--ai-surface);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(25, 22, 18, 0.04);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.22s ease,
+    transform 0.18s ease,
+    color 0.18s ease;
+}
+.ai-app .ai-model:hover:not(:disabled) {
+  background: var(--ai-surface);
+  border-color: #d8d2c6;
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 28px rgba(25, 22, 18, 0.14),
+    0 3px 8px rgba(25, 22, 18, 0.09);
+}
+.ai-app .ai-model.open {
+  background: var(--ai-surface);
+  border-color: #d8d2c6;
+  box-shadow:
+    0 14px 32px rgba(25, 22, 18, 0.16),
+    0 4px 10px rgba(25, 22, 18, 0.1);
+}
+.ai-app .ai-model:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.ai-model b {
+  font-weight: 600;
+  color: var(--ai-ink);
+  white-space: nowrap;
+}
+.ai-model .ai-tag {
+  color: var(--ai-muted);
+  font-weight: 400;
+}
+.ai-model-caret {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ai-muted);
+  transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.ai-model.open .ai-model-caret {
+  transform: rotate(180deg);
+}
+
+/* ===== Model dropdown ===== */
+.ai-model-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  max-width: min(360px, 90vw);
+  background: var(--ai-surface);
+  border: 1px solid var(--ai-line);
+  border-radius: 14px;
+  padding: 6px;
+  z-index: 30;
+  box-shadow:
+    0 18px 48px rgba(25, 22, 18, 0.14),
+    0 2px 8px rgba(25, 22, 18, 0.06);
+  transform-origin: top right;
+  /* The motion component animates transform+opacity; overflow is hidden
+   * by the inner scroll container so the popover's rounded corners stay
+   * clean during animation. */
+}
+/* Bottom (in-conversation) composer: pop the menu UPWARD so it doesn't
+ * fall off the viewport edge. Matching transform-origin keeps the
+ * framer-motion scale animation anchored at the correct corner. */
+.ai-model-menu.drop-up {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: bottom right;
+}
+.ai-model-menu-inner {
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #d9d4ca transparent;
+  padding-right: 2px;
+}
+.ai-model-menu-inner::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-model-menu-inner::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.ai-model-menu-inner::-webkit-scrollbar-thumb {
+  background: #d9d4ca;
+  border-radius: 999px;
+}
+.ai-model-menu-inner::-webkit-scrollbar-thumb:hover {
+  background: #b5afa4;
+}
+
+.ai-app .ai-model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background 0.15s ease;
+}
+.ai-app .ai-model-option + .ai-model-option {
+  margin-top: 4px;
+}
+.ai-app .ai-model-option:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.ai-app .ai-model-option.active {
+  background: var(--ai-accent-soft);
+}
+.ai-app .ai-model-option.active:hover {
+  background: var(--ai-accent-soft);
+  filter: brightness(0.98);
+}
+.ai-model-option-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ai-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-model-option-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ai-accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px var(--ai-accent-soft);
+}
+
+.ai-app .ai-send {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ai-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  border: 0;
+  transition: background 0.2s, opacity 0.2s, transform 0.15s;
+}
+.ai-app .ai-send:disabled {
+  background: #f0d9cc;
+  color: #ffffff;
+  cursor: not-allowed;
+}
+.ai-app .ai-send:not(:disabled):hover {
+  background: #c26242;
+  transform: translateY(-1px);
+}
+.ai-app .ai-send:not(:disabled):active {
+  transform: translateY(0);
+}
+.ai-app .ai-send.stop {
+  background: var(--ai-accent);
+}
+.ai-app .ai-send.stop:hover {
+  background: #c26242;
+}
+
+.ai-chips {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 6px;
+}
+/* Prefixed with `.ai-app` to win against the global
+ * `.ai-app button { padding: 0; }` reset, which would otherwise
+ * collapse the chip's horizontal padding and squash the label
+ * against the rounded edges. */
+.ai-app .ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--ai-line);
+  border-radius: 999px;
+  background: var(--ai-surface);
+  color: var(--ai-ink-2);
+  font-size: 13.5px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.ai-app .ai-chip:hover {
+  background: #fdfcf8;
+  border-color: #d8d2c6;
+  box-shadow: 0 4px 14px -10px rgba(30, 25, 20, 0.25);
+}
+.ai-app .ai-chip svg {
+  color: #8a847b;
+  flex-shrink: 0;
+}
+
+/* Conversation state */
+.ai-conv {
+  flex: 1;
+  min-height: 0;
+  display: none;
+  flex-direction: column;
+}
+.ai-conv.active {
+  display: flex;
+}
+.ai-empty.active {
+  display: flex;
+}
+.ai-empty.hidden {
+  display: none;
+}
+
+.ai-conv-header {
+  flex-shrink: 0;
+  padding: 18px 18px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ai-conv-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--ai-ink);
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 8px;
+  cursor: text;
+  max-width: 60ch;
+}
+.ai-conv-title:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.ai-conv-title.editing {
+  background: rgba(0, 0, 0, 0.04);
+  cursor: text;
+}
+.ai-conv-title-input {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  font-weight: 500;
+  width: 40ch;
+  max-width: 60ch;
+  padding: 0;
+}
+
+.ai-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Reserve the scrollbar gutter so the centered thread does not shift
+   * horizontally when content grows tall enough to introduce (or tall
+   * enough to drop) a scrollbar — e.g. expanding a search / thinking
+   * card mid-reply. */
+  scrollbar-gutter: stable;
+  padding: 10px 0 20px;
+}
+.ai-messages::-webkit-scrollbar {
+  width: 10px;
+}
+.ai-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ai-messages::-webkit-scrollbar-thumb {
+  background: #d9d4ca;
+  border-radius: 10px;
+  border: 3px solid var(--ai-bg);
+}
+
+.ai-thread {
+  width: min(680px, 92%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.ai-msg-user {
+  align-self: flex-end;
+  max-width: 80%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.ai-bubble-user {
+  background: var(--ai-bubble-user);
+  color: var(--ai-ink);
+  padding: 10px 16px;
+  border-radius: 18px;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* Shrink-to-content so a short message doesn't stretch to the width
+   * of the thumbnail row above it. The flex parent's `align-items:
+   * flex-end` keeps the bubble right-aligned. */
+  max-width: 100%;
+  align-self: flex-end;
+  width: auto;
+}
+
+.ai-msg-ai {
+  align-self: flex-start;
+  width: 100%;
+}
+.ai-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--ai-muted);
+  margin-bottom: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.ai-summary:hover {
+  color: var(--ai-ink-2);
+}
+.ai-summary .caret {
+  opacity: 0.6;
+  transition: transform 0.2s ease;
+}
+.ai-summary.open .caret {
+  transform: rotate(90deg);
+}
+
+.ai-reasoning {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-left: 2px solid #d8d2c6;
+  color: var(--ai-muted);
+  background: #f4f1e9;
+  border-radius: 0 10px 10px 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.ai-body {
+  --background: oklch(0.99 0.004 75);
+  --foreground: oklch(0.22 0.01 60);
+  --card: oklch(0.985 0.005 75);
+  --card-foreground: oklch(0.22 0.01 60);
+  --popover: oklch(0.985 0.005 75);
+  --popover-foreground: oklch(0.22 0.01 60);
+  --secondary: oklch(0.966 0.007 75);
+  --secondary-foreground: oklch(0.22 0.01 60);
+  --muted: oklch(0.966 0.007 75);
+  --muted-foreground: oklch(0.5 0.015 70);
+  --accent: oklch(0.952 0.012 73);
+  --accent-foreground: oklch(0.22 0.01 60);
+  --destructive: oklch(0.62 0.18 26);
+  --destructive-foreground: oklch(0.98 0.004 75);
+  --border: oklch(0.905 0.008 72);
+  --input: var(--border);
+  --primary: oklch(0.66 0.13 42);
+  --primary-foreground: oklch(0.98 0.004 75);
+  --sidebar: oklch(0.973 0.007 75);
+  --ring: oklch(0.66 0.13 42);
+  --radius: 14px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ai-ink);
+}
+.ai-streamdown {
+  color: inherit;
+}
+.ai-streamdown [data-streamdown='heading-1'],
+.ai-streamdown [data-streamdown='heading-2'],
+.ai-streamdown [data-streamdown='heading-3'],
+.ai-streamdown [data-streamdown='heading-4'] {
+  font-weight: 600;
+  color: var(--ai-ink);
+  line-height: 1.3;
+}
+.ai-streamdown [data-streamdown='heading-1'] {
+  font-size: 20px;
+}
+.ai-streamdown [data-streamdown='heading-2'] {
+  font-size: 18px;
+}
+.ai-streamdown [data-streamdown='heading-3'] {
+  font-size: 16.5px;
+}
+.ai-streamdown [data-streamdown='heading-4'] {
+  font-size: 15px;
+}
+.ai-streamdown [data-streamdown='strong'] {
+  font-weight: 600;
+}
+.ai-streamdown em {
+  font-style: italic;
+}
+.ai-streamdown p,
+.ai-streamdown [data-streamdown='blockquote'],
+.ai-streamdown [data-streamdown='ordered-list'],
+.ai-streamdown [data-streamdown='unordered-list'],
+.ai-streamdown [data-streamdown='table-wrapper'],
+.ai-streamdown [data-streamdown='code-block'],
+.ai-streamdown [data-streamdown='mermaid-block'] {
+  margin-bottom: 14px;
+}
+.ai-streamdown > :last-child {
+  margin-bottom: 0;
+}
+.ai-streamdown [data-streamdown='unordered-list'],
+.ai-streamdown [data-streamdown='ordered-list'],
+.ai-streamdown ul,
+.ai-streamdown ol {
+  padding-left: 26px;
+}
+/* The global reset at styles/reset.css zeroes out `list-style` on every
+ * <ul>/<ol>, which strips the bullets and numbers markdown relies on.
+ * Re-enable them inside the chat body only — elsewhere on the platform
+ * we still want the reset. `outside` keeps the marker column aligned
+ * with the padding above. */
+.ai-streamdown [data-streamdown='ordered-list'],
+.ai-streamdown ol {
+  list-style: decimal outside;
+}
+.ai-streamdown [data-streamdown='unordered-list'],
+.ai-streamdown ul {
+  list-style: disc outside;
+}
+/* Nested lists — alternate markers the way browsers normally would. */
+.ai-streamdown ol ol {
+  list-style-type: lower-alpha;
+}
+.ai-streamdown ol ol ol {
+  list-style-type: lower-roman;
+}
+.ai-streamdown ul ul {
+  list-style-type: circle;
+}
+.ai-streamdown ul ul ul {
+  list-style-type: square;
+}
+.ai-streamdown [data-streamdown='list-item'],
+.ai-streamdown li {
+  margin-bottom: 4px;
+}
+.ai-streamdown a,
+.ai-streamdown [data-streamdown='link'] {
+  color: var(--ai-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-word;
+}
+.ai-streamdown [data-streamdown='blockquote'] {
+  padding: 4px 14px;
+  border-left: 3px solid #d8d2c6;
+  color: var(--ai-ink-2);
+  background: #f5f2ea;
+  border-radius: 0 8px 8px 0;
+}
+.ai-streamdown [data-streamdown='table-wrapper'] {
+  overflow-x: auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  gap: 0;
+  border-radius: 0;
+}
+/* Table controls row — right-align icons, vertically center */
+.ai-streamdown [data-streamdown='table-wrapper'] > div:first-child:has(button) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 2px 6px;
+}
+.ai-streamdown [data-streamdown='table-wrapper'] > div:first-child:has(button) > * {
+  display: inline-flex;
+  align-items: center;
+}
+.ai-streamdown [data-streamdown='table-wrapper'] > div:first-child:has(button) button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a847b;
+}
+.ai-streamdown [data-streamdown='table-wrapper'] > div:first-child:has(button) button:hover {
+  color: var(--ai-ink);
+}
+/* Table dropdown menus (copy/download format selectors) */
+.ai-streamdown [data-streamdown='table-wrapper'] [class*="absolute"][class*="top-full"] {
+  background: var(--ai-surface);
+  border: 1px solid var(--ai-line);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(30, 25, 20, 0.12);
+  padding: 4px;
+  animation: ai-dropdown-in 0.18s ease-out;
+  transform-origin: top right;
+}
+.ai-streamdown [data-streamdown='table-wrapper'] [class*="absolute"][class*="top-full"] button {
+  border-radius: 6px;
+  color: var(--ai-ink-2);
+  padding: 6px 12px;
+}
+.ai-streamdown [data-streamdown='table-wrapper'] [class*="absolute"][class*="top-full"] button:hover {
+  background: var(--ai-line-2);
+  color: var(--ai-ink);
+}
+@keyframes ai-dropdown-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+/* Table scroll container — remove inner border */
+.ai-streamdown [data-streamdown='table-wrapper'] > div:has(> [data-streamdown='table']) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.ai-streamdown [data-streamdown='table'] {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 0;
+  font-size: 14px;
+  border: 0;
+}
+.ai-streamdown [data-streamdown='table-header'] {
+  background: transparent;
+}
+.ai-streamdown [data-streamdown='table-header-cell'] {
+  border: 0;
+  border-bottom: 2px solid var(--ai-line);
+  padding: 8px 14px;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 600;
+  color: var(--ai-ink);
+}
+.ai-streamdown [data-streamdown='table-cell'] {
+  border: 0;
+  border-bottom: 1px solid var(--ai-line-2);
+  padding: 8px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+.ai-streamdown [data-streamdown='table-row']:last-child [data-streamdown='table-cell'] {
+  border-bottom: 0;
+}
+.ai-streamdown [data-streamdown='table-body'] {
+  border: 0;
+}
+/* Table fullscreen overlay — frosted glass + centered card */
+[data-streamdown='table-fullscreen'] {
+  background: rgba(247, 246, 242, 0.6);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  animation: ai-fullscreen-in 0.22s ease-out;
+  align-items: center;
+  justify-content: center;
+}
+[data-streamdown='table-fullscreen'] > div {
+  max-width: 860px;
+  width: 92%;
+  max-height: 90vh;
+  margin: 0;
+  background: var(--ai-surface, #ffffff);
+  border-radius: 16px;
+  border: 1px solid var(--ai-line, #e7e3db);
+  box-shadow: 0 8px 32px rgba(30, 25, 20, 0.12);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+[data-streamdown='table-fullscreen'] > div > div:first-child {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ai-line-2, #efebe2);
+  gap: 2px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+[data-streamdown='table-fullscreen'] > div > div:first-child button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+}
+[data-streamdown='table-fullscreen'] > div > div:last-child {
+  overflow: auto;
+  flex: 1;
+  padding: 0;
+}
+[data-streamdown='table-fullscreen'] [data-streamdown='table'],
+[data-streamdown='table-fullscreen'] table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  border: 0;
+}
+[data-streamdown='table-fullscreen'] [data-streamdown='table-header'],
+[data-streamdown='table-fullscreen'] thead {
+  background: transparent;
+}
+[data-streamdown='table-fullscreen'] [data-streamdown='table-header-cell'],
+[data-streamdown='table-fullscreen'] th {
+  border: 0;
+  border-bottom: 2px solid var(--ai-line, #e7e3db);
+  padding: 10px 16px;
+  font-weight: 600;
+  color: var(--ai-ink, #1f1e1c);
+  text-align: left;
+}
+[data-streamdown='table-fullscreen'] [data-streamdown='table-cell'],
+[data-streamdown='table-fullscreen'] td {
+  border: 0;
+  border-bottom: 1px solid var(--ai-line-2, #efebe2);
+  padding: 10px 16px;
+  text-align: left;
+}
+[data-streamdown='table-fullscreen'] [data-streamdown='table-body'],
+[data-streamdown='table-fullscreen'] tbody {
+  border: 0;
+}
+[data-streamdown='table-fullscreen'] button {
+  color: var(--ai-muted, #8a847b);
+}
+[data-streamdown='table-fullscreen'] button:hover {
+  color: var(--ai-ink, #1f1e1c);
+  background: var(--ai-line-2, #efebe2);
+  border-radius: 6px;
+}
+/* Fullscreen dropdown menus */
+[data-streamdown='table-fullscreen'] [class*="absolute"][class*="top-full"] {
+  background: var(--ai-surface, #ffffff);
+  border: 1px solid var(--ai-line, #e7e3db);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(30, 25, 20, 0.12);
+  padding: 4px;
+  animation: ai-dropdown-in 0.18s ease-out;
+  transform-origin: top right;
+}
+[data-streamdown='table-fullscreen'] [class*="absolute"][class*="top-full"] button {
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+@keyframes ai-fullscreen-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.ai-streamdown [data-streamdown='inline-code'] {
+  font-family: var(--ai-mono);
+  background: #f0ece3;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 13.5px;
+}
+.ai-streamdown [data-streamdown='code-block'],
+.ai-streamdown [data-streamdown='mermaid-block'] {
+  position: relative;
+  overflow: hidden;
+  box-shadow: none;
+  border: 1px solid var(--ai-line-2);
+  border-radius: 16px;
+  background: #f7f3eb;
+  gap: 0;
+  padding: 0;
+}
+.ai-streamdown [data-streamdown='mermaid-block'] {
+  overflow: visible;
+}
+.ai-streamdown [data-streamdown='code-block-header'] {
+  min-height: 0;
+  height: auto;
+  padding: 10px 14px 8px;
+  padding-right: 88px;
+  border-bottom: none;
+  background: #f3ede2;
+  color: #8a847b;
+  line-height: 1.2;
+  border-radius: 16px 16px 0 0;
+  margin: 0;
+}
+/* Mermaid header — match code-block-header style */
+.ai-streamdown [data-streamdown='mermaid-block'] > div:first-child {
+  padding: 10px 14px 8px;
+  padding-right: 88px;
+  background: #f3ede2;
+  color: #8a847b;
+  line-height: 1.2;
+  border-radius: 16px 16px 0 0;
+  height: auto;
+}
+.ai-streamdown [data-streamdown='mermaid-block'] > div:first-child span {
+  margin-left: 0;
+}
+/* Top-right action icons — vertically center with header */
+.ai-streamdown [data-streamdown='code-block'] > div:has(> [data-streamdown='code-block-actions']),
+.ai-streamdown [data-streamdown='mermaid-block'] > div:has(> [data-streamdown='mermaid-block-actions']) {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  left: auto;
+  margin: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  height: 34px;
+}
+.ai-streamdown [data-streamdown='code-block-actions'],
+.ai-streamdown [data-streamdown='mermaid-block-actions'] {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.ai-streamdown [data-streamdown='code-block-actions'] button,
+.ai-streamdown [data-streamdown='mermaid-block-actions'] button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: #8a847b;
+}
+.ai-streamdown [data-streamdown='code-block'] pre {
+  margin: 0;
+  font-family: var(--ai-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: #2a2825;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  tab-size: 2;
+}
+.ai-streamdown [data-streamdown='code-block-body'] {
+  border: 0;
+  border-radius: 0;
+  background: #fbf8f2;
+  padding: 14px 16px;
+}
+.ai-streamdown [data-streamdown='code-block-body'] pre {
+  background: transparent;
+}
+.ai-streamdown [data-streamdown='code-block-body'] code {
+  display: block;
+}
+.ai-streamdown [data-streamdown='code-block-body'] code > span {
+  display: block;
+  min-height: 1.7em;
+}
+.ai-streamdown [data-streamdown='code-block-body'] code > span::before {
+  width: 1rem;
+  margin-right: 0.75rem;
+  color: rgba(138, 132, 123, 0.58);
+}
+.ai-streamdown [data-streamdown='code-block-actions'] button:hover {
+  color: var(--ai-ink);
+  background: rgba(219, 209, 191, 0.35);
+}
+.ai-streamdown [data-streamdown='image-wrapper'] {
+  overflow: hidden;
+  border-radius: 14px;
+}
+.ai-streamdown [data-streamdown='image'] {
+  max-width: 100%;
+  height: auto;
+}
+.ai-streamdown [data-streamdown='mermaid-block-actions'] button:hover {
+  color: var(--ai-ink);
+  background: rgba(219, 209, 191, 0.35);
+}
+/* Mermaid: SVG rendering area — remove inner border */
+.ai-streamdown [data-streamdown='mermaid-block'] > div:last-child {
+  border: 0;
+  border-radius: 0 0 16px 16px;
+  background: transparent;
+}
+/* Mermaid: pan/zoom controls (bottom-left) */
+.ai-streamdown [data-streamdown='mermaid-block'] [class*="absolute"][class*="z-10"][class*="bottom"] {
+  border: 0;
+  background: #f3ede2;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.ai-streamdown [data-streamdown='mermaid-block'] [class*="absolute"][class*="z-10"][class*="bottom"] button {
+  color: #8a847b;
+}
+.ai-streamdown [data-streamdown='mermaid-block'] [class*="absolute"][class*="z-10"][class*="bottom"] button:hover {
+  color: var(--ai-ink);
+  background: rgba(219, 209, 191, 0.3);
+}
+.ai-streamdown [data-streamdown='mermaid-block'] svg {
+  max-width: 100%;
+  height: auto;
+}
+.ai-streamdown [data-streamdown='horizontal-rule'] {
+  border: 0;
+  border-top: 1px solid var(--ai-line);
+  margin: 24px 0;
+}
+
+
+/* ===== Thinking bubble ===== */
+/* Shape mirrors the reference (`rounded-2xl` = 16px) in BOTH states so
+ * expand/collapse never snaps to a capsule mid-animation. The visual
+ * difference between states is purely in width + padding. */
+.ai-think-wrap {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+.ai-think {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 80%;
+  background: #f5f2ea;
+  border: 1px solid var(--ai-line-2);
+  color: #8a847b;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02);
+  padding: 8px 12px;
+  transition:
+    padding 0.25s ease,
+    background 0.2s ease;
+}
+.ai-think.expanded {
+  width: 100%;
+  padding: 12px 16px;
+  background: #f4f1e9;
+}
+.ai-think-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #a59f93;
+  user-select: none;
+  -webkit-user-select: none;
+  width: 100%;
+}
+.ai-think-head.clickable {
+  cursor: pointer;
+}
+.ai-think-head.clickable:hover {
+  color: var(--ai-ink-2);
+}
+.ai-think-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-accent);
+  flex-shrink: 0;
+}
+.ai-think-label {
+  flex: 1;
+  text-transform: none;
+}
+.ai-think-caret {
+  display: inline-flex;
+  align-items: center;
+  color: #a59f93;
+}
+.ai-think-details-wrap {
+  overflow: hidden;
+}
+.ai-think-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #d8d2c6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #6d6862;
+  font-size: 13px;
+  line-height: 1.65;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.ai-think-details::-webkit-scrollbar {
+  width: 6px;
+}
+.ai-think-details::-webkit-scrollbar-thumb {
+  background: #d8d2c6;
+  border-radius: 999px;
+}
+
+/* ===== Search bubble ===== */
+.ai-search-wrap {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+.ai-search {
+  /* Same layout contract as `.ai-think` — width is NOT animated. The
+   * bubble snaps between its collapsed (hug-content) and expanded
+   * (100% of max-width) states instantly; only height + opacity on the
+   * body animate. Attempting to animate width produced too many edge
+   * cases (BFC interactions, intrinsic-width leaks, two-stage opening
+   * feels). Mirror the thinking bubble exactly. */
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 80%;
+  background: #fbf7f2;
+  border: 1px solid #efe4d6;
+  color: #8a7a66;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02);
+  padding: 8px 14px;
+  transition:
+    padding 0.25s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+.ai-search.expanded {
+  width: 100%;
+  padding: 12px 14px;
+  background: #faf4ec;
+  border-color: #ead9c2;
+}
+.ai-search-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a8870;
+  user-select: none;
+  -webkit-user-select: none;
+  width: 100%;
+}
+.ai-search-head.clickable {
+  cursor: pointer;
+}
+.ai-search-head.clickable:hover {
+  color: var(--ai-ink-2);
+}
+.ai-search-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-accent);
+  flex-shrink: 0;
+}
+.ai-search-globe {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-accent);
+  flex-shrink: 0;
+}
+.ai-search-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-search-caret {
+  display: inline-flex;
+  align-items: center;
+  color: #b8a78f;
+}
+
+.ai-search-details-wrap {
+  /* framer-motion animates height on this element; overflow: hidden
+   * is what turns the height animation into a smooth slide. */
+  overflow: hidden;
+  /* Explicit full-width so structured bodies (tables, kv grids) fill
+   * the expanded card. ThinkingBubble gets away without this because
+   * its content is pure text — which naturally line-wraps to the
+   * container width. Our bodies have flex/grid children whose
+   * intrinsic size is often narrower than the container, so we force
+   * the fill here. `.ai-search`'s `align-items: flex-start` would
+   * otherwise sit them at their natural (narrow) width. */
+  width: 100%;
+}
+.ai-search-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  /* Inset the scrollbar so it sits clearly apart from the result cards
+   * rather than hugging their right edge. */
+  padding-right: 6px;
+  border-top: 1px dashed #e4d4bb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Take the full width of the (now explicitly 100%) wrap. */
+  width: 100%;
+  box-sizing: border-box;
+  /* Hard ceiling for the scrollable body. Anything taller gets a
+   * proper inner scrollbar rather than stretching the card. */
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #e4d4bb transparent;
+  /* Pre-exit fade: the JS toggles `.body-hidden` *before* AnimatePresence
+   * begins collapsing the wrap, so the content vanishes without the
+   * height changing. opacity is a layout-neutral property so this
+   * doesn't cause the "height drop" — the rectangle keeps its size,
+   * then the wrap folds it shut over 0.3s. */
+  transition: opacity 0.15s ease;
+}
+.ai-search-details.body-hidden {
+  opacity: 0;
+  /* Stop invisible content from receiving pointer events during the
+   * brief window where it's fading out. */
+  pointer-events: none;
+}
+.ai-search-details::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-search-details::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.ai-search-details::-webkit-scrollbar-thumb {
+  background: #e4d4bb;
+  border-radius: 999px;
+}
+.ai-search-details::-webkit-scrollbar-thumb:hover {
+  background: #d9c4a4;
+}
+
+.ai-search-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-search-group + .ai-search-group {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed #eadfca;
+}
+.ai-search-group-head {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 2px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a8870;
+}
+.ai-search-group-q {
+  color: var(--ai-ink-2);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
+}
+.ai-search-group-q::before {
+  content: '「';
+  opacity: 0.6;
+}
+.ai-search-group-q::after {
+  content: '」';
+  opacity: 0.6;
+}
+.ai-search-group-count {
+  color: #b8a78f;
+  font-weight: 500;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.ai-search-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fffdf9;
+  border: 1px solid #efe4d6;
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.ai-search-item:hover {
+  background: #fff;
+  border-color: #d9c4a4;
+  transform: translateY(-1px);
+}
+.ai-search-item-idx {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--ai-accent-soft);
+  color: var(--ai-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.ai-search-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.ai-search-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ai-ink);
+  line-height: 1.45;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+.ai-search-item-desc {
+  font-size: 12.5px;
+  color: #6d6862;
+  line-height: 1.55;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+.ai-search-item-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #a59f93;
+  min-width: 0;
+}
+.ai-search-item-fav {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.ai-search-item-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+.ai-search-item-age {
+  flex-shrink: 0;
+}
+
+/* ===== Citation pill ===== */
+.ai-cite-wrap {
+  position: relative;
+  display: inline-flex;
+  /* Keeps the pill baseline-aligned with surrounding body copy. */
+  vertical-align: baseline;
+  margin: 0 1px;
+}
+.ai-cite {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  /* Intentionally smaller than body copy per design direction. */
+  font-size: 0.78em;
+  font-weight: 500;
+  line-height: 1.25;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid #ecdcc5;
+  border-radius: 999px;
+  background: #fbf4e9;
+  color: #6d6862;
+  text-decoration: none;
+  white-space: nowrap;
+  max-width: 220px;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+/* Color-invert on hover: pill fills with the accent, text + icon flip
+ * to white. No vertical translate so the text baseline stays put. */
+.ai-cite:hover,
+.ai-cite:focus-visible {
+  background: var(--ai-accent);
+  border-color: var(--ai-accent);
+  color: #ffffff;
+  outline: none;
+}
+.ai-cite:hover .ai-cite-icon,
+.ai-cite:focus-visible .ai-cite-icon {
+  color: #ffffff;
+}
+.ai-cite-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-accent);
+  flex-shrink: 0;
+  margin-top: -1px;
+  transition: color 0.18s ease;
+}
+.ai-cite-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.ai-cite-card {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  /* Anchor the card's LEFT edge to the pill's horizontal center; the
+   * `-50%` translation (driven by framer-motion's `x` prop) then pulls
+   * it back by half its own width, leaving it centered over the pill. */
+  left: 50%;
+  z-index: 40;
+  min-width: 240px;
+  max-width: min(340px, 70vw);
+  padding: 10px 12px;
+  background: var(--ai-surface);
+  color: var(--ai-ink);
+  border: 1px solid var(--ai-line);
+  border-radius: 12px;
+  box-shadow:
+    0 14px 36px rgba(25, 22, 18, 0.14),
+    0 2px 6px rgba(25, 22, 18, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  /* Pop animation grows from the arrow tip (bottom-center of the card). */
+  transform-origin: bottom center;
+  pointer-events: auto;
+}
+.ai-cite-card::after {
+  /* Subtle arrow pointing at the pill, centered on the card. */
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  transform: translateY(-55%) rotate(45deg);
+  background: var(--ai-surface);
+  border-right: 1px solid var(--ai-line);
+  border-bottom: 1px solid var(--ai-line);
+}
+.ai-cite-card-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ai-muted);
+}
+.ai-cite-card-fav {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.ai-cite-card-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-cite-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ai-ink);
+  word-break: break-word;
+}
+.ai-cite-card-url {
+  font-size: 11.5px;
+  color: var(--ai-accent);
+  word-break: break-all;
+  /* Clamp to 2 lines so very long URLs don't blow up the card. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Dot loader shown when waiting for first token */
+.ai-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.ai-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ai-muted-2);
+  animation: ai-bounce 1.2s infinite ease-in-out;
+}
+.ai-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.ai-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes ai-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.ai-conv-composer {
+  flex-shrink: 0;
+  padding: 0 24px 8px;
+}
+.ai-conv-composer .ai-composer-wrap {
+  margin: 0 auto;
+}
+
+.ai-footer-note {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--ai-muted);
+  padding: 6px 0 6px;
+  line-height: 1;
+}
+
+/* Tooltips for collapsed sidebar */
+.ai-side.collapsed .ai-nav-item {
+  position: relative;
+}
+.ai-side.collapsed .ai-nav-item[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #2a2825;
+  color: #fff;
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 20;
+}
+.ai-side.collapsed .ai-nav-item[data-tip]:hover::after {
+  opacity: 1;
+}
+
+/* ===== Floating entry button (shown inside AppShell) ===== */
+.ai-fab {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  z-index: 50;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #d97757 0%, #b35a3c 100%);
+  color: #fff;
+  box-shadow: 0 10px 28px -8px rgba(217, 119, 87, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.ai-fab::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    rgba(217, 119, 87, 0.35) 0%,
+    transparent 70%
+  );
+  z-index: -1;
+  animation: ai-fab-pulse 2.4s ease-in-out infinite;
+}
+.ai-fab:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 14px 32px -6px rgba(217, 119, 87, 0.6),
+    0 4px 12px rgba(0, 0, 0, 0.12);
+}
+@keyframes ai-fab-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.3;
+  }
+}
+
+/* KaTeX overrides inside chat body */
+.ai-body .katex {
+  font-size: 1.05em;
+}
+.ai-body .katex-display {
+  margin: 10px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* ===== Knowledge base bubble =====
+ * Visual language mirrors the search bubble but uses a cooler green tint
+ * so the two "context sources" stay distinguishable at a glance.
+ */
+.ai-kb-wrap {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+.ai-kb {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 80%;
+  background: #f4f8f3;
+  border: 1px solid #dfe9da;
+  color: #6b7f68;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.02);
+  padding: 8px 14px;
+  transition:
+    padding 0.25s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+.ai-kb.expanded {
+  width: 100%;
+  padding: 12px 14px;
+  background: #eff5ed;
+  border-color: #cedec7;
+}
+.ai-kb-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c9178;
+  user-select: none;
+  -webkit-user-select: none;
+  width: 100%;
+}
+.ai-kb-head.clickable {
+  cursor: pointer;
+}
+.ai-kb-head.clickable:hover {
+  color: #4e6a4a;
+}
+.ai-kb-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b9467;
+  flex-shrink: 0;
+}
+.ai-kb-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-kb-caret {
+  display: inline-flex;
+  align-items: center;
+  color: #9ab296;
+}
+
+.ai-kb-details-wrap {
+  overflow: hidden;
+}
+.ai-kb-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  padding-right: 6px;
+  border-top: 1px dashed #cedec7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #cedec7 transparent;
+}
+.ai-kb-details::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-kb-details::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.ai-kb-details::-webkit-scrollbar-thumb {
+  background: #cedec7;
+  border-radius: 999px;
+}
+.ai-kb-details::-webkit-scrollbar-thumb:hover {
+  background: #b5cbad;
+}
+
+.ai-kb-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fffdf9;
+  border: 1px solid #dfe9da;
+  border-radius: 12px;
+  color: inherit;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.ai-kb-item:hover {
+  background: #fbfefa;
+  border-color: #b5cbad;
+}
+.ai-kb-item-idx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #dfe9da;
+  color: #4e6a4a;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+.ai-kb-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.ai-kb-item-title {
+  font-weight: 600;
+  color: var(--ai-ink);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+.ai-kb-item-chunk {
+  color: #9ab296;
+  font-weight: 500;
+  margin-left: 6px;
+  font-size: 11.5px;
+}
+.ai-kb-item-desc {
+  font-size: 12.5px;
+  color: #6c7d6a;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.ai-kb-item-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #9ab296;
+}
+.ai-kb-item-score {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eaf1e7;
+  color: #4e6a4a;
+  font-weight: 600;
+}
+
+/* Knowledge-base pill active state — tinted green to match the bubble. */
+.ai-pill.v-kb.on {
+  background: #eaf1e7;
+  border-color: #b5cbad;
+  color: #4e6a4a;
+}
+
+/* ============================================================
+   Generic tool bubbles (ToolBubble.tsx) — live inside the same
+   .ai-search wrapper as SearchBubble so the collapse animation
+   and sidebar alignment stay consistent.
+   ============================================================ */
+
+.ai-tool-empty {
+  padding: 6px 2px;
+  color: var(--ai-ink-3, #9a8870);
+  font-size: 13px;
+}
+.ai-tool-json {
+  margin: 0;
+  padding: 4px 0;
+  font-family: var(--ai-mono);
+  font-size: 12px;
+  color: var(--ai-ink-2);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Key-value list (elder_profile / alert_card / assessment / weather / ...) */
+.ai-tool-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0;
+}
+.ai-tool-kv-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  align-items: baseline;
+}
+.ai-tool-kv-label {
+  color: #9a8870;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.ai-tool-kv-value {
+  color: var(--ai-ink-2);
+  word-break: break-word;
+}
+.ai-tool-sugg {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Table layout used for list_*/table-mode results. */
+.ai-tool-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  color: var(--ai-ink-2);
+  overflow-x: auto;
+}
+.ai-tool-thead {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(70px, 1fr);
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f4ecdf;
+  font-weight: 600;
+  color: #8a7a66;
+}
+.ai-tool-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(70px, 1fr);
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px dashed #eadfca;
+}
+.ai-tool-row:last-child {
+  border-bottom: none;
+}
+.ai-tool-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Status / risk-level badges inside table cells. */
+.ai-tool-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #eee3d2;
+  color: #7a6a56;
+}
+.ai-tool-badge.risk-high {
+  background: #f6d9d9;
+  color: #9a3a3a;
+}
+.ai-tool-badge.risk-medium {
+  background: #f5e7c9;
+  color: #8c6a28;
+}
+.ai-tool-badge.risk-low {
+  background: #e3eddb;
+  color: #4e6a4a;
+}
+.ai-tool-badge.status-pending {
+  background: #f5e2c8;
+  color: #8a5a23;
+}
+.ai-tool-badge.status-acknowledged {
+  background: #e0e6ed;
+  color: #3e5570;
+}
+.ai-tool-badge.status-resolved {
+  background: #e3eddb;
+  color: #4e6a4a;
+}
+
+/* Dashboard stat cards — minimal editorial layout.
+ *
+ * Earlier iterations rendered each metric in its own filled card with
+ * a rounded border, which made the dashboard-overview bubble feel
+ * dense and competed visually with the surrounding chat turn. The
+ * overview is glanceable by nature (6 numbers), so we drop the card
+ * chrome entirely: just a clean 3-column grid of "label above, serif
+ * number below". The overall bubble stays framed by the already-
+ * present `.ai-search` container — no need to re-border each stat.
+ */
+.ai-tool-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 14px;
+  row-gap: 14px;
+  padding: 4px 2px 2px;
+}
+.ai-tool-stat-card {
+  background: none;
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ai-tool-stat-label {
+  font-size: 11.5px;
+  color: #9a8870;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-tool-stat-value {
+  font-size: 22px;
+  font-family: var(--ai-serif);
+  font-weight: 500;
+  color: var(--ai-ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-tool-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.ai-tool-bar-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 50px;
+  align-items: center;
+  gap: 8px;
+}
+.ai-tool-bar-label {
+  color: #8a7a66;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-tool-bar-wrap {
+  height: 8px;
+  background: #f3eadb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.ai-tool-bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #cfa97b, #b58a54);
+  border-radius: 999px;
+}
+.ai-tool-bar-value {
+  text-align: right;
+  color: var(--ai-ink-2);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+/* ---------- Weather bubble: icon + 2x3 metric grid ---------- */
+.ai-tool-weather {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-tool-weather-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+.ai-tool-weather-icon {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  /* OpenWeatherMap PNGs have a fair amount of transparent padding; pull
+   * them slightly negative on the margin so the city text sits closer. */
+  margin: -8px 0;
+}
+.ai-tool-weather-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ai-tool-weather-city {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ai-ink);
+}
+.ai-tool-weather-desc {
+  font-size: 12.5px;
+  color: #9a8870;
+}
+
+.ai-tool-weather-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  padding: 6px 0 2px;
+  border-top: 1px dashed #e4d4bb;
+}
+.ai-tool-weather-cell {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #faf4ea;
+  border: 1px solid #eadfca;
+  border-radius: 8px;
+}
+.ai-tool-weather-cell-label {
+  font-size: 12px;
+  color: #9a8870;
+  font-weight: 600;
+}
+.ai-tool-weather-cell-value {
+  font-size: 13px;
+  color: var(--ai-ink-2);
+  font-variant-numeric: tabular-nums;
+}

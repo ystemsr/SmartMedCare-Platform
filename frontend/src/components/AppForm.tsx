@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, DatePicker, Input, Modal, Select, Textarea } from './ui';
+import ElderPicker from './ElderPicker';
+import DoctorPicker from './DoctorPicker';
+import DoctorComboBox from './DoctorComboBox';
+import AlertPicker, { type AlertSummary } from './AlertPicker';
+import FollowupPicker from './FollowupPicker';
+import TagsInput from './TagsInput';
 import { message } from '../utils/message';
 
 export interface FormFieldRule {
@@ -13,11 +19,34 @@ export interface FormFieldRule {
 export interface FormFieldConfig {
   name: string;
   label: string;
-  type?: 'input' | 'textarea' | 'number' | 'select' | 'date' | 'password';
+  type?:
+    | 'input'
+    | 'textarea'
+    | 'number'
+    | 'select'
+    | 'date'
+    | 'password'
+    | 'elder-picker'
+    | 'doctor-picker'
+    | 'doctor-combo'
+    | 'alert-picker'
+    | 'followup-picker'
+    | 'tags';
   required?: boolean;
   options?: { label: string; value: string | number }[];
   placeholder?: string;
   rules?: FormFieldRule[];
+  /** For 'elder-picker' / 'doctor-picker' / 'alert-picker' / 'followup-picker': name of a sibling field in initialValues holding a prefilled display label (e.g. 'elder_name', 'assigned_to_name') */
+  labelField?: string;
+  /** For 'alert-picker' / 'followup-picker': name of a sibling field whose value scopes the options shown (e.g. 'elder_id'). */
+  dependsOn?: string;
+  /** For 'alert-picker': enable multi-select. The form value becomes number[]. */
+  multi?: boolean;
+  /** For 'alert-picker': hide alerts already linked to a todo/in-progress followup. */
+  excludeLinked?: boolean;
+  /** For 'alert-picker': name of a sibling field in initialValues holding the
+   * already-linked alert summaries (so chips render before any fetch). */
+  initialAlertsField?: string;
 }
 
 interface AppFormProps<T = any> {
@@ -33,7 +62,13 @@ interface AppFormProps<T = any> {
 
 function createDefaultValues(fields: FormFieldConfig[]) {
   return fields.reduce<Record<string, unknown>>((result, field) => {
-    result[field.name] = '';
+    if (field.type === 'tags') {
+      result[field.name] = [];
+    } else if (field.type === 'alert-picker' && field.multi) {
+      result[field.name] = [];
+    } else {
+      result[field.name] = '';
+    }
     return result;
   }, {});
 }
@@ -71,7 +106,12 @@ const AppForm: React.FC<AppFormProps> = ({
   const validate = () => {
     const nextErrors = fields.reduce<Record<string, string>>((result, field) => {
       const value = values[field.name];
-      if (field.required && (value === '' || value === null || value === undefined)) {
+      const isEmpty =
+        value === '' ||
+        value === null ||
+        value === undefined ||
+        (Array.isArray(value) && value.length === 0);
+      if (field.required && isEmpty) {
         result[field.name] = `请输入${field.label}`;
         return result;
       }
@@ -103,9 +143,20 @@ const AppForm: React.FC<AppFormProps> = ({
     return true;
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = async () => {
     if (!validate()) return;
-    await onSubmit(values);
+    setSubmitting(true);
+    try {
+      await onSubmit(values);
+    } catch (err) {
+      // Surface backend / network errors as a toast so the modal never fails
+      // silently when a caller's onSubmit lets the promise reject.
+      message.error(err instanceof Error ? err.message : '提交失败');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -117,8 +168,8 @@ const AppForm: React.FC<AppFormProps> = ({
       footer={
         <>
           <Button variant="outlined" onClick={onCancel}>取消</Button>
-          <Button onClick={handleSubmit} loading={confirmLoading}>
-            {confirmLoading ? '提交中...' : '确定'}
+          <Button onClick={handleSubmit} loading={confirmLoading || submitting}>
+            {confirmLoading || submitting ? '提交中...' : '确定'}
           </Button>
         </>
       }
@@ -148,6 +199,141 @@ const AppForm: React.FC<AppFormProps> = ({
                 required={field.required}
                 value={(value as string) || null}
                 onChange={(v) => updateValue(field.name, v ?? '')}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'elder-picker') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            return (
+              <ElderPicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as number | '' | null) ?? ''}
+                onChange={(v) => updateValue(field.name, v)}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'doctor-picker') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            return (
+              <DoctorPicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as number | '' | null) ?? ''}
+                onChange={(v) => updateValue(field.name, v)}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'doctor-combo') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            return (
+              <DoctorComboBox
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as number | '' | null) ?? ''}
+                onChange={(v) => updateValue(field.name, v)}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'followup-picker') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            const dependsOn = field.dependsOn ?? 'elder_id';
+            const elderId = values[dependsOn] as number | '' | null | undefined;
+            return (
+              <FollowupPicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={(value as number | '' | null) ?? ''}
+                onChange={(v) => updateValue(field.name, v)}
+                elderId={elderId ?? ''}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'alert-picker') {
+            const initialLabel =
+              field.labelField && initialValues
+                ? ((initialValues as Record<string, unknown>)[field.labelField] as string | undefined)
+                : undefined;
+            const initialAlerts =
+              field.initialAlertsField && initialValues
+                ? ((initialValues as Record<string, unknown>)[
+                    field.initialAlertsField
+                  ] as AlertSummary[] | undefined)
+                : undefined;
+            const dependsOn = field.dependsOn ?? 'elder_id';
+            const elderId = values[dependsOn] as number | '' | null | undefined;
+            const isMulti = Boolean(field.multi);
+            const fallbackValue: unknown = isMulti ? [] : '';
+            const currentValue = value === '' || value === null || value === undefined
+              ? fallbackValue
+              : value;
+            // When excludeLinked is on, the current selection (edit mode) must
+            // stay visible even though those alerts are linked to this very
+            // followup, so feed them back through keep_ids.
+            const keepIds = isMulti
+              ? Array.isArray(currentValue)
+                ? (currentValue as number[])
+                : []
+              : typeof currentValue === 'number'
+                ? [currentValue]
+                : [];
+            return (
+              <AlertPicker
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                multi={isMulti}
+                value={currentValue as number | number[] | '' | null}
+                onChange={(v) => updateValue(field.name, v)}
+                elderId={elderId ?? ''}
+                excludeLinked={field.excludeLinked}
+                keepIds={field.excludeLinked ? keepIds : undefined}
+                initialAlerts={initialAlerts}
+                initialLabel={initialLabel}
+                placeholder={field.placeholder}
+                error={errors[field.name]}
+              />
+            );
+          }
+          if (field.type === 'tags') {
+            const current = Array.isArray(value) ? (value as string[]) : [];
+            return (
+              <TagsInput
+                key={field.name}
+                label={field.label}
+                required={field.required}
+                value={current}
+                onChange={(tags) => updateValue(field.name, tags)}
+                placeholder={field.placeholder}
                 error={errors[field.name]}
               />
             );

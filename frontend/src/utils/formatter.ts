@@ -1,15 +1,32 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 
-/** Format date string to YYYY-MM-DD */
-export function formatDate(dateStr: string | undefined | null): string {
-  if (!dateStr) return '-';
-  return dayjs(dateStr).format('YYYY-MM-DD');
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+/**
+ * Parse a datetime string coming from the backend.
+ * Backend stores all timestamps as UTC but may serialize them as naive ISO
+ * strings (without timezone marker). If no timezone info is present we
+ * interpret the value as UTC; otherwise dayjs handles the offset natively.
+ * The returned Dayjs instance is shifted to the user's local timezone.
+ */
+function parseBackendDate(dateStr: string) {
+  const hasTz = /Z|[+-]\d{2}:?\d{2}$/.test(dateStr);
+  return hasTz ? dayjs(dateStr).local() : dayjs.utc(dateStr).local();
 }
 
-/** Format datetime string to YYYY-MM-DD HH:mm:ss */
+/** Format date string to YYYY-MM-DD (in user's local timezone) */
+export function formatDate(dateStr: string | undefined | null): string {
+  if (!dateStr) return '-';
+  return parseBackendDate(dateStr).format('YYYY-MM-DD');
+}
+
+/** Format datetime string to YYYY-MM-DD HH:mm:ss (in user's local timezone) */
 export function formatDateTime(dateStr: string | undefined | null): string {
   if (!dateStr) return '-';
-  return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss');
+  return parseBackendDate(dateStr).format('YYYY-MM-DD HH:mm:ss');
 }
 
 /** Format gender enum to Chinese label */

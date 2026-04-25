@@ -36,6 +36,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const anchorRef = useRef<HTMLSpanElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const updatePosition = () => {
     if (!anchorRef.current) return;
@@ -47,7 +48,10 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (!anchorRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (anchorRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onScroll = () => setOpen(false);
     document.addEventListener('mousedown', onDoc);
@@ -76,8 +80,10 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
       {open && coords &&
         ReactDOM.createPortal(
           <div
+            ref={menuRef}
             className="smc-menu"
             style={{ top: coords.top, left: coords.left, minWidth }}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             {items.map((entry) => {

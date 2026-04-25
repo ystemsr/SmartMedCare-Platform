@@ -1,12 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Plus,
-  Trash2,
-  Pencil,
-  RefreshCw,
   Search,
-  ToggleRight,
-  ShieldCheck,
   Eye,
   AlertTriangle,
 } from 'lucide-react';
@@ -24,6 +19,10 @@ import {
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import AppForm, { type FormFieldConfig } from '../../components/AppForm';
 import PermissionGuard from '../../components/PermissionGuard';
+import { RefPageHead, RefStat, RefGrid } from '../../components/ref';
+import CredentialsModal from '../../components/CredentialsModal';
+import ElderDetailDrawer from '../../components/ElderDetailDrawer';
+import InlineDoctorSwitcher from '../../components/InlineDoctorSwitcher';
 import { useTable } from '../../hooks/useTable';
 import {
   activateElderAccount,
@@ -35,11 +34,12 @@ import {
   updateElderAccountStatus,
 } from '../../api/elders';
 import { formatDate, formatGender } from '../../utils/formatter';
-import { ACCOUNT_STATUS_OPTIONS, GENDER_OPTIONS, RISK_LEVEL_OPTIONS } from '../../utils/constants';
+import { ACCOUNT_STATUS_OPTIONS, AI_RISK_OPTIONS, GENDER_OPTIONS } from '../../utils/constants';
+import { useAuthStore } from '../../store/auth';
 import { message } from '../../utils/message';
 import type { Elder, ElderListQuery } from '../../types/elder';
 
-const formFields: FormFieldConfig[] = [
+const BASE_FORM_FIELDS: FormFieldConfig[] = [
   { name: 'name', label: '姓名', required: true },
   { name: 'gender', label: '性别', type: 'select', required: true, options: GENDER_OPTIONS },
   { name: 'birth_date', label: '出生日期', type: 'date', required: true },
@@ -50,6 +50,28 @@ const formFields: FormFieldConfig[] = [
   { name: 'emergency_contact_phone', label: '紧急联系电话' },
 ];
 
+const DOCTOR_FIELD: FormFieldConfig = {
+  name: 'primary_doctor_id',
+  label: '负责医生',
+  type: 'doctor-combo',
+  labelField: 'primary_doctor_name',
+  placeholder: '输入医生姓名 / 账号 / 手机号',
+};
+
+const TAGS_FIELD: FormFieldConfig = {
+  name: 'tags',
+  label: '标签',
+  type: 'tags',
+  placeholder: '输入标签后按回车',
+};
+
+interface CredentialsState {
+  title: string;
+  description?: string;
+  username?: string;
+  password: string;
+}
+
 const ElderListPage: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'list' | 'archive'>('list');
@@ -57,6 +79,22 @@ const ElderListPage: React.FC = () => {
   const [formVisible, setFormVisible] = useState(false);
   const [editingElder, setEditingElder] = useState<Elder | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [credentials, setCredentials] = useState<CredentialsState | null>(null);
+  const [detailElder, setDetailElder] = useState<Elder | null>(null);
+  const userRoles = useAuthStore((state) => state.user?.roles ?? []);
+  const isAdmin = userRoles.includes('admin');
+
+  // Admins can assign/switch the primary doctor freely, in both create and
+  // edit flows. Non-admin doctors never see the picker: on create the backend
+  // auto-assigns them; on edit they can't reassign their own elders anyway.
+  const formFields = useMemo<FormFieldConfig[]>(() => {
+    const fields = [...BASE_FORM_FIELDS];
+    if (isAdmin) {
+      fields.push(DOCTOR_FIELD);
+    }
+    fields.push(TAGS_FIELD);
+    return fields;
+  }, [isAdmin]);
 
   const fetchFn = useCallback(
     (params: ElderListQuery & { page: number; page_size: number }) => getElders(params),
@@ -72,21 +110,23 @@ const ElderListPage: React.FC = () => {
   };
 
   const handleEdit = (record: Elder) => {
+    setDetailElder(null);
     setEditingElder(record);
     setFormVisible(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (record: Elder) => {
     const ok = await confirm({
       title: '删除老人档案',
-      content: '确定删除该老人档案？此操作不可撤销。',
+      content: `确定删除 ${record.name} 的档案？此操作不可撤销。`,
       intent: 'danger',
       okText: '删除',
     });
     if (!ok) return;
     try {
-      await deleteElder(id);
+      await deleteElder(record.id);
       message.success('删除成功');
+      setDetailElder(null);
       refresh();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除失败');
@@ -96,60 +136,95 @@ const ElderListPage: React.FC = () => {
   const handleActivateAccount = async (record: Elder) => {
     const ok = await confirm({
       title: '激活账户',
-      content: '确定为该老人激活登录账户？',
+      content: `确定为 ${record.name} 激活登录账户？`,
       intent: 'info',
     });
     if (!ok) return;
     try {
       const res = await activateElderAccount(record.id);
-      message.success(`账户已激活，用户名: ${res.data.username}，密码: ${res.data.password}`);
+      setDetailElder(null);
+      setCredentials({
+        title: '账户已激活',
+        description: `已为 ${record.name} 开通登录账户，请将以下凭据交付给本人。`,
+        username: res.data.username,
+        password: res.data.password,
+      });
       refresh();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '激活失败');
     }
   };
 
-  const handleResetPassword = async (id: number) => {
+  const handleResetPassword = async (record: Elder) => {
     const ok = await confirm({
       title: '重置密码',
-      content: '确定重置密码？',
+      content: `确定为 ${record.name} 重置登录密码？`,
       intent: 'warning',
     });
     if (!ok) return;
     try {
-      await resetElderPassword(id);
-      message.success('密码已重置');
+      const res = await resetElderPassword(record.id);
+      setDetailElder(null);
+      setCredentials({
+        title: '密码已重置',
+        description: `已为 ${record.name} 生成新密码，请交付给本人。`,
+        password: res.data.new_password,
+      });
     } catch (err) {
       message.error(err instanceof Error ? err.message : '重置失败');
     }
   };
 
-  const handleToggleStatus = async (id: number, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+  const handleToggleStatus = async (record: Elder) => {
+    const newStatus = record.account_status === 'active' ? 'disabled' : 'active';
     const ok = await confirm({
       title: newStatus === 'active' ? '启用账户' : '禁用账户',
-      content: `确定${newStatus === 'active' ? '启用' : '禁用'}该账户？`,
+      content: `确定${newStatus === 'active' ? '启用' : '禁用'} ${record.name} 的账户？`,
       intent: newStatus === 'active' ? 'info' : 'warning',
     });
     if (!ok) return;
     try {
-      await updateElderAccountStatus(id, newStatus);
+      await updateElderAccountStatus(record.id, newStatus);
       message.success(newStatus === 'active' ? '已启用' : '已禁用');
+      setDetailElder((prev) =>
+        prev && prev.id === record.id ? { ...prev, account_status: newStatus } : prev,
+      );
       refresh();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '操作失败');
     }
   };
 
+  const handleOpenFullArchive = (record: Elder) => {
+    setDetailElder(null);
+    navigate(`/elders/${record.id}`);
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSubmit = async (values: any) => {
     setSubmitLoading(true);
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload: any = {
+        ...values,
+        tags: Array.isArray(values.tags) ? values.tags : [],
+      };
+      // Only admins are allowed to pick/change the primary doctor. Non-admin
+      // doctors get auto-assigned on create and can't reassign on edit, so
+      // strip the field entirely for them.
+      if (isAdmin) {
+        payload.primary_doctor_id =
+          values.primary_doctor_id === '' || values.primary_doctor_id === undefined
+            ? null
+            : values.primary_doctor_id;
+      } else {
+        delete payload.primary_doctor_id;
+      }
       if (editingElder) {
-        await updateElder(editingElder.id, values);
+        await updateElder(editingElder.id, payload);
         message.success('更新成功');
       } else {
-        await createElder(values);
+        await createElder(payload);
         message.success('创建成功');
       }
       setFormVisible(false);
@@ -179,21 +254,34 @@ const ElderListPage: React.FC = () => {
       { title: '联系电话', dataIndex: 'phone', width: 130 },
       { title: '地址', dataIndex: 'address', width: 200, ellipsis: true },
       {
-        title: '标签',
-        dataIndex: 'tags',
-        width: 220,
-        render: (value: unknown) => {
-          const tags = value as string[] | undefined;
-          return tags?.length ? (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {tags.map((tag) => (
-                <Chip key={tag} tone="primary" outlined>
-                  {tag}
-                </Chip>
-              ))}
-            </div>
-          ) : (
-            '-'
+        title: '负责医生',
+        key: 'primary_doctor',
+        width: 160,
+        render: (_: unknown, record: Elder) => {
+          if (!isAdmin) {
+            return record.primary_doctor_name ? (
+              record.primary_doctor_name
+            ) : (
+              <Chip outlined>未指派</Chip>
+            );
+          }
+          return (
+            <InlineDoctorSwitcher
+              currentDoctorId={record.primary_doctor_id ?? null}
+              currentDoctorName={record.primary_doctor_name ?? null}
+              onSelect={async (doctorId) => {
+                try {
+                  await updateElder(record.id, { primary_doctor_id: doctorId });
+                  message.success(
+                    doctorId === null ? '已清除指派' : '已切换负责医生',
+                  );
+                  refresh();
+                } catch (err) {
+                  message.error(err instanceof Error ? err.message : '操作失败');
+                  throw err;
+                }
+              }}
+            />
           );
         },
       },
@@ -261,75 +349,21 @@ const ElderListPage: React.FC = () => {
       {
         title: '操作',
         key: 'actions',
-        width: 380,
+        width: 110,
         fixed: 'right' as const,
         render: (_: unknown, record: Elder) => (
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <Button
-              size="sm"
-              variant="text"
-              startIcon={<Eye size={14} />}
-              onClick={() => navigate(`/elders/${record.id}`)}
-            >
-              查看
-            </Button>
-            <PermissionGuard permission="elder:update">
-              <Button
-                size="sm"
-                variant="text"
-                startIcon={<Pencil size={14} />}
-                onClick={() => handleEdit(record)}
-              >
-                编辑
-              </Button>
-            </PermissionGuard>
-            <PermissionGuard permission="elder:update">
-              {!record.username ? (
-                <Button
-                  size="sm"
-                  variant="text"
-                  startIcon={<ShieldCheck size={14} />}
-                  onClick={() => handleActivateAccount(record)}
-                >
-                  激活账户
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    variant="text"
-                    startIcon={<RefreshCw size={14} />}
-                    onClick={() => handleResetPassword(record.id)}
-                  >
-                    重置密码
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="text"
-                    startIcon={<ToggleRight size={14} />}
-                    onClick={() => handleToggleStatus(record.id, record.account_status)}
-                  >
-                    {record.account_status === 'active' ? '禁用' : '启用'}
-                  </Button>
-                </>
-              )}
-            </PermissionGuard>
-            <PermissionGuard permission="elder:delete">
-              <Button
-                size="sm"
-                variant="text"
-                danger
-                startIcon={<Trash2 size={14} />}
-                onClick={() => handleDelete(record.id)}
-              >
-                删除
-              </Button>
-            </PermissionGuard>
-          </div>
+          <Button
+            size="sm"
+            variant="text"
+            startIcon={<Eye size={14} />}
+            onClick={() => setDetailElder(record)}
+          >
+            查看
+          </Button>
         ),
       },
     ],
-    [navigate],
+    [isAdmin, refresh],
   );
 
   const handleArchiveSearch = useCallback(() => {
@@ -338,38 +372,113 @@ const ElderListPage: React.FC = () => {
 
   const archiveCards = useMemo(
     () =>
-      data.map((elder) => (
-        <div
-          key={elder.id}
-          style={{ flex: '1 1 240px', minWidth: 240, maxWidth: 320 }}
-        >
-          <Card
-            hoverable
-            style={{ height: '100%', cursor: 'pointer' }}
-            onClick={() => navigate(`/elders/${elder.id}/archive`)}
+      data.map((elder) => {
+        const initial = (elder.name || '老').slice(0, 1);
+        return (
+          <div
+            key={elder.id}
+            style={{ flex: '1 1 260px', minWidth: 260, maxWidth: 340 }}
           >
-            <div style={{ padding: 20 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{elder.name}</div>
-              <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 12 }}>
-                {formatGender(elder.gender)} · {elder.phone || '-'}
+            <Card
+              hoverable
+              style={{ height: '100%', cursor: 'pointer' }}
+              onClick={() => navigate(`/elders/${elder.id}/archive`)}
+            >
+              <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background:
+                        'color-mix(in oklab, var(--smc-primary) 14%, transparent)',
+                      color: 'var(--smc-primary-700)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontFamily: 'var(--smc-font-display)',
+                      fontSize: 20,
+                      fontWeight: 500,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {initial}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontFamily: 'var(--smc-font-display)',
+                        fontSize: 20,
+                        fontWeight: 500,
+                        letterSpacing: '-0.01em',
+                        color: 'var(--smc-text)',
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      {elder.name}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 2,
+                        fontSize: 13,
+                        color: 'var(--smc-text-2)',
+                      }}
+                    >
+                      {formatGender(elder.gender)} · {elder.phone || '-'}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontFamily: 'var(--smc-font-ui)',
+                      fontSize: 10,
+                      letterSpacing: '0.16em',
+                      textTransform: 'uppercase',
+                      color: 'var(--smc-text-3)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    标签
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {elder.tags?.length ? (
+                      elder.tags.map((tag) => (
+                        <Chip key={tag} tone="primary" outlined>
+                          {tag}
+                        </Chip>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: 13, color: 'var(--smc-text-3)' }}>
+                        暂无标签
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingTop: 10,
+                    borderTop: '1px solid var(--smc-divider)',
+                    fontSize: 12,
+                    color: 'var(--smc-text-3)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  <span>点击查看健康档案</span>
+                  <span style={{ color: 'var(--smc-primary-700)', fontWeight: 500 }}>
+                    →
+                  </span>
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--smc-text-2)', marginBottom: 6 }}>标签</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                {elder.tags?.length ? (
-                  elder.tags.map((tag) => (
-                    <Chip key={tag} tone="primary" outlined>
-                      {tag}
-                    </Chip>
-                  ))
-                ) : (
-                  <span style={{ fontSize: 13, color: 'var(--smc-text-3)' }}>暂无标签</span>
-                )}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>点击查看健康档案</div>
-            </div>
-          </Card>
-        </div>
-      )),
+            </Card>
+          </div>
+        );
+      }),
     [data, navigate],
   );
 
@@ -387,12 +496,12 @@ const ElderListPage: React.FC = () => {
       </div>
       <div style={{ minWidth: 140 }}>
         <Select
-          label="风险等级"
+          label="AI 风险"
           value={query.risk_level || ''}
           onChange={(v) =>
             setQuery((prev) => ({ ...prev, risk_level: v ? String(v) : undefined }))
           }
-          options={[{ label: '全部', value: '' }, ...RISK_LEVEL_OPTIONS]}
+          options={[{ label: '全部', value: '' }, ...AI_RISK_OPTIONS]}
         />
       </div>
       <div style={{ minWidth: 140 }}>
@@ -405,16 +514,72 @@ const ElderListPage: React.FC = () => {
           options={[{ label: '全部', value: '' }, ...ACCOUNT_STATUS_OPTIONS]}
         />
       </div>
-      <PermissionGuard permission="elder:create">
-        <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
-          新增老人
-        </Button>
-      </PermissionGuard>
     </div>
   );
 
   return (
     <div>
+      <CredentialsModal
+        open={credentials !== null}
+        onClose={() => setCredentials(null)}
+        title={credentials?.title ?? ''}
+        description={credentials?.description}
+        username={credentials?.username}
+        password={credentials?.password ?? ''}
+      />
+      <ElderDetailDrawer
+        open={detailElder !== null}
+        elder={detailElder}
+        onClose={() => setDetailElder(null)}
+        onEdit={handleEdit}
+        onActivate={handleActivateAccount}
+        onResetPassword={handleResetPassword}
+        onToggleStatus={handleToggleStatus}
+        onDelete={handleDelete}
+        onOpenFullArchive={handleOpenFullArchive}
+      />
+      <RefPageHead
+        title="老人管理"
+        subtitle={`共 ${pagination.total ?? data.length} 人 · 维护基础档案、家属关系与账户凭证 · 切换「健康档案」以卡片形式浏览`}
+        actions={
+          <PermissionGuard permission="elder:create">
+            <Button startIcon={<Plus size={14} />} onClick={handleCreate}>
+              新增老人
+            </Button>
+          </PermissionGuard>
+        }
+      />
+
+      {/* Quick-glance stats computed from the current page of records. */}
+      <RefGrid cols={4} style={{ marginBottom: 16 }}>
+        <RefStat
+          label="在管老人"
+          value={pagination.total ?? data.length}
+          sub="全部档案数"
+          tone="info"
+        />
+        <RefStat
+          label="已激活账户"
+          value={data.filter((e) => e.account_status === 'active').length}
+          sub="当前页统计"
+          tone="ok"
+          valueColor="var(--smc-success)"
+        />
+        <RefStat
+          label="AI 高风险"
+          value={data.filter((e) => e.latest_high_risk === true).length}
+          sub="需重点关注"
+          tone="risk"
+          valueColor="var(--smc-error)"
+        />
+        <RefStat
+          label="未指派医生"
+          value={data.filter((e) => !e.primary_doctor_id).length}
+          sub="尚待分配"
+          tone="warn"
+        />
+      </RefGrid>
+
       <div style={{ marginBottom: 16 }}>
         <Tabs
           activeKey={activeTab}
@@ -461,11 +626,15 @@ const ElderListPage: React.FC = () => {
               flexWrap: 'wrap',
             }}
           >
-            <div>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>老人健康档案</h2>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--smc-text-2)' }}>
-                查看并进入单个老人的健康档案详情
-              </p>
+            <div
+              style={{
+                fontFamily: 'var(--smc-font-ui)',
+                fontSize: 12,
+                color: 'var(--smc-text-3)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {loading ? '加载档案中…' : `共 ${data.length} 位老人`}
             </div>
 
             <div style={{ width: 340, maxWidth: '100%' }}>
@@ -475,7 +644,7 @@ const ElderListPage: React.FC = () => {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') handleArchiveSearch();
                 }}
-                placeholder="搜索姓名/手机号/身份证"
+                placeholder="搜索姓名 / 手机号 / 身份证"
                 endAdornment={<Search size={14} />}
               />
             </div>

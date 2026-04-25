@@ -1,13 +1,36 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Users, AlertTriangle, Clock, CheckCircle2, Stethoscope, LineChart } from 'lucide-react';
+import {
+  Users,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Stethoscope,
+  LineChart as LineIcon,
+} from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
-import { Card, Chip, Select, type ChipTone } from '../../components/ui';
-import StatCard from '../../components/StatCard';
+import { Select } from '../../components/ui';
 import { getOverview, getTodos, getTrends } from '../../api/dashboard';
 import type { DashboardOverview, TodoItem, TrendData } from '../../api/dashboard';
+import { useAuthStore } from '../../store/auth';
 import { message } from '../../utils/message';
+import {
+  RefPageHead,
+  RefStat,
+  RefGrid,
+  RefCard,
+  RefDonut,
+  RefPill,
+  RefSev,
+} from '../../components/ref';
+
+const CHART_COLORS = {
+  alerts: '#D97757',
+  followups: '#788C5D',
+  assessments: '#6A9BCC',
+};
 
 const DashboardPage: React.FC = () => {
+  const user = useAuthStore((s) => s.user);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [trends, setTrends] = useState<TrendData | null>(null);
@@ -40,141 +63,355 @@ const DashboardPage: React.FC = () => {
     () =>
       trends
         ? {
-            tooltip: { trigger: 'axis' as const },
-            legend: { data: ['预警数', '随访数', '评估数'] },
-            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-            xAxis: { type: 'category' as const, data: trends.dates },
-            yAxis: { type: 'value' as const },
+            color: [CHART_COLORS.alerts, CHART_COLORS.followups, CHART_COLORS.assessments],
+            tooltip: {
+              trigger: 'axis' as const,
+              backgroundColor: '#141413',
+              borderColor: '#141413',
+              textStyle: { color: '#F5F3EC', fontFamily: 'Poppins' },
+              padding: [8, 12],
+            },
+            legend: {
+              data: ['预警数', '随访数', '评估数'],
+              textStyle: { color: '#55534C', fontFamily: 'Poppins', fontSize: 12 },
+              itemGap: 20,
+              icon: 'circle',
+              top: 4,
+            },
+            grid: { left: 8, right: 12, bottom: 8, top: 36, containLabel: true },
+            xAxis: {
+              type: 'category' as const,
+              data: trends.dates,
+              axisLine: { lineStyle: { color: '#D8D5CC' } },
+              axisLabel: { color: '#8A877D', fontFamily: 'Poppins', fontSize: 11 },
+              axisTick: { show: false },
+            },
+            yAxis: {
+              type: 'value' as const,
+              axisLine: { show: false },
+              axisTick: { show: false },
+              axisLabel: { color: '#8A877D', fontFamily: 'Poppins', fontSize: 11 },
+              splitLine: { lineStyle: { color: '#E2DFD5', type: [4, 4] as any } },
+            },
             series: [
-              { name: '预警数', type: 'line', data: trends.alerts, smooth: true },
-              { name: '随访数', type: 'line', data: trends.followups, smooth: true },
-              { name: '评估数', type: 'line', data: trends.assessments, smooth: true },
+              {
+                name: '预警数',
+                type: 'line',
+                data: trends.alerts,
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                lineStyle: { width: 2.5 },
+                areaStyle: {
+                  color: {
+                    type: 'linear',
+                    x: 0,
+                    y: 0,
+                    x2: 0,
+                    y2: 1,
+                    colorStops: [
+                      { offset: 0, color: 'rgba(217,119,87,0.22)' },
+                      { offset: 1, color: 'rgba(217,119,87,0)' },
+                    ],
+                  },
+                },
+              },
+              {
+                name: '随访数',
+                type: 'line',
+                data: trends.followups,
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                lineStyle: { width: 2.5 },
+              },
+              {
+                name: '评估数',
+                type: 'line',
+                data: trends.assessments,
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                lineStyle: { width: 2.5 },
+              },
             ],
           }
         : {},
     [trends],
   );
 
-  const todoPriorityTone: Record<string, ChipTone> = {
-    low: 'default',
-    medium: 'primary',
-    high: 'warning',
-    urgent: 'error',
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 6) return '夜深了';
+    if (h < 12) return '早上好';
+    if (h < 18) return '下午好';
+    return '晚上好';
+  }, []);
+
+  const priorityPill: Record<string, { tone: any; label: string; sev: any }> = {
+    urgent: { tone: 'risk', label: '紧急', sev: 'high' },
+    high: { tone: 'warn', label: '重要', sev: 'high' },
+    medium: { tone: 'info', label: '一般', sev: 'med' },
+    low: { tone: 'mute', label: '普通', sev: 'low' },
   };
 
-  return (
-    <div style={{ display: 'grid', gap: 24 }}>
-      <div
-        style={{
-          display: 'grid',
-          gap: 20,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-        }}
-      >
-        <StatCard title="老人总数" value={overview?.elder_total ?? '-'} icon={<Users size={20} />} color="#1f6feb" loading={loading} />
-        <StatCard title="高风险人数" value={overview?.high_risk_total ?? '-'} icon={<AlertTriangle size={20} />} color="#d14343" loading={loading} />
-        <StatCard title="待处理预警" value={overview?.pending_alert_total ?? '-'} icon={<Clock size={20} />} color="#d9822b" loading={loading} />
-        <StatCard title="待随访任务" value={overview?.todo_followup_total ?? '-'} icon={<Stethoscope size={20} />} color="#0f9d8f" loading={loading} />
-        <StatCard title="今日已完成随访" value={overview?.completed_followup_today ?? '-'} icon={<CheckCircle2 size={20} />} color="#1f9d63" loading={loading} />
-        <StatCard title="今日评估数" value={overview?.assessment_total_today ?? '-'} icon={<LineChart size={20} />} color="#13c2c2" loading={loading} />
-      </div>
+  // Donut breakdown of pending work types
+  const donutData = useMemo(() => {
+    if (!overview) return [];
+    return [
+      {
+        value: overview.pending_alert_total || 0,
+        color: 'var(--smc-error)',
+        label: '待处理预警',
+      },
+      {
+        value: overview.todo_followup_total || 0,
+        color: 'var(--smc-primary)',
+        label: '待随访',
+      },
+      {
+        value: overview.assessment_total_today || 0,
+        color: 'var(--smc-info)',
+        label: '今日评估',
+      },
+      {
+        value: overview.completed_followup_today || 0,
+        color: 'var(--smc-success)',
+        label: '已完成随访',
+      },
+    ];
+  }, [overview]);
 
+  return (
+    <>
+      <RefPageHead
+        title={`${greeting}${user?.real_name ? `，${user.real_name}` : ''}`}
+        subtitle={`${new Date().toLocaleDateString('zh-CN', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })} · 系统运行状态良好 · 数据每日凌晨汇总更新`}
+      />
+
+      {/* Stat grid */}
+      <RefGrid cols={4} style={{ marginBottom: 16 }}>
+        <RefStat
+          label="老人总数"
+          value={overview?.elder_total ?? '—'}
+          sub="在管老人"
+          icon={<Users size={16} />}
+          tone="info"
+        />
+        <RefStat
+          label="高风险人数"
+          value={overview?.high_risk_total ?? '—'}
+          sub="需重点关注"
+          icon={<AlertTriangle size={16} />}
+          tone="risk"
+          valueColor="var(--smc-error)"
+        />
+        <RefStat
+          label="待处理预警"
+          value={overview?.pending_alert_total ?? '—'}
+          sub="今日触发"
+          icon={<Clock size={16} />}
+          tone="warn"
+        />
+        <RefStat
+          label="本周随访完成率"
+          value={
+            overview
+              ? `${Math.round(
+                  ((overview.completed_followup_today || 0) /
+                    Math.max(1, overview.todo_followup_total || 0)) *
+                    100,
+                )}%`
+              : '—'
+          }
+          sub={`今日完成 ${overview?.completed_followup_today ?? 0}`}
+          icon={<CheckCircle2 size={16} />}
+          tone="ok"
+        />
+      </RefGrid>
+
+      {/* Trend chart + donut breakdown */}
       <div
-        style={{
-          display: 'grid',
-          gap: 20,
-          gridTemplateColumns: 'minmax(0, 2fr) minmax(320px, 1fr)',
-        }}
-        className="smc-dashboard-grid"
+        className="ref-grid"
+        style={{ gridTemplateColumns: '2fr 1fr', marginBottom: 16, gap: 16 }}
       >
-        <Card style={{ height: '100%' }}>
-          <div style={{ padding: 20 }}>
+        <RefCard
+          title="业务趋势"
+          subtitle="预警、随访、评估的每日走势"
+          actions={
+            <div style={{ width: 140 }}>
+              <Select
+                value={trendRange}
+                onChange={(v) => setTrendRange(String(v))}
+                options={[
+                  { label: '近 7 天', value: '7d' },
+                  { label: '近 30 天', value: '30d' },
+                  { label: '近 90 天', value: '90d' },
+                ]}
+              />
+            </div>
+          }
+        >
+          {trends ? (
+            <ReactECharts option={chartOption} style={{ height: 300 }} />
+          ) : (
             <div
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 16,
-                marginBottom: 16,
-                flexWrap: 'wrap',
+                color: 'var(--smc-text-3)',
+                padding: '48px 0',
+                textAlign: 'center',
+                fontFamily: 'var(--smc-font-display)',
               }}
             >
-              <div>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>趋势数据</h3>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--smc-text-2)' }}>
-                  近7天、30天或90天的变化趋势
-                </p>
-              </div>
-              <div style={{ width: 160 }}>
-                <Select
-                  value={trendRange}
-                  onChange={(v) => setTrendRange(String(v))}
-                  options={[
-                    { label: '近7天', value: '7d' },
-                    { label: '近30天', value: '30d' },
-                    { label: '近90天', value: '90d' },
-                  ]}
-                />
-              </div>
+              {loading ? '加载中…' : '暂无趋势数据'}
             </div>
-            {trends ? (
-              <ReactECharts option={chartOption} style={{ height: 350 }} />
-            ) : (
-              <div
-                style={{
-                  color: 'var(--smc-text-2)',
-                  padding: '48px 0',
-                  textAlign: 'center',
-                }}
-              >
-                暂无趋势数据
-              </div>
-            )}
-          </div>
-        </Card>
+          )}
+        </RefCard>
 
-        <Card style={{ height: '100%' }}>
-          <div style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 600 }}>近期待办</h3>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {todos.map((item, idx) => (
+        <RefCard title="工作分布" subtitle="各类事项占比">
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <RefDonut data={donutData} centerLabel="总量" />
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                fontSize: 13,
+              }}
+            >
+              {donutData.map((d) => (
                 <div
-                  key={item.id}
-                  style={{
-                    padding: '10px 0',
-                    borderBottom:
-                      idx === todos.length - 1 ? 'none' : '1px solid var(--smc-divider)',
-                  }}
+                  key={d.label}
+                  style={{ display: 'flex', justifyContent: 'space-between' }}
                 >
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                    <Chip tone="default" outlined>
-                      {item.type}
-                    </Chip>
-                    <Chip tone={todoPriorityTone[item.priority] || 'default'} outlined>
-                      {item.priority}
-                    </Chip>
-                  </div>
-                  <div style={{ fontSize: 14, color: 'var(--smc-text)' }}>{item.title}</div>
-                  <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginTop: 2 }}>
-                    {item.description}
-                  </div>
+                  <span
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 2,
+                        background: d.color,
+                      }}
+                    />
+                    {d.label}
+                  </span>
+                  <b>{d.value}</b>
                 </div>
               ))}
-              {!loading && todos.length === 0 && (
-                <div
-                  style={{
-                    color: 'var(--smc-text-2)',
-                    padding: '32px 0',
-                    textAlign: 'center',
-                  }}
-                >
-                  暂无待办事项
-                </div>
-              )}
             </div>
           </div>
-        </Card>
+        </RefCard>
       </div>
-    </div>
+
+      {/* Todo list */}
+      <RefCard
+        title="近期待办"
+        subtitle="按紧急程度排序"
+        actions={
+          <span style={{ fontSize: 12, color: 'var(--smc-text-3)' }}>
+            共 {todos.length} 条
+          </span>
+        }
+        flush
+      >
+        <table className="ref-table">
+          <thead>
+            <tr>
+              <th>优先级</th>
+              <th>类型</th>
+              <th>事项</th>
+              <th>说明</th>
+              <th style={{ width: 100 }}>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {todos.map((item) => {
+              const pri = priorityPill[item.priority] || priorityPill.medium;
+              return (
+                <tr key={item.id}>
+                  <td>
+                    <RefSev level={pri.sev}>{pri.label}</RefSev>
+                  </td>
+                  <td>
+                    <RefPill>{item.type}</RefPill>
+                  </td>
+                  <td style={{ fontWeight: 500 }}>{item.title}</td>
+                  <td style={{ color: 'var(--smc-text-3)' }}>
+                    {item.description || '—'}
+                  </td>
+                  <td>
+                    <button className="ref-btn-small ref-btn-small--primary">
+                      查看
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!loading && todos.length === 0 && (
+              <tr>
+                <td
+                  colSpan={5}
+                  style={{
+                    color: 'var(--smc-text-3)',
+                    textAlign: 'center',
+                    padding: '36px 0',
+                    fontFamily: 'var(--smc-font-display)',
+                  }}
+                >
+                  今日暂无待办事项
+                </td>
+              </tr>
+            )}
+            {loading && todos.length === 0 && (
+              <tr>
+                <td
+                  colSpan={5}
+                  style={{
+                    color: 'var(--smc-text-3)',
+                    textAlign: 'center',
+                    padding: '36px 0',
+                  }}
+                >
+                  加载中…
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </RefCard>
+
+      {/* Secondary metrics row */}
+      <RefGrid cols={3} style={{ marginTop: 16 }}>
+        <RefStat
+          label="待随访任务"
+          value={overview?.todo_followup_total ?? '—'}
+          sub="尚未执行"
+          icon={<Stethoscope size={16} />}
+          tone="info"
+        />
+        <RefStat
+          label="今日已完成随访"
+          value={overview?.completed_followup_today ?? '—'}
+          sub="计入 SLA"
+          icon={<CheckCircle2 size={16} />}
+          tone="ok"
+        />
+        <RefStat
+          label="今日评估数"
+          value={overview?.assessment_total_today ?? '—'}
+          sub="当日新建"
+          icon={<LineIcon size={16} />}
+          tone="purple"
+        />
+      </RefGrid>
+    </>
   );
 };
 

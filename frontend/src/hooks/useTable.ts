@@ -34,7 +34,7 @@ export function useTable<TItem, TQuery extends Record<string, any> = Record<stri
   fetchFn: (params: TQuery & { page: number; page_size: number }) => Promise<ApiResponse<PaginatedData<TItem>>>,
   options?: UseTableOptions<TQuery>,
 ): UseTableReturn<TItem, TQuery> {
-  const defaultPageSize = options?.defaultPageSize ?? 20;
+  const defaultPageSize = options?.defaultPageSize ?? 30;
   const [data, setData] = useState<TItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);

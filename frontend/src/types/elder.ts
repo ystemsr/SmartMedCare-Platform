@@ -15,6 +15,8 @@ export interface Elder {
   tags: string[];
   username?: string;
   family_count?: number;
+  primary_doctor_id?: number | null;
+  primary_doctor_name?: string | null;
   latest_risk_score?: number | null;
   latest_high_risk?: boolean | null;
   latest_prediction_at?: string | null;
@@ -33,6 +35,7 @@ export interface ElderCreate {
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   tags?: string[];
+  primary_doctor_id?: number | null;
 }
 
 /** Update elder request */

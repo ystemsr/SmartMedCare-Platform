@@ -56,17 +56,17 @@ class FamilyMemberService:
         now = datetime.now(timezone.utc)
         if invite.expires_at.replace(tzinfo=timezone.utc) <= now:
             return "邀请码已过期"
-        if invite.used_count >= invite.max_uses:
-            return "邀请码已用完"
 
         # Check elder exists
         elder = await ElderRepository.get_by_id(db, invite.elder_id)
         if elder is None:
             return "关联的老人档案不存在"
 
-        # Check family member count
+        # Gate on the live active-family count (unbinds free up slots)
+        # rather than the monotonic invite.used_count counter.
         count = await FamilyMemberRepository.count_by_elder_id(db, invite.elder_id)
-        if count >= MAX_FAMILY_MEMBERS:
+        slot_cap = min(invite.max_uses, MAX_FAMILY_MEMBERS)
+        if count >= slot_cap:
             return "该老人已达到最大家属数量限制（3人）"
 
         # Check phone uniqueness as username

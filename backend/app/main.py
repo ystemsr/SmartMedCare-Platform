@@ -12,6 +12,9 @@ from app.core.config import settings
 from app.core.logger import setup_logging
 from app.core.minio_client import init_minio
 from app.core.redis_client import close_redis, init_redis
+from app.services.ai_tools import bootstrap as ai_tools_bootstrap
+from app.services.weather import WeatherService
+from app.tasks.pipeline_scheduler import PipelineScheduler
 from app.api.v1.router import api_router
 from app.utils.response import (
     INTERNAL_ERROR,
@@ -39,9 +42,14 @@ HTTP_TO_APP_CODE = {
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     logger.info("Starting %s application", settings.APP_NAME)
+    ai_tools_bootstrap.register_all()
     await init_redis()
     await init_minio()
+    await WeatherService.start()
+    await PipelineScheduler.start()
     yield
+    await PipelineScheduler.stop()
+    await WeatherService.stop()
     await close_redis()
     logger.info("Application shutdown complete")
 
@@ -66,21 +74,43 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 
+def _clean_pydantic_reason(msg: str) -> str:
+    """Strip Pydantic's 'Value error, ' prefix from custom ValueError messages."""
+    prefix = "Value error, "
+    return msg[len(prefix):] if msg.startswith(prefix) else msg
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ) -> JSONResponse:
-    """Handle Pydantic / FastAPI request validation errors."""
+    """Handle Pydantic / FastAPI request validation errors.
+
+    Surfaces the first field-level reason as the top-level message so the
+    frontend shows a meaningful cause (e.g. "密码长度至少 6 位") instead of a
+    generic "Parameter validation failed".
+    """
     errors = []
     for err in exc.errors():
-        field = ".".join(str(loc) for loc in err.get("loc", []))
-        errors.append({"field": field, "reason": err.get("msg", "")})
+        loc = [str(p) for p in err.get("loc", []) if p != "body"]
+        field = ".".join(loc)
+        reason = _clean_pydantic_reason(err.get("msg", ""))
+        errors.append({"field": field, "reason": reason})
+
+    if errors:
+        first = errors[0]
+        top_message = (
+            f"{first['field']}: {first['reason']}" if first.get("field") else first["reason"]
+        )
+    else:
+        top_message = "Parameter validation failed"
+
     return JSONResponse(
         status_code=422,
         content=error_response(
             code=PARAM_ERROR,
-            message="Parameter validation failed",
+            message=top_message,
             errors=errors,
         ),
     )

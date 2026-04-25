@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, RefreshCw, XCircle } from 'lucide-react';
+import { Plus, RefreshCw, XCircle, RotateCcw, Download } from 'lucide-react';
 import PermissionGuard from '../../components/PermissionGuard';
 import AppTable, { type AppTableColumn } from '../../components/AppTable';
 import PageHeader from '../../components/bigdata/PageHeader';
 import JobStatusChip, { JOB_TYPE_LABEL } from '../../components/bigdata/JobStatusChip';
+import JobParamsForm from '../../components/bigdata/JobParamsForm';
 import {
   Button,
   Chip,
@@ -11,33 +12,60 @@ import {
   Drawer,
   Modal,
   Select,
-  Textarea,
+  Input,
   confirm,
 } from '@/components/ui';
-import { cancelJob, getJobDetail, getJobs, submitJob } from '../../api/bigdata';
+import {
+  cancelJob,
+  getJobDetail,
+  getJobs,
+  retryJob,
+  jobLogDownloadUrl,
+  submitJob,
+} from '../../api/bigdata';
 import { formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
-import type { Job, JobDetail, JobType } from '../../types/bigdata';
+import type { Job, JobDetail, JobStatus, JobType } from '../../types/bigdata';
 
 const JOB_TYPE_OPTIONS: { label: string; value: JobType }[] = [
-  { label: 'MySQL 导入 HDFS', value: 'mysql_to_hdfs' },
-  { label: '构建数据集市', value: 'build_marts' },
-  { label: '批量预测', value: 'batch_predict' },
-  { label: '自定义 Hive', value: 'custom_hive' },
+  { label: '业务库快照（MySQL → HDFS）', value: 'mysql_to_hdfs' },
+  { label: '构建统计数据集市', value: 'build_marts' },
+  { label: '智能风险预测（批量）', value: 'batch_predict' },
 ];
 
-const PARAMS_PLACEHOLDER = '{\n  "table": "health_archives"\n}';
+const STATUS_FILTER_OPTIONS: { label: string; value: JobStatus | '' }[] = [
+  { label: '全部', value: '' },
+  { label: '等待', value: 'pending' },
+  { label: '运行中', value: 'running' },
+  { label: '成功', value: 'succeeded' },
+  { label: '失败', value: 'failed' },
+  { label: '已取消', value: 'cancelled' },
+];
+
+function formatDuration(ms?: number | null): string {
+  if (ms == null) return '—';
+  if (ms < 1000) return `${ms} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  const mins = Math.floor(ms / 60_000);
+  const secs = Math.round((ms % 60_000) / 1000);
+  return `${mins}m ${secs}s`;
+}
 
 const JobManagerPage: React.FC = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(30);
+
+  const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('');
+  const [typeFilter, setTypeFilter] = useState<JobType | ''>('');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitType, setSubmitType] = useState<JobType>('mysql_to_hdfs');
-  const [paramsText, setParamsText] = useState('');
+  const [submitParams, setSubmitParams] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const [selected, setSelected] = useState<Job | null>(null);
@@ -48,7 +76,14 @@ const JobManagerPage: React.FC = () => {
   const fetchJobs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getJobs({ page, page_size: pageSize });
+      const res = await getJobs({
+        page,
+        page_size: pageSize,
+        status: statusFilter || undefined,
+        job_type: typeFilter || undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+      });
       setJobs(res.data.items);
       setTotal(res.data.total);
     } catch (err) {
@@ -56,7 +91,7 @@ const JobManagerPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize]);
+  }, [page, pageSize, statusFilter, typeFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchJobs();
@@ -110,22 +145,17 @@ const JobManagerPage: React.FC = () => {
   }, [selected, loadDetail, clearPoll, fetchJobs]);
 
   const handleSubmit = async () => {
-    let parsed: Record<string, unknown> | undefined;
-    if (paramsText.trim()) {
-      try {
-        parsed = JSON.parse(paramsText);
-      } catch {
-        message.error('参数必须是合法的 JSON');
-        return;
-      }
-    }
-
     setSubmitting(true);
     try {
-      await submitJob({ job_type: submitType, params: parsed });
+      // Drop empty string values; coerce comma-separated strings as-is.
+      const cleaned: Record<string, unknown> = {};
+      Object.entries(submitParams).forEach(([k, v]) => {
+        if (v !== '' && v !== null && v !== undefined) cleaned[k] = v;
+      });
+      await submitJob({ job_type: submitType, params: cleaned });
       message.success('作业已提交');
       setSubmitOpen(false);
-      setParamsText('');
+      setSubmitParams({});
       fetchJobs();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '提交失败');
@@ -145,12 +175,20 @@ const JobManagerPage: React.FC = () => {
     try {
       await cancelJob(jobId);
       message.success('已请求取消');
-      if (selected?.job_id === jobId) {
-        loadDetail(jobId);
-      }
+      if (selected?.job_id === jobId) loadDetail(jobId);
       fetchJobs();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '取消失败');
+    }
+  };
+
+  const handleRetry = async (job: Job) => {
+    try {
+      await retryJob(job.job_id);
+      message.success('已重试并提交新作业');
+      fetchJobs();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '重试失败');
     }
   };
 
@@ -158,9 +196,9 @@ const JobManagerPage: React.FC = () => {
     {
       title: '作业 ID',
       dataIndex: 'job_id',
-      width: 240,
+      width: 220,
       render: (value) => (
-        <Chip outlined style={{ fontFamily: 'monospace' }}>
+        <Chip outlined style={{ fontFamily: 'monospace', fontSize: 12 }}>
           {String(value)}
         </Chip>
       ),
@@ -168,37 +206,74 @@ const JobManagerPage: React.FC = () => {
     {
       title: '类型',
       dataIndex: 'job_type',
-      width: 150,
+      width: 140,
       render: (value) => JOB_TYPE_LABEL[String(value)] || String(value),
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 110,
+      width: 100,
       render: (value) => <JobStatusChip status={value as Job['status']} />,
+    },
+    {
+      title: '耗时',
+      dataIndex: 'duration_ms',
+      width: 90,
+      render: (value) => (
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {formatDuration(value as number | null)}
+        </span>
+      ),
+    },
+    {
+      title: '处理行数',
+      dataIndex: 'rows_processed',
+      width: 110,
+      render: (value) =>
+        value == null ? '—' : (value as number).toLocaleString(),
     },
     {
       title: '开始时间',
       dataIndex: 'started_at',
-      width: 170,
+      width: 160,
       render: (value) => formatDateTime(value as string),
     },
     {
       title: '结束时间',
       dataIndex: 'finished_at',
-      width: 170,
+      width: 160,
       render: (value) => formatDateTime(value as string),
     },
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 140,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => (
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}
+        >
           <Button size="sm" variant="text" onClick={() => setSelected(record)}>
-            查看日志
+            详情
           </Button>
+          {(record.status === 'failed' || record.status === 'cancelled') && (
+            <PermissionGuard permission="bigdata:run">
+              <Button
+                size="sm"
+                variant="text"
+                startIcon={<RotateCcw size={14} />}
+                onClick={() => handleRetry(record)}
+              >
+                重试
+              </Button>
+            </PermissionGuard>
+          )}
           {record.status === 'running' && (
             <PermissionGuard permission="bigdata:run">
               <Button
@@ -221,8 +296,57 @@ const JobManagerPage: React.FC = () => {
     <div>
       <PageHeader
         title="作业管理"
-        description="提交、监控与管理大数据批处理作业"
+        description="提交、监控、过滤与管理大数据批处理作业"
       />
+
+      <div
+        style={{
+          display: 'grid',
+          gap: 12,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          marginBottom: 16,
+        }}
+      >
+        <Select<JobStatus | ''>
+          label="状态"
+          value={statusFilter}
+          onChange={(v) => {
+            setPage(1);
+            setStatusFilter(v);
+          }}
+          options={STATUS_FILTER_OPTIONS}
+        />
+        <Select<JobType | ''>
+          label="类型"
+          value={typeFilter}
+          onChange={(v) => {
+            setPage(1);
+            setTypeFilter(v);
+          }}
+          options={[
+            { label: '全部', value: '' },
+            ...JOB_TYPE_OPTIONS.map((o) => ({ label: o.label, value: o.value })),
+          ]}
+        />
+        <Input
+          label="起始日期"
+          type="date"
+          value={dateFrom}
+          onChange={(e) => {
+            setPage(1);
+            setDateFrom(e.target.value);
+          }}
+        />
+        <Input
+          label="截止日期"
+          type="date"
+          value={dateTo}
+          onChange={(e) => {
+            setPage(1);
+            setDateTo(e.target.value);
+          }}
+        />
+      </div>
 
       <AppTable<Job>
         columns={columns}
@@ -252,7 +376,10 @@ const JobManagerPage: React.FC = () => {
               <Button
                 variant="primary"
                 startIcon={<Plus size={14} />}
-                onClick={() => setSubmitOpen(true)}
+                onClick={() => {
+                  setSubmitParams({});
+                  setSubmitOpen(true);
+                }}
               >
                 提交新作业
               </Button>
@@ -265,13 +392,18 @@ const JobManagerPage: React.FC = () => {
         open={submitOpen}
         onClose={() => setSubmitOpen(false)}
         title="提交新作业"
-        width={560}
+        width={640}
         footer={
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Button variant="text" onClick={() => setSubmitOpen(false)}>
               取消
             </Button>
-            <Button variant="primary" onClick={handleSubmit} loading={submitting} disabled={submitting}>
+            <Button
+              variant="primary"
+              onClick={handleSubmit}
+              loading={submitting}
+              disabled={submitting}
+            >
               {submitting ? '提交中...' : '提交'}
             </Button>
           </div>
@@ -281,20 +413,17 @@ const JobManagerPage: React.FC = () => {
           <Select<JobType>
             label="作业类型"
             value={submitType}
-            onChange={(next) => setSubmitType(next)}
+            onChange={(next) => {
+              setSubmitType(next);
+              setSubmitParams({});
+            }}
             options={JOB_TYPE_OPTIONS}
           />
-          <Textarea
-            label="参数 (JSON, 可选)"
-            rows={6}
-            value={paramsText}
-            onChange={(event) => setParamsText(event.target.value)}
-            placeholder={PARAMS_PLACEHOLDER}
-            style={{ fontFamily: 'monospace', fontSize: 14 }}
+          <JobParamsForm
+            jobType={submitType}
+            params={submitParams}
+            onChange={setSubmitParams}
           />
-          <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
-            参数将原样透传给后端，请参考作业类型所需的字段。
-          </div>
         </div>
       </Modal>
 
@@ -302,60 +431,38 @@ const JobManagerPage: React.FC = () => {
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
         placement="right"
-        width={680}
+        width={720}
         title="作业详情"
       >
-        <div
-          style={{
-            fontSize: 'var(--smc-fs-sm)',
-            color: 'var(--smc-text-2)',
-            marginBottom: 16,
-          }}
-        >
+        <div style={{ fontSize: 'var(--smc-fs-sm)', color: 'var(--smc-text-2)', marginBottom: 16 }}>
           作业 ID：
           <span style={{ fontFamily: 'monospace', color: 'var(--smc-text)' }}>
             {selected?.job_id}
           </span>
         </div>
         <Divider />
-
         {detailLoading && !detail ? (
           <div style={{ color: 'var(--smc-text-2)', marginTop: 16 }}>加载中...</div>
         ) : detail ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
-            <div
-              style={{
-                display: 'flex',
-                gap: 12,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <JobStatusChip status={detail.status} />
               <Chip outlined>{JOB_TYPE_LABEL[detail.job_type] || detail.job_type}</Chip>
+              <Chip outlined>耗时 {formatDuration(detail.duration_ms)}</Chip>
+              {detail.rows_processed != null && (
+                <Chip outlined>
+                  处理 {detail.rows_processed.toLocaleString()} 行
+                </Chip>
+              )}
               {detail.status === 'running' && (
                 <span style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
-                  日志每 3 秒自动刷新
+                  日志每 3 秒刷新
                 </span>
               )}
             </div>
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
-                  开始时间
-                </div>
-                <div style={{ fontSize: 'var(--smc-fs-sm)' }}>
-                  {formatDateTime(detail.started_at)}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
-                  结束时间
-                </div>
-                <div style={{ fontSize: 'var(--smc-fs-sm)' }}>
-                  {formatDateTime(detail.finished_at)}
-                </div>
-              </div>
+              <MetricCell label="开始时间" value={formatDateTime(detail.started_at)} />
+              <MetricCell label="结束时间" value={formatDateTime(detail.finished_at)} />
             </div>
 
             {detail.params && Object.keys(detail.params).length > 0 && (
@@ -381,8 +488,32 @@ const JobManagerPage: React.FC = () => {
             )}
 
             <div>
-              <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
-                日志
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 4,
+                }}
+              >
+                <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>
+                  日志 (尾部 500 行)
+                </div>
+                <a
+                  href={jobLogDownloadUrl(detail.job_id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--smc-primary)',
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <Download size={12} /> 下载完整日志
+                </a>
               </div>
               <pre
                 style={{
@@ -399,7 +530,12 @@ const JobManagerPage: React.FC = () => {
                   whiteSpace: 'pre-wrap',
                 }}
               >
-                {detail.logs || '暂无日志输出'}
+                {(() => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const logs = (detail as any).log_tail || (detail as any).logs;
+                  if (Array.isArray(logs)) return logs.join('\n') || '暂无日志输出';
+                  return logs || '暂无日志输出';
+                })()}
               </pre>
             </div>
           </div>
@@ -408,5 +544,12 @@ const JobManagerPage: React.FC = () => {
     </div>
   );
 };
+
+const MetricCell: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div>
+    <div style={{ fontSize: 'var(--smc-fs-xs)', color: 'var(--smc-text-2)' }}>{label}</div>
+    <div style={{ fontSize: 'var(--smc-fs-sm)' }}>{value}</div>
+  </div>
+);
 
 export default JobManagerPage;

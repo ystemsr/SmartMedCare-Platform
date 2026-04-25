@@ -1,11 +1,21 @@
 import type { PaginationParams } from './common';
 
+/** Lightweight alert info embedded in a followup response. */
+export interface FollowupAlertSummary {
+  id: number;
+  title: string;
+  risk_level: string;
+  status: string;
+  source?: string | null;
+}
+
 /** Follow-up plan entity */
 export interface Followup {
   id: number;
   elder_id: number;
   elder_name?: string;
-  alert_id?: number;
+  alert_ids: number[];
+  alerts?: FollowupAlertSummary[];
   plan_type: string;
   planned_at: string;
   status: 'todo' | 'in_progress' | 'completed' | 'overdue' | 'cancelled';
@@ -20,7 +30,7 @@ export interface Followup {
 /** Create follow-up request */
 export interface FollowupCreate {
   elder_id: number;
-  alert_id?: number;
+  alert_ids?: number[];
   plan_type: string;
   planned_at: string;
   assigned_to: number;
@@ -62,4 +72,6 @@ export interface FollowupListQuery extends PaginationParams {
   plan_type?: string;
   date_start?: string;
   date_end?: string;
+  /** Restrict to actionable statuses (todo / in_progress / overdue). */
+  active_only?: boolean;
 }

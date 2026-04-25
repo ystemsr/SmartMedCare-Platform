@@ -15,7 +15,7 @@ import {
   getCareRecords,
   createCareRecord,
 } from '../../api/elders';
-import { getElderPredictions } from '../../api/bigdata';
+import { getPredictionHistory } from '../../api/bigdata';
 import { formatGender, formatDate, formatDateTime } from '../../utils/formatter';
 import { message } from '../../utils/message';
 import type { Elder, HealthRecord, MedicalRecord, CareRecord } from '../../types/elder';
@@ -29,6 +29,8 @@ const healthRecordFields: FormFieldConfig[] = [
   { name: 'blood_glucose', label: '血糖(mmol/L)', type: 'number' },
   { name: 'heart_rate', label: '心率(次/分)', type: 'number' },
   { name: 'temperature', label: '体温(℃)', type: 'number' },
+  { name: 'chronic_diseases', label: '慢性病（多项用英文逗号分隔）' },
+  { name: 'allergies', label: '过敏史（多项用英文逗号分隔）' },
 ];
 
 const medicalRecordFields: FormFieldConfig[] = [
@@ -64,8 +66,29 @@ interface DetailItemProps {
 function DetailItem({ label, value }: DetailItemProps) {
   return (
     <div>
-      <div style={{ fontSize: 12, color: 'var(--smc-text-2)', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 14, wordBreak: 'break-word' }}>{value}</div>
+      <div
+        style={{
+          fontFamily: 'var(--smc-font-ui)',
+          fontSize: 10,
+          color: 'var(--smc-text-3)',
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          fontWeight: 500,
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 15,
+          color: 'var(--smc-text)',
+          wordBreak: 'break-word',
+          lineHeight: 1.5,
+        }}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -125,13 +148,8 @@ const ElderDetailPage: React.FC = () => {
 
   const fetchPredictions = useCallback(async () => {
     try {
-      const res = await getElderPredictions(elderId);
-      const payload = res.data as unknown;
-      const list: PredictionRecord[] = Array.isArray(payload)
-        ? (payload as PredictionRecord[])
-        : payload
-          ? [payload as PredictionRecord]
-          : [];
+      const res = await getPredictionHistory(elderId, 30);
+      const list = res.data.items || [];
       list.sort((a, b) => (b.predicted_at || '').localeCompare(a.predicted_at || ''));
       setPredictions(list);
     } catch {
@@ -165,6 +183,14 @@ const ElderDetailPage: React.FC = () => {
         render: (value: unknown) => {
           const diseases = value as string[] | undefined;
           return diseases?.join(', ') || '-';
+        },
+      },
+      {
+        title: '过敏史',
+        dataIndex: 'allergies',
+        render: (value: unknown) => {
+          const allergies = value as string[] | undefined;
+          return allergies?.join(', ') || '-';
         },
       },
       {
@@ -387,141 +413,270 @@ const ElderDetailPage: React.FC = () => {
     },
   ];
 
+  const initial = (elder?.name || '老').slice(0, 1);
+  const latest = predictions[0];
+
+  const miniTiles: Array<{
+    label: string;
+    value: React.ReactNode;
+    color: string;
+    sub?: React.ReactNode;
+  }> = [
+    {
+      label: '健康记录数',
+      value: healthRecords.length,
+      color: 'var(--smc-primary)',
+    },
+    {
+      label: '医疗记录数',
+      value: medicalRecords.length,
+      color: 'var(--smc-secondary)',
+    },
+    {
+      label: '照护记录数',
+      value: careRecords.length,
+      color: 'var(--smc-warning)',
+    },
+  ];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
-        <Button variant="text" startIcon={<ArrowLeft size={14} />} onClick={() => navigate('/elders')}>
-          返回列表
+        <Button
+          variant="text"
+          startIcon={<ArrowLeft size={14} />}
+          onClick={() => navigate('/elders')}
+        >
+          返回老人列表
         </Button>
+      </div>
+
+      <div className="smc-page-hero" style={{ marginBottom: 0 }}>
+        <div style={{ display: 'flex', gap: 18, minWidth: 0, flex: 1 }}>
+          <span
+            aria-hidden
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 16,
+              background:
+                'color-mix(in oklab, var(--smc-primary) 14%, transparent)',
+              color: 'var(--smc-primary-700)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: 'var(--smc-font-display)',
+              fontSize: 28,
+              fontWeight: 500,
+              flexShrink: 0,
+            }}
+          >
+            {initial}
+          </span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="smc-page-hero__kicker">档案 · Resident Profile</div>
+            <h1 className="smc-page-hero__title">{elder?.name || '老人档案'}</h1>
+            <div
+              style={{
+                display: 'flex',
+                gap: 14,
+                marginTop: 8,
+                flexWrap: 'wrap',
+                fontSize: 13,
+                color: 'var(--smc-text-2)',
+              }}
+            >
+              <span>{formatGender(elder?.gender)}</span>
+              <span style={{ color: 'var(--smc-text-3)' }}>·</span>
+              <span>{formatDate(elder?.birth_date)}</span>
+              <span style={{ color: 'var(--smc-text-3)' }}>·</span>
+              <span>{elder?.phone || '-'}</span>
+              <span style={{ color: 'var(--smc-text-3)' }}>·</span>
+              <span>负责医生：{elder?.primary_doctor_name || '未指派'}</span>
+            </div>
+            {elder?.tags?.length ? (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  flexWrap: 'wrap',
+                  marginTop: 12,
+                }}
+              >
+                {elder.tags.map((tag) => (
+                  <Chip key={tag} tone="primary" outlined>
+                    {tag}
+                  </Chip>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <Card>
         <div style={{ padding: 24 }}>
-          <h2 style={{ margin: '0 0 16px', fontSize: 22, fontWeight: 700 }}>
-            {elder?.name || '老人档案'}
-          </h2>
+          <div
+            style={{
+              fontFamily: 'var(--smc-font-ui)',
+              fontSize: 10,
+              letterSpacing: '0.16em',
+              textTransform: 'uppercase',
+              color: 'var(--smc-text-3)',
+              marginBottom: 18,
+            }}
+          >
+            基础信息
+          </div>
           <div style={detailGridStyle}>
-            <DetailItem label="姓名" value={elder?.name || '-'} />
-            <DetailItem label="性别" value={formatGender(elder?.gender)} />
-            <DetailItem label="出生日期" value={formatDate(elder?.birth_date)} />
             <DetailItem label="身份证号" value={elder?.id_card || '-'} />
-            <DetailItem label="联系电话" value={elder?.phone || '-'} />
             <DetailItem label="地址" value={elder?.address || '-'} />
-            <DetailItem label="紧急联系人" value={elder?.emergency_contact_name || '-'} />
-            <DetailItem label="紧急联系电话" value={elder?.emergency_contact_phone || '-'} />
             <DetailItem
-              label="标签"
-              value={
-                elder?.tags?.length ? (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {elder.tags.map((tag) => (
-                      <Chip key={tag} tone="primary" outlined>
-                        {tag}
-                      </Chip>
-                    ))}
-                  </div>
-                ) : (
-                  '-'
-                )
-              }
+              label="紧急联系人"
+              value={elder?.emergency_contact_name || '-'}
+            />
+            <DetailItem
+              label="紧急联系电话"
+              value={elder?.emergency_contact_phone || '-'}
             />
           </div>
         </div>
       </Card>
 
-      <Card>
-        <div style={{ padding: 24 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>记录概览</h3>
-          <div
-            style={{
-              display: 'grid',
-              gap: 16,
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            }}
-          >
-            <Card>
-              <div style={{ padding: 20 }}>
-                <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 4 }}>
-                  健康记录数
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--smc-primary)' }}>
-                  {healthRecords.length}
-                </div>
+      <div
+        style={{
+          display: 'grid',
+          gap: 16,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        }}
+      >
+        {miniTiles.map((tile) => (
+          <Card key={tile.label}>
+            <div style={{ padding: '20px 22px', position: 'relative' }}>
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  top: 22,
+                  right: 22,
+                  width: 18,
+                  height: 1,
+                  background: tile.color,
+                  opacity: 0.7,
+                }}
+              />
+              <div
+                style={{
+                  fontFamily: 'var(--smc-font-ui)',
+                  fontSize: 10,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: 'var(--smc-text-3)',
+                  marginBottom: 8,
+                }}
+              >
+                {tile.label}
               </div>
-            </Card>
-            <Card>
-              <div style={{ padding: 20 }}>
-                <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 4 }}>
-                  医疗记录数
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--smc-success)' }}>
-                  {medicalRecords.length}
-                </div>
+              <div
+                style={{
+                  fontFamily: 'var(--smc-font-display)',
+                  fontSize: 30,
+                  fontWeight: 500,
+                  letterSpacing: '-0.01em',
+                  color: 'var(--smc-text)',
+                  lineHeight: 1.05,
+                }}
+              >
+                {tile.value}
               </div>
-            </Card>
-            <Card>
-              <div style={{ padding: 20 }}>
-                <div style={{ fontSize: 13, color: 'var(--smc-text-2)', marginBottom: 4 }}>
-                  照护记录数
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--smc-warning)' }}>
-                  {careRecords.length}
-                </div>
-              </div>
-            </Card>
-            <Card>
-              <div style={{ padding: 20 }}>
+            </div>
+          </Card>
+        ))}
+        <Card>
+          <div style={{ padding: '20px 22px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'var(--smc-font-ui)',
+                  fontSize: 10,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: 'var(--smc-text-3)',
+                }}
+              >
+                AI 健康评估
+              </span>
+              {predictions.length > 0 && (
+                <Button size="sm" variant="text" onClick={() => setTab('ai')}>
+                  查看历史
+                </Button>
+              )}
+            </div>
+            {latest ? (
+              <>
                 <div
                   style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 4,
+                    gap: 10,
+                    alignItems: 'baseline',
                   }}
                 >
-                  <span style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>AI 健康评估</span>
-                  {predictions.length > 0 && (
-                    <Button size="sm" variant="text" onClick={() => setTab('ai')}>
-                      查看历史
-                    </Button>
+                  <span
+                    style={{
+                      fontFamily: 'var(--smc-font-display)',
+                      fontSize: 30,
+                      fontWeight: 500,
+                      letterSpacing: '-0.01em',
+                      color: latest.high_risk
+                        ? 'var(--smc-error)'
+                        : 'var(--smc-success)',
+                      lineHeight: 1.05,
+                    }}
+                  >
+                    {latest.health_score.toFixed(1)}
+                  </span>
+                  {latest.high_risk ? (
+                    <Chip tone="error" outlined icon={<AlertTriangle size={12} />}>
+                      高风险
+                    </Chip>
+                  ) : (
+                    <Chip tone="success" outlined>
+                      正常
+                    </Chip>
                   )}
                 </div>
-                {predictions.length === 0 ? (
-                  <div style={{ fontSize: 13, color: 'var(--smc-text-2)' }}>暂无评估</div>
-                ) : (
-                  <>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-                      <span
-                        style={{
-                          fontSize: 28,
-                          fontWeight: 700,
-                          color: predictions[0].high_risk
-                            ? 'var(--smc-error)'
-                            : 'var(--smc-success)',
-                        }}
-                      >
-                        {predictions[0].health_score.toFixed(1)}
-                      </span>
-                      {predictions[0].high_risk ? (
-                        <Chip tone="error" outlined icon={<AlertTriangle size={12} />}>
-                          高风险
-                        </Chip>
-                      ) : (
-                        <Chip tone="success" outlined>
-                          正常
-                        </Chip>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--smc-text-3)', marginTop: 4 }}>
-                      {formatDateTime(predictions[0].predicted_at)}
-                    </div>
-                  </>
-                )}
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--smc-text-3)',
+                    marginTop: 6,
+                  }}
+                >
+                  {formatDateTime(latest.predicted_at)}
+                </div>
+              </>
+            ) : (
+              <div
+                style={{
+                  fontFamily: 'var(--smc-font-display)',
+                  fontSize: 16,
+                  color: 'var(--smc-text-3)',
+                  paddingTop: 4,
+                }}
+              >
+                暂无评估
               </div>
-            </Card>
+            )}
           </div>
-        </div>
-      </Card>
+        </Card>
+      </div>
 
       <Card>
         <div style={{ padding: '8px 24px 0' }}>
@@ -540,10 +695,21 @@ const ElderDetailPage: React.FC = () => {
         visible={healthFormVisible}
         fields={healthRecordFields}
         onSubmit={async (values) => {
-          await createHealthRecord(elderId, {
+          const splitList = (v: unknown): string[] | undefined => {
+            if (!v) return undefined;
+            if (Array.isArray(v)) return v.map(String).map((s) => s.trim()).filter(Boolean);
+            return String(v)
+              .split(/[,，;；、/|]/)
+              .map((s) => s.trim())
+              .filter(Boolean);
+          };
+          const payload = {
             ...values,
+            chronic_diseases: splitList((values as Record<string, unknown>).chronic_diseases),
+            allergies: splitList((values as Record<string, unknown>).allergies),
             recorded_at: new Date().toISOString(),
-          } as Parameters<typeof createHealthRecord>[1]);
+          };
+          await createHealthRecord(elderId, payload as Parameters<typeof createHealthRecord>[1]);
           message.success('添加成功');
           setHealthFormVisible(false);
           fetchHealthRecords();

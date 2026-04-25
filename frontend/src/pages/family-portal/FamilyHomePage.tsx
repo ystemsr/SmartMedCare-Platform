@@ -24,25 +24,29 @@ import { formatDateTime } from '../../utils/formatter';
 
 interface AlertRecord {
   id: number;
-  alert_type: string;
-  level: string;
-  message: string;
+  type: string;
+  risk_level: string;
+  title: string;
+  description?: string;
   status: string;
+  triggered_at?: string;
   created_at: string;
 }
 
 interface HealthRecord {
   id: number;
-  record_date: string;
+  recorded_at: string;
 }
 
 const alertLevelColorMap: Record<string, string> = {
+  critical: '#dc2626',
   high: '#ef4444',
   medium: '#f59e0b',
   low: '#3b82f6',
 };
 
 const alertLevelLabelMap: Record<string, string> = {
+  critical: '紧急',
   high: '高',
   medium: '中',
   low: '低',
@@ -131,7 +135,7 @@ const FamilyHomePage: React.FC = () => {
           setAlertsTotal(alertsData.total || 0);
           setHealthTotal(healthData.total || 0);
           if (healthData.items?.length > 0) {
-            setLatestRecordDate(healthData.items[0].record_date);
+            setLatestRecordDate(healthData.items[0].recorded_at);
           }
         } catch {
           message.error('获取统计信息失败');
@@ -155,10 +159,10 @@ const FamilyHomePage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Welcome banner */}
+      {/* Welcome banner — warm Anthropic-style gradient to match app palette. */}
       <Card
         style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          background: 'linear-gradient(135deg, var(--smc-primary-700) 0%, var(--smc-primary) 100%)',
           color: '#fff',
           overflow: 'hidden',
           position: 'relative',
@@ -356,7 +360,7 @@ const FamilyHomePage: React.FC = () => {
                         width: 10,
                         height: 10,
                         borderRadius: '50%',
-                        background: alertLevelColorMap[alert.level] || '#3b82f6',
+                        background: alertLevelColorMap[alert.risk_level] || '#3b82f6',
                         flexShrink: 0,
                       }}
                     />
@@ -370,10 +374,10 @@ const FamilyHomePage: React.FC = () => {
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {alert.message}
+                        {alert.title}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--smc-text-2)' }}>
-                        {alert.alert_type} · {formatDateTime(alert.created_at)}
+                        {alert.type} · {formatDateTime(alert.triggered_at || alert.created_at)}
                       </div>
                     </div>
                     <span
@@ -384,12 +388,12 @@ const FamilyHomePage: React.FC = () => {
                         lineHeight: '22px',
                         padding: '0 8px',
                         borderRadius: 999,
-                        background: `${alertLevelColorMap[alert.level] || '#3b82f6'}18`,
-                        color: alertLevelColorMap[alert.level] || '#3b82f6',
+                        background: `${alertLevelColorMap[alert.risk_level] || '#3b82f6'}18`,
+                        color: alertLevelColorMap[alert.risk_level] || '#3b82f6',
                         flexShrink: 0,
                       }}
                     >
-                      {alertLevelLabelMap[alert.level] || alert.level}
+                      {alertLevelLabelMap[alert.risk_level] || alert.risk_level}
                     </span>
                   </div>
                 ))}

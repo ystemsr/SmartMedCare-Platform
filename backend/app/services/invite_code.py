@@ -3,18 +3,21 @@
 import logging
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.repositories.family_member import FamilyMemberRepository
 from app.repositories.invite_code import InviteCodeRepository
 from app.schemas.invite_code import InviteCodeResponse, InviteCodeValidateResponse
 
 logger = logging.getLogger(__name__)
 
 CODE_LENGTH = 8
-CODE_EXPIRY_DAYS = 7
 MAX_FAMILY_MEMBERS = 3
+# Invite codes are permanent per elder; store a sentinel far-future expiry so
+# legacy expires_at checks elsewhere always pass.
+_PERMANENT_EXPIRES_AT = datetime(2099, 12, 31, 23, 59, 59)
 
 
 def _generate_code() -> str:
@@ -29,49 +32,44 @@ class InviteCodeService:
     """Invite code business operations."""
 
     @staticmethod
-    async def generate_code(db: AsyncSession, elder_id: int) -> InviteCodeResponse:
-        """Generate or return existing active invite code for an elder."""
-        # Check for existing active code
-        existing = await InviteCodeRepository.get_active_by_elder_id(db, elder_id)
-        if existing:
-            return InviteCodeResponse(
-                code=existing.code,
-                expires_at=existing.expires_at,
-                used_count=existing.used_count,
-                max_uses=existing.max_uses,
-                remaining_slots=existing.max_uses - existing.used_count,
-            )
-
-        # Generate new code
-        code = _generate_code()
-        expires_at = datetime.now(timezone.utc) + timedelta(days=CODE_EXPIRY_DAYS)
-        invite = await InviteCodeRepository.create(
-            db, elder_id=elder_id, code=code, expires_at=expires_at
-        )
-        await db.commit()
-        await db.refresh(invite)
-        logger.info("Invite code generated: elder_id=%s code=%s", elder_id, code)
+    async def _build_response(
+        db: AsyncSession, invite, elder_id: int
+    ) -> InviteCodeResponse:
+        # Derive bound count from active FamilyMember rows so unbinds are reflected.
+        # invite.used_count is a monotonic legacy counter and is not used for display.
+        bound_count = await FamilyMemberRepository.count_by_elder_id(db, elder_id)
+        used_count = min(bound_count, invite.max_uses)
         return InviteCodeResponse(
             code=invite.code,
             expires_at=invite.expires_at,
-            used_count=invite.used_count,
+            used_count=used_count,
             max_uses=invite.max_uses,
-            remaining_slots=invite.max_uses - invite.used_count,
+            remaining_slots=max(invite.max_uses - used_count, 0),
         )
 
     @staticmethod
-    async def get_active_code(db: AsyncSession, elder_id: int) -> InviteCodeResponse | None:
-        """Get active invite code for an elder."""
+    async def generate_code(db: AsyncSession, elder_id: int) -> InviteCodeResponse:
+        """Return the elder's permanent invite code, creating it on first call."""
         existing = await InviteCodeRepository.get_active_by_elder_id(db, elder_id)
-        if not existing:
-            return None
-        return InviteCodeResponse(
-            code=existing.code,
-            expires_at=existing.expires_at,
-            used_count=existing.used_count,
-            max_uses=existing.max_uses,
-            remaining_slots=existing.max_uses - existing.used_count,
+        if existing:
+            return await InviteCodeService._build_response(db, existing, elder_id)
+
+        code = _generate_code()
+        invite = await InviteCodeRepository.create(
+            db, elder_id=elder_id, code=code, expires_at=_PERMANENT_EXPIRES_AT
         )
+        await db.commit()
+        await db.refresh(invite)
+        logger.info("Permanent invite code created: elder_id=%s code=%s", elder_id, code)
+        return await InviteCodeService._build_response(db, invite, elder_id)
+
+    @staticmethod
+    async def get_active_code(db: AsyncSession, elder_id: int) -> InviteCodeResponse | None:
+        """Get the elder's permanent invite code, creating it lazily if missing."""
+        existing = await InviteCodeRepository.get_active_by_elder_id(db, elder_id)
+        if existing is None:
+            return await InviteCodeService.generate_code(db, elder_id)
+        return await InviteCodeService._build_response(db, existing, elder_id)
 
     @staticmethod
     async def validate_code(db: AsyncSession, code: str) -> InviteCodeValidateResponse:
@@ -83,7 +81,9 @@ class InviteCodeService:
         now = datetime.now(timezone.utc)
         if invite.expires_at.replace(tzinfo=timezone.utc) <= now:
             return InviteCodeValidateResponse(valid=False)
-        if invite.used_count >= invite.max_uses:
+
+        bound_count = await FamilyMemberRepository.count_by_elder_id(db, invite.elder_id)
+        if bound_count >= invite.max_uses:
             return InviteCodeValidateResponse(valid=False)
 
         # Load elder name for display (masked)
@@ -99,7 +99,7 @@ class InviteCodeService:
         return InviteCodeValidateResponse(
             valid=True,
             elder_name=masked_name,
-            remaining_slots=invite.max_uses - invite.used_count,
+            remaining_slots=max(invite.max_uses - bound_count, 0),
         )
 
     @staticmethod

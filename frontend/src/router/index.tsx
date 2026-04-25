@@ -23,6 +23,8 @@ const ElderLayout = lazy(() => import('../layouts/ElderLayout'));
 const ElderHomePage = lazy(() => import('../pages/elder-portal/ElderHomePage'));
 const ElderHealthPage = lazy(() => import('../pages/elder-portal/ElderHealthPage'));
 const ElderInvitePage = lazy(() => import('../pages/elder-portal/ElderInvitePage'));
+const ElderPersonalPage = lazy(() => import('../pages/elder-portal/ElderPersonalPage'));
+const ElderSurveysPage = lazy(() => import('../pages/elder-portal/ElderSurveysPage'));
 const FamilyRegisterPage = lazy(() => import('../pages/family/FamilyRegisterPage'));
 const FamilyLayout = lazy(() => import('../layouts/FamilyLayout'));
 const FamilyHomePage = lazy(() => import('../pages/family-portal/FamilyHomePage'));
@@ -32,6 +34,10 @@ const MLInferencePage = lazy(() => import('../pages/bigdata/MLInferencePage'));
 const JobManagerPage = lazy(() => import('../pages/bigdata/JobManagerPage'));
 const HdfsBrowserPage = lazy(() => import('../pages/bigdata/HdfsBrowserPage'));
 const HiveQueryPage = lazy(() => import('../pages/bigdata/HiveQueryPage'));
+const BigDataAnalyticsPage = lazy(() => import('../pages/bigdata/BigDataAnalyticsPage'));
+const AIChatPage = lazy(() => import('../pages/ai/AIChatPage'));
+const AIConfigPage = lazy(() => import('../pages/ai/AIConfigPage'));
+const KnowledgeBasePage = lazy(() => import('../pages/kb/KnowledgeBasePage'));
 
 const PageLoading: React.FC = () => (
   <div
@@ -96,7 +102,29 @@ const AppRouter: React.FC = () => {
           <Route path="/bigdata/jobs" element={<JobManagerPage />} />
           <Route path="/bigdata/hdfs" element={<HdfsBrowserPage />} />
           <Route path="/bigdata/hive" element={<HiveQueryPage />} />
+          <Route path="/bigdata/analytics" element={<BigDataAnalyticsPage />} />
+          <Route path="/ai/config" element={<AIConfigPage />} />
+          <Route path="/ai/knowledge-base" element={<KnowledgeBasePage />} />
         </Route>
+
+        {/* Full-screen AI chat — open to every authenticated role.
+         * `/ai` = empty state; `/ai/:id` = viewing a conversation. */}
+        <Route
+          path="/ai"
+          element={
+            <ProtectedRoute>
+              <AIChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai/:id"
+          element={
+            <ProtectedRoute>
+              <AIChatPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           element={
@@ -107,8 +135,9 @@ const AppRouter: React.FC = () => {
         >
           <Route path="/elder" element={<ElderHomePage />} />
           <Route path="/elder/health" element={<ElderHealthPage />} />
+          <Route path="/elder/surveys" element={<ElderSurveysPage />} />
           <Route path="/elder/invite" element={<ElderInvitePage />} />
-          <Route path="/elder/personal" element={<PersonalAccountPage />} />
+          <Route path="/elder/personal" element={<ElderPersonalPage />} />
         </Route>
 
         <Route

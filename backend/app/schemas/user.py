@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class RoleBrief(BaseModel):
@@ -23,8 +23,17 @@ class UserCreate(BaseModel):
     real_name: str = Field(..., min_length=1, max_length=64)
     phone: str = Field(default="", max_length=20)
     email: str = Field(default="", max_length=128)
-    password: str = Field(..., min_length=6)
+    password: str
     role_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, v: str) -> str:
+        if not isinstance(v, str) or len(v) < 6:
+            raise ValueError("密码长度至少 6 位")
+        if len(v) > 128:
+            raise ValueError("密码长度不能超过 128 位")
+        return v
 
 
 class UserUpdate(BaseModel):

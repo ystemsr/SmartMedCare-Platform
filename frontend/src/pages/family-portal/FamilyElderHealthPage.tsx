@@ -21,33 +21,38 @@ import { message } from '../../utils/message';
 
 interface HealthRecord {
   id: number;
-  record_date: string;
-  systolic_bp?: number;
-  diastolic_bp?: number;
+  recorded_at: string;
+  blood_pressure_systolic?: number;
+  blood_pressure_diastolic?: number;
   blood_glucose?: number;
   heart_rate?: number;
   temperature?: number;
-  notes?: string;
+  chronic_diseases?: string[];
+  allergies?: string[];
   created_at: string;
 }
 
 interface AlertRecord {
   id: number;
-  elder_name: string;
-  alert_type: string;
-  level: string;
-  message: string;
+  elder_name?: string;
+  type: string;
+  risk_level: string;
+  title: string;
+  description?: string;
   status: string;
+  triggered_at?: string;
   created_at: string;
 }
 
 const alertLevelToneMap: Record<string, ChipTone> = {
+  critical: 'error',
   high: 'error',
   medium: 'warning',
   low: 'primary',
 };
 
 const alertLevelLabelMap: Record<string, string> = {
+  critical: '紧急',
   high: '高风险',
   medium: '中风险',
   low: '低风险',
@@ -95,10 +100,6 @@ function temperatureColor(val?: number): string {
   if (val >= 37.3) return '#ef4444';
   if (val >= 37.0) return '#f59e0b';
   return 'inherit';
-}
-
-function vitalIndicatorColor(val: number | undefined, colorFn: (v?: number) => string): string {
-  return colorFn(val);
 }
 
 /* ---- Vital sign card ---- */
@@ -171,36 +172,45 @@ function VitalCard({
 
 /* ---- Column definitions ---- */
 
+const toNumber = (v: unknown): number | undefined => {
+  if (v === null || v === undefined || v === '') return undefined;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : undefined;
+};
+
 const healthColumns: AppTableColumn<HealthRecord>[] = [
   {
     title: '记录日期',
-    dataIndex: 'record_date',
-    key: 'record_date',
-    width: 120,
+    dataIndex: 'recorded_at',
+    key: 'recorded_at',
+    width: 160,
+    render: (value) => formatDateTime(value as string | undefined),
   },
   {
     title: '收缩压 (mmHg)',
-    dataIndex: 'systolic_bp',
-    key: 'systolic_bp',
+    dataIndex: 'blood_pressure_systolic',
+    key: 'blood_pressure_systolic',
     width: 130,
     render: (value, record) => {
-      if (typeof value !== 'number') return '-';
-      const color = bpColor(value, record.diastolic_bp);
+      const n = toNumber(value);
+      if (n === undefined) return '-';
+      const color = bpColor(n, toNumber(record.blood_pressure_diastolic));
       return (
-        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{n}</span>
       );
     },
   },
   {
     title: '舒张压 (mmHg)',
-    dataIndex: 'diastolic_bp',
-    key: 'diastolic_bp',
+    dataIndex: 'blood_pressure_diastolic',
+    key: 'blood_pressure_diastolic',
     width: 130,
     render: (value, record) => {
-      if (typeof value !== 'number') return '-';
-      const color = bpColor(record.systolic_bp, value);
+      const n = toNumber(value);
+      if (n === undefined) return '-';
+      const color = bpColor(toNumber(record.blood_pressure_systolic), n);
       return (
-        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{n}</span>
       );
     },
   },
@@ -210,10 +220,11 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     key: 'blood_glucose',
     width: 130,
     render: (value) => {
-      if (typeof value !== 'number') return '-';
-      const color = glucoseColor(value);
+      const n = toNumber(value);
+      if (n === undefined) return '-';
+      const color = glucoseColor(n);
       return (
-        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{n}</span>
       );
     },
   },
@@ -223,10 +234,11 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     key: 'heart_rate',
     width: 110,
     render: (value) => {
-      if (typeof value !== 'number') return '-';
-      const color = heartRateColor(value);
+      const n = toNumber(value);
+      if (n === undefined) return '-';
+      const color = heartRateColor(n);
       return (
-        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{n}</span>
       );
     },
   },
@@ -236,33 +248,34 @@ const healthColumns: AppTableColumn<HealthRecord>[] = [
     key: 'temperature',
     width: 100,
     render: (value) => {
-      if (typeof value !== 'number') return '-';
-      const color = temperatureColor(value);
+      const n = toNumber(value);
+      if (n === undefined) return '-';
+      const color = temperatureColor(n);
       return (
-        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{value}</span>
+        <span style={{ fontWeight: color !== 'inherit' ? 700 : 400, color }}>{n}</span>
       );
     },
   },
   {
-    title: '备注',
-    dataIndex: 'notes',
-    key: 'notes',
+    title: '过敏史',
+    dataIndex: 'allergies',
+    key: 'allergies',
     ellipsis: true,
-    render: (value) => (typeof value === 'string' && value ? value : '-'),
+    render: (value) => (Array.isArray(value) && value.length ? value.join('、') : '-'),
   },
 ];
 
 const alertColumns: AppTableColumn<AlertRecord>[] = [
   {
     title: '预警类型',
-    dataIndex: 'alert_type',
-    key: 'alert_type',
+    dataIndex: 'type',
+    key: 'type',
     width: 120,
   },
   {
     title: '级别',
-    dataIndex: 'level',
-    key: 'level',
+    dataIndex: 'risk_level',
+    key: 'risk_level',
     width: 100,
     render: (value) => {
       const level = typeof value === 'string' ? value : '';
@@ -275,8 +288,8 @@ const alertColumns: AppTableColumn<AlertRecord>[] = [
   },
   {
     title: '内容',
-    dataIndex: 'message',
-    key: 'message',
+    dataIndex: 'title',
+    key: 'title',
     ellipsis: true,
   },
   {
@@ -321,7 +334,7 @@ const FamilyElderHealthPage: React.FC = () => {
   const [healthPage, setHealthPage] = useState(1);
   const [alertsPage, setAlertsPage] = useState(1);
   const [tab, setTab] = useState<'health' | 'alerts'>('health');
-  const pageSize = 10;
+  const pageSize = 30;
 
   /* Latest record for vital cards */
   const latestRecord = healthRecords.length > 0 ? healthRecords[0] : null;
@@ -427,6 +440,7 @@ const FamilyElderHealthPage: React.FC = () => {
         current: healthPage,
         pageSize,
         total: healthTotal,
+        showSizeChanger: true,
         showTotal: (total) => `共 ${total} 条`,
       }}
       onChange={({ current }) => {
@@ -462,6 +476,7 @@ const FamilyElderHealthPage: React.FC = () => {
           current: alertsPage,
           pageSize,
           total: alertsTotal,
+          showSizeChanger: true,
           showTotal: (total) => `共 ${total} 条`,
         }}
         onChange={({ current }) => {
@@ -473,11 +488,11 @@ const FamilyElderHealthPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Elder info header */}
+      {/* Elder info header — tinted with warm primary to align with app palette. */}
       {elderInfo && (
         <Card
           style={{
-            background: 'linear-gradient(135deg, #667eea08 0%, #764ba208 100%)',
+            background: 'linear-gradient(135deg, rgba(217,119,87,0.08) 0%, rgba(120,140,93,0.06) 100%)',
           }}
         >
           <div style={{ padding: '20px 24px' }}>
@@ -556,36 +571,52 @@ const FamilyElderHealthPage: React.FC = () => {
           icon={<Gauge size={16} />}
           label="血压"
           value={
-            latestRecord?.systolic_bp !== undefined && latestRecord?.diastolic_bp !== undefined
-              ? `${latestRecord.systolic_bp}/${latestRecord.diastolic_bp}`
+            toNumber(latestRecord?.blood_pressure_systolic) !== undefined &&
+            toNumber(latestRecord?.blood_pressure_diastolic) !== undefined
+              ? `${toNumber(latestRecord?.blood_pressure_systolic)}/${toNumber(latestRecord?.blood_pressure_diastolic)}`
               : '-'
           }
           unit="mmHg"
-          color={vitalIndicatorColor(latestRecord?.systolic_bp, (v) => bpColor(v, latestRecord?.diastolic_bp))}
+          color={bpColor(
+            toNumber(latestRecord?.blood_pressure_systolic),
+            toNumber(latestRecord?.blood_pressure_diastolic),
+          )}
           loading={healthLoading && healthRecords.length === 0}
         />
         <VitalCard
           icon={<Activity size={16} />}
           label="心率"
-          value={latestRecord?.heart_rate !== undefined ? String(latestRecord.heart_rate) : '-'}
+          value={
+            toNumber(latestRecord?.heart_rate) !== undefined
+              ? String(toNumber(latestRecord?.heart_rate))
+              : '-'
+          }
           unit="bpm"
-          color={vitalIndicatorColor(latestRecord?.heart_rate, heartRateColor)}
+          color={heartRateColor(toNumber(latestRecord?.heart_rate))}
           loading={healthLoading && healthRecords.length === 0}
         />
         <VitalCard
           icon={<Droplet size={16} />}
           label="血糖"
-          value={latestRecord?.blood_glucose !== undefined ? String(latestRecord.blood_glucose) : '-'}
+          value={
+            toNumber(latestRecord?.blood_glucose) !== undefined
+              ? String(toNumber(latestRecord?.blood_glucose))
+              : '-'
+          }
           unit="mmol/L"
-          color={vitalIndicatorColor(latestRecord?.blood_glucose, glucoseColor)}
+          color={glucoseColor(toNumber(latestRecord?.blood_glucose))}
           loading={healthLoading && healthRecords.length === 0}
         />
         <VitalCard
           icon={<Thermometer size={16} />}
           label="体温"
-          value={latestRecord?.temperature !== undefined ? String(latestRecord.temperature) : '-'}
+          value={
+            toNumber(latestRecord?.temperature) !== undefined
+              ? String(toNumber(latestRecord?.temperature))
+              : '-'
+          }
           unit="°C"
-          color={vitalIndicatorColor(latestRecord?.temperature, temperatureColor)}
+          color={temperatureColor(toNumber(latestRecord?.temperature))}
           loading={healthLoading && healthRecords.length === 0}
         />
       </div>

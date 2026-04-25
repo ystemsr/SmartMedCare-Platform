@@ -2,6 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search, CheckCircle2, Ban, Check } from 'lucide-react';
 import { Button, Card, Chip, Spinner, confirm } from '../../components/ui';
+import { RefPageHead, RefStatusStrip } from '../../components/ref';
+import { AlertTriangle } from 'lucide-react';
 import { getAlertDetail, updateAlertStatus } from '../../api/alerts';
 import { formatDateTime, formatRiskLevel, formatAlertStatus } from '../../utils/formatter';
 import { RISK_LEVEL_COLORS, ALERT_STATUS_COLORS } from '../../utils/constants';
@@ -130,6 +132,15 @@ const AlertDetailPage: React.FC = () => {
     );
   }
 
+  const stripTone: 'risk' | 'warn' | 'ok' | 'info' =
+    alert?.risk_level === 'high'
+      ? 'risk'
+      : alert?.risk_level === 'medium'
+        ? 'warn'
+        : alert?.status === 'resolved'
+          ? 'ok'
+          : 'info';
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div>
@@ -138,45 +149,40 @@ const AlertDetailPage: React.FC = () => {
         </Button>
       </div>
 
+      <RefPageHead
+        title={alert?.title || '预警详情'}
+        subtitle={`${formatRiskLevel(alert?.risk_level)} · ${alert?.type || '—'} · 触发于 ${formatDateTime(alert?.triggered_at) || '—'}`}
+        actions={
+          <>
+            <Chip
+              outlined
+              style={{
+                color: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'var(--smc-text)',
+                borderColor: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'var(--smc-divider)',
+              }}
+            >
+              {formatRiskLevel(alert?.risk_level)}
+            </Chip>
+            <Chip
+              outlined
+              style={{
+                color: ALERT_STATUS_COLORS[alert?.status || ''] || 'var(--smc-text)',
+                borderColor: ALERT_STATUS_COLORS[alert?.status || ''] || 'var(--smc-divider)',
+              }}
+            >
+              {formatAlertStatus(alert?.status)}
+            </Chip>
+          </>
+        }
+      />
+
+      <RefStatusStrip tone={stripTone} icon={<AlertTriangle size={16} />}>
+        {alert?.description ||
+          `${formatRiskLevel(alert?.risk_level)} 预警 · 状态：${formatAlertStatus(alert?.status)}`}
+      </RefStatusStrip>
+
       <Card>
         <div style={{ padding: 24 }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 16,
-              flexWrap: 'wrap',
-              marginBottom: 16,
-            }}
-          >
-            <div>
-              <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>预警详情</h2>
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--smc-text-2)' }}>
-                查看预警基础信息、处理进度和后续操作
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <Chip
-                outlined
-                style={{
-                  color: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'var(--smc-text)',
-                  borderColor: RISK_LEVEL_COLORS[alert?.risk_level || ''] || 'var(--smc-divider)',
-                }}
-              >
-                {formatRiskLevel(alert?.risk_level)}
-              </Chip>
-              <Chip
-                outlined
-                style={{
-                  color: ALERT_STATUS_COLORS[alert?.status || ''] || 'var(--smc-text)',
-                  borderColor: ALERT_STATUS_COLORS[alert?.status || ''] || 'var(--smc-divider)',
-                }}
-              >
-                {formatAlertStatus(alert?.status)}
-              </Chip>
-            </div>
-          </div>
-
           <div
             style={{
               display: 'grid',

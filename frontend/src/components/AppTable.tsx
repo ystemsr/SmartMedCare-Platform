@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { Search, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
-import { Button, Card, Checkbox, Input, Select, Spinner } from './ui';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Search, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
+import { Card, Checkbox, Select, Spinner } from './ui';
 
 export interface AppTableColumn<T> {
   title?: React.ReactNode | ((props: any) => React.ReactNode);
@@ -151,11 +151,18 @@ function Pagination({
         <ChevronsRight size={14} />
       </button>
       {showSizeChanger && (
-        <div style={{ marginLeft: 8, width: 100 }}>
+        <div style={{ marginLeft: 8, width: 120 }}>
           <Select
-            value={pageSize}
-            onChange={(v) => onChange({ current: 1, pageSize: Number(v) })}
-            options={[10, 20, 50, 100].map((v) => ({ label: `${v} / 页`, value: v }))}
+            value={current}
+            onChange={(v) => {
+              const next = Number(v);
+              if (next === current) return;
+              onChange({ current: next, pageSize });
+            }}
+            options={Array.from({ length: totalPages }, (_, i) => ({
+              label: `第 ${i + 1} / ${totalPages} 页`,
+              value: i + 1,
+            }))}
           />
         </div>
       )}
@@ -177,6 +184,23 @@ function AppTable<T extends object>({
   emptyText = '暂无数据',
 }: AppTableProps<T>) {
   const [keyword, setKeyword] = useState('');
+  const lastSearchRef = useRef('');
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!onSearch) return;
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      const trimmed = keyword.trim();
+      if (trimmed === lastSearchRef.current) return;
+      lastSearchRef.current = trimmed;
+      onSearch(trimmed);
+    }, 280);
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyword]);
 
   const rowIds = useMemo(
     () => dataSource.map((record) => getRowIdentifier(record, rowKey)),
@@ -214,25 +238,29 @@ function AppTable<T extends object>({
         <div className="smc-table__toolbar">
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {onSearch && (
-              <div className="smc-table__search">
-                <Input
+              <div className="smc-table__search smc-table__search--pill">
+                <Search
+                  size={14}
+                  className="smc-table__search-icon"
+                  aria-hidden
+                />
+                <input
+                  type="text"
+                  className="smc-table__search-input"
                   value={keyword}
                   placeholder={searchPlaceholder}
                   onChange={(e) => setKeyword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') onSearch(keyword.trim());
-                  }}
-                  containerClassName=""
-                  fullWidth={false}
-                  style={{ width: 240 }}
                 />
-                <Button
-                  variant="primary"
-                  startIcon={<Search size={14} />}
-                  onClick={() => onSearch(keyword.trim())}
-                >
-                  搜索
-                </Button>
+                {keyword && (
+                  <button
+                    type="button"
+                    className="smc-table__search-clear"
+                    onClick={() => setKeyword('')}
+                    aria-label="清除搜索"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
               </div>
             )}
           </div>

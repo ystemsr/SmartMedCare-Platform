@@ -6,6 +6,7 @@ import { useTable } from '../../hooks/useTable';
 import { getElders } from '../../api/elders';
 import { formatGender } from '../../utils/formatter';
 import type { Elder, ElderListQuery } from '../../types/elder';
+import { RefPageHead } from '../../components/ref';
 
 const ElderArchiveListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -58,34 +59,23 @@ const ElderArchiveListPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 16,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>老人健康档案</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--smc-text-2)' }}>
-            查看并进入单个老人的健康档案详情
-          </p>
-        </div>
-
-        <div style={{ width: 340, maxWidth: '100%' }}>
-          <Input
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') handleSearch();
-            }}
-            placeholder="搜索姓名/手机号/身份证"
-            endAdornment={<Search size={14} />}
-          />
-        </div>
-      </div>
+      <RefPageHead
+        title="老人健康档案"
+        subtitle={`共 ${data.length} 位老人 · 查看并进入单个老人的健康档案详情`}
+        actions={
+          <div style={{ width: 320, maxWidth: '100%' }}>
+            <Input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') handleSearch();
+              }}
+              placeholder="搜索姓名/手机号/身份证"
+              endAdornment={<Search size={14} />}
+            />
+          </div>
+        }
+      />
 
       {loading ? (
         <div

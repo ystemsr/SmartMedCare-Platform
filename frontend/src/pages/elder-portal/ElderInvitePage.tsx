@@ -356,9 +356,7 @@ const ElderInvitePage: React.FC = () => {
     Math.min(boundCount, MAX_FAMILY_MEMBERS) / MAX_FAMILY_MEMBERS;
   const reachedLimit = boundCount >= MAX_FAMILY_MEMBERS;
   const hasActiveCode = !!inviteCode;
-  const displayUsedCount = inviteCode
-    ? Math.max(inviteCode.used_count ?? 0, boundCount)
-    : 0;
+  const displayUsedCount = inviteCode?.used_count ?? boundCount;
   const displayMaxUses = inviteCode?.max_uses ?? MAX_FAMILY_MEMBERS;
   const usageExhausted = hasActiveCode && displayUsedCount >= displayMaxUses;
 
@@ -403,7 +401,7 @@ const ElderInvitePage: React.FC = () => {
               index={1}
               icon={<LinkIcon size={18} />}
               title="获取专属邀请码"
-              description="系统已为您生成一枚永久邀请码，下方可直接查看"
+              description="系统已为您准备了一枚永久邀请码，下方可直接获取"
               active
             />
             <StepCard
@@ -672,7 +670,7 @@ const ElderInvitePage: React.FC = () => {
                   >
                     还没有家属绑定
                     <br />
-                    生成邀请码后分享给家人即可
+                    获取邀请码后分享给家人即可
                   </div>
                 </div>
               ) : (

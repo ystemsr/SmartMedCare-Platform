@@ -6,11 +6,9 @@ import {
   CheckCircle2,
   Stethoscope,
   LineChart as LineIcon,
-  Download,
-  Plus,
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
-import { Select, Button } from '../../components/ui';
+import { Select } from '../../components/ui';
 import { getOverview, getTodos, getTrends } from '../../api/dashboard';
 import type { DashboardOverview, TodoItem, TrendData } from '../../api/dashboard';
 import { useAuthStore } from '../../store/auth';
@@ -193,18 +191,6 @@ const DashboardPage: React.FC = () => {
           month: 'long',
           day: 'numeric',
         })} · 系统运行状态良好 · 数据每日凌晨汇总更新`}
-        actions={
-          <>
-            <Button variant="outlined" size="sm" onClick={fetchData}>
-              <Download size={14} />
-              导出日报
-            </Button>
-            <Button size="sm">
-              <Plus size={14} />
-              新建老人档案
-            </Button>
-          </>
-        }
       />
 
       {/* Stat grid */}

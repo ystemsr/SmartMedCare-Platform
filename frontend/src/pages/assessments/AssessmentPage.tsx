@@ -265,7 +265,7 @@ const AssessmentPage: React.FC = () => {
         );
       },
     },
-    { title: '评估摘要', dataIndex: 'summary', ellipsis: true },
+    { title: '评估摘要', dataIndex: 'summary', width: 280, ellipsis: true },
     {
       title: '创建时间',
       dataIndex: 'created_at',

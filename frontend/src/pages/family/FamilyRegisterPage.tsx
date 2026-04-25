@@ -28,6 +28,7 @@ import SlideCaptcha from '../../components/SlideCaptcha';
 import { validateInviteCode, registerFamily } from '../../api/family';
 import { useAuthStore, getHomeRoute } from '../../store/auth';
 import { setToken } from '../../utils/storage';
+import { generateUUID } from '../../utils/uuid';
 import type { InviteCodeValidation } from '../../types/family';
 
 // ---------------------------------------------------------------------------
@@ -318,7 +319,7 @@ const FamilyRegisterPage: React.FC = () => {
   const [activeLoadingStep, setActiveLoadingStep] = useState(0);
 
   const confettiRef = useRef<ConfettiRef>(null);
-  const sessionId = useMemo(() => crypto.randomUUID(), []);
+  const sessionId = useMemo(() => generateUUID(), []);
   const fetchUser = useAuthStore((s) => s.fetchUser);
 
   // Input refs for auto-focus

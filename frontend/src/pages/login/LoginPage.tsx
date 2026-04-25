@@ -11,6 +11,7 @@ import {
 import { useAuthStore, getHomeRoute } from '../../store/auth';
 import SlideCaptcha from '../../components/SlideCaptcha';
 import { message } from '../../utils/message';
+import { generateUUID } from '../../utils/uuid';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // ---------------------------------------------------------------------------
@@ -39,7 +40,7 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
 
   const passwordInputRef = useRef<HTMLInputElement>(null);
-  const sessionId = useMemo(() => crypto.randomUUID(), []);
+  const sessionId = useMemo(() => generateUUID(), []);
 
   const isUsernameValid = validateUsername(username);
   const isPasswordValid = validatePassword(password);

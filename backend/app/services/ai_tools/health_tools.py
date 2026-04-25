@@ -1,4 +1,18 @@
-"""Health record tools."""
+"""Health record tools.
+
+Two audiences share the underlying query + formatting logic, but the
+tool *registrations* are deliberately split so each audience sees a
+description tuned to how they'll actually use it:
+
+  - admin / doctor: `list_health_records`, `get_latest_vitals` — require
+    `elder_id`, describing the tool in terms of looking up another
+    person's record.
+  - elder / family: `list_my_health_records`, `get_my_latest_vitals` —
+    no `elder_id` argument; the elder is resolved from the caller's
+    scope (the caller's own archive, or their single linked elder).
+    Family with multiple linked elders must fall back to the admin-style
+    tool or pass an id — handled by `resolve_scoped_elder_id`.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +23,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func, select
 
 from app.models.health_archive import HealthRecord
-from app.services.ai_tools._common import cap_model_lines
+from app.services.ai_tools._common import cap_model_lines, resolve_scoped_elder_id
 from app.services.ai_tools.context import ToolContext, ToolResult
 from app.services.ai_tools.registry import ToolSpec, register
 
@@ -65,25 +79,25 @@ def _parse_date(v: Any) -> Optional[datetime]:
         return None
 
 
-# --------------------------------------------------------------------- list_health_records
+# --------------------------------------------------------------------- shared core
 
 
-async def _handle_list_health_records(args: dict, ctx: ToolContext) -> ToolResult:
-    try:
-        elder_id = int(args.get("elder_id"))
-    except (TypeError, ValueError):
-        return ToolResult.fail("elder_id 必填且必须是整数", bubble="health_records")
+async def _list_records_core(
+    ctx: ToolContext,
+    *,
+    elder_id: int,
+    date_from: Optional[str],
+    date_to: Optional[str],
+    page: int,
+    page_size: int,
+) -> ToolResult:
     ctx.enforce_elder_scope(elder_id)
-
-    page = max(1, int(args.get("page") or 1))
-    page_size = max(1, min(50, int(args.get("page_size") or 20)))
-
     stmt = select(HealthRecord).where(
         HealthRecord.elder_id == elder_id,
         HealthRecord.deleted_at.is_(None),
     )
-    df = _parse_date(args.get("date_from"))
-    dt = _parse_date(args.get("date_to"))
+    df = _parse_date(date_from)
+    dt = _parse_date(date_to)
     if df:
         stmt = stmt.where(HealthRecord.recorded_at >= df)
     if dt:
@@ -130,40 +144,8 @@ async def _handle_list_health_records(args: dict, ctx: ToolContext) -> ToolResul
     )
 
 
-register(
-    ToolSpec(
-        name="list_health_records",
-        description="List health records (vitals) for an elder, most recent first. Supports date range and pagination.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "elder_id": {"type": "integer"},
-                "date_from": {"type": "string", "description": "ISO date or datetime"},
-                "date_to": {"type": "string"},
-                "page": {"type": "integer", "minimum": 1, "default": 1},
-                "page_size": {"type": "integer", "minimum": 1, "maximum": 30, "default": 10},
-            },
-            "required": ["elder_id"],
-        },
-        handler=_handle_list_health_records,
-        allowed_roles={"admin", "doctor", "elder", "family"},
-        required_permission="health_record:read",
-        action="read",
-        ui_bubble_type="health_records",
-    )
-)
-
-
-# --------------------------------------------------------------------- get_latest_vitals
-
-
-async def _handle_get_latest_vitals(args: dict, ctx: ToolContext) -> ToolResult:
-    try:
-        elder_id = int(args.get("elder_id"))
-    except (TypeError, ValueError):
-        return ToolResult.fail("elder_id 必填且必须是整数", bubble="health_records")
+async def _latest_vital_core(ctx: ToolContext, *, elder_id: int) -> ToolResult:
     ctx.enforce_elder_scope(elder_id)
-
     stmt = (
         select(HealthRecord)
         .where(HealthRecord.elder_id == elder_id, HealthRecord.deleted_at.is_(None))
@@ -226,17 +208,155 @@ async def _handle_get_latest_vitals(args: dict, ctx: ToolContext) -> ToolResult:
     )
 
 
+# --------------------------------------------------------------------- list_health_records (admin/doctor)
+
+
+async def _handle_list_health_records(args: dict, ctx: ToolContext) -> ToolResult:
+    try:
+        elder_id = int(args.get("elder_id"))
+    except (TypeError, ValueError):
+        return ToolResult.fail("elder_id 必填且必须是整数", bubble="health_records")
+    page = max(1, int(args.get("page") or 1))
+    page_size = max(1, min(50, int(args.get("page_size") or 20)))
+    return await _list_records_core(
+        ctx,
+        elder_id=elder_id,
+        date_from=args.get("date_from"),
+        date_to=args.get("date_to"),
+        page=page,
+        page_size=page_size,
+    )
+
+
+register(
+    ToolSpec(
+        name="list_health_records",
+        description="List health records (vitals) for an elder, most recent first. Supports date range and pagination.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "elder_id": {"type": "integer", "description": "target elder id"},
+                "date_from": {"type": "string", "description": "ISO date or datetime"},
+                "date_to": {"type": "string"},
+                "page": {"type": "integer", "minimum": 1, "default": 1},
+                "page_size": {"type": "integer", "minimum": 1, "maximum": 30, "default": 10},
+            },
+            "required": ["elder_id"],
+        },
+        handler=_handle_list_health_records,
+        allowed_roles={"admin", "doctor"},
+        required_permission="health_record:read",
+        action="read",
+        ui_bubble_type="health_records",
+    )
+)
+
+
+# --------------------------------------------------------------------- list_my_health_records (elder/family)
+
+
+async def _handle_list_my_health_records(args: dict, ctx: ToolContext) -> ToolResult:
+    elder_id, err = resolve_scoped_elder_id(
+        ctx, args.get("elder_id"), bubble="health_records"
+    )
+    if err is not None:
+        return err
+    page = max(1, int(args.get("page") or 1))
+    page_size = max(1, min(50, int(args.get("page_size") or 20)))
+    return await _list_records_core(
+        ctx,
+        elder_id=elder_id,
+        date_from=args.get("date_from"),
+        date_to=args.get("date_to"),
+        page=page,
+        page_size=page_size,
+    )
+
+
+register(
+    ToolSpec(
+        name="list_my_health_records",
+        description="Self-service: list health records for the caller's linked elder. Supports date range and pagination.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "elder_id": {
+                    "type": "integer",
+                    "description": "Only needed when the caller is linked to multiple elders.",
+                },
+                "date_from": {"type": "string", "description": "ISO date or datetime"},
+                "date_to": {"type": "string"},
+                "page": {"type": "integer", "minimum": 1, "default": 1},
+                "page_size": {"type": "integer", "minimum": 1, "maximum": 30, "default": 10},
+            },
+        },
+        handler=_handle_list_my_health_records,
+        allowed_roles={"elder", "family"},
+        required_permission="health_record:read",
+        action="read",
+        ui_bubble_type="health_records",
+    )
+)
+
+
+# --------------------------------------------------------------------- get_latest_vitals (admin/doctor)
+
+
+async def _handle_get_latest_vitals(args: dict, ctx: ToolContext) -> ToolResult:
+    try:
+        elder_id = int(args.get("elder_id"))
+    except (TypeError, ValueError):
+        return ToolResult.fail("elder_id 必填且必须是整数", bubble="health_records")
+    return await _latest_vital_core(ctx, elder_id=elder_id)
+
+
 register(
     ToolSpec(
         name="get_latest_vitals",
         description="Return the most recent health record for an elder, with abnormal-vital flags.",
         parameters={
             "type": "object",
-            "properties": {"elder_id": {"type": "integer"}},
+            "properties": {
+                "elder_id": {"type": "integer", "description": "target elder id"},
+            },
             "required": ["elder_id"],
         },
         handler=_handle_get_latest_vitals,
-        allowed_roles={"admin", "doctor", "elder", "family"},
+        allowed_roles={"admin", "doctor"},
+        required_permission="health_record:read",
+        action="read",
+        ui_bubble_type="health_records",
+    )
+)
+
+
+# --------------------------------------------------------------------- get_my_latest_vitals (elder/family)
+
+
+async def _handle_get_my_latest_vitals(args: dict, ctx: ToolContext) -> ToolResult:
+    elder_id, err = resolve_scoped_elder_id(
+        ctx, args.get("elder_id"), bubble="health_records"
+    )
+    if err is not None:
+        return err
+    return await _latest_vital_core(ctx, elder_id=elder_id)
+
+
+register(
+    ToolSpec(
+        name="get_my_latest_vitals",
+        description="Self-service: return the most recent health record for the caller's linked elder, with abnormal-vital flags.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "elder_id": {
+                    "type": "integer",
+                    "description": "Only needed when the caller is linked to multiple elders.",
+                },
+            },
+        },
+        handler=_handle_get_my_latest_vitals,
+        allowed_roles={"elder", "family"},
         required_permission="health_record:read",
         action="read",
         ui_bubble_type="health_records",

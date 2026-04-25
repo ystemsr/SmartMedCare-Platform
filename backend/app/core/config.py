@@ -50,7 +50,7 @@ class Settings(BaseSettings):
 
     # Weather (OpenWeatherMap)
     WEATHER_API_KEY: str = ""
-    WEATHER_DEFAULT_CITY: str = "Beijing"
+    WEATHER_DEFAULT_CITY: str = "Chengdu"
     WEATHER_REFRESH_SECONDS: int = 1800  # 30 minutes
 
     # Qdrant (vector database for RAG knowledge base)

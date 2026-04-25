@@ -299,10 +299,10 @@ register(
 )
 
 
-# --------------------------------------------------------------------- generate_family_invite_code
+# --------------------------------------------------------------------- get_family_invite_code
 
 
-async def _handle_generate_invite_code(args: dict, ctx: ToolContext) -> ToolResult:
+async def _handle_get_invite_code(args: dict, ctx: ToolContext) -> ToolResult:
     from app.services.invite_code import InviteCodeService
 
     if ctx.role_code != "elder":
@@ -312,16 +312,18 @@ async def _handle_generate_invite_code(args: dict, ctx: ToolContext) -> ToolResu
     # An elder user has exactly one elder_id in scope
     elder_id = ctx.scoped_elder_ids[0]
     try:
-        resp = await InviteCodeService.generate_code(ctx.db, elder_id)
+        resp = await InviteCodeService.get_active_code(ctx.db, elder_id)
     except Exception as e:  # noqa: BLE001
-        return ToolResult.fail(f"生成邀请码失败: {e}", bubble="text")
+        return ToolResult.fail(f"获取邀请码失败: {e}", bubble="text")
+    if resp is None:
+        return ToolResult.fail("获取邀请码失败", bubble="text")
     expires = resp.expires_at.isoformat() if resp.expires_at else None
     return ToolResult(
         ok=True,
         model_text=(
             f"您的家属邀请码：{resp.code}\n"
-            f"可被使用次数：{resp.max_uses}，已使用：{resp.used_count}，"
-            f"剩余 {resp.remaining_slots} 次。"
+            f"可绑定上限 {resp.max_uses} 人，已绑定 {resp.used_count} 人，"
+            f"剩余 {resp.remaining_slots} 人可邀请。"
         ),
         ui_payload={
             "code": resp.code,
@@ -336,16 +338,17 @@ async def _handle_generate_invite_code(args: dict, ctx: ToolContext) -> ToolResu
 
 register(
     ToolSpec(
-        name="generate_family_invite_code",
+        name="get_family_invite_code",
         description=(
-            "Elder-only self-service. Generate or return the existing family invite code. Idempotent — "
-            "multiple calls return the same code as long as it has remaining slots."
+            "Elder-only self-service. Return the elder's permanent family invite code, creating it on "
+            "first call. Idempotent — multiple calls return the same code. Reports the live bound-family "
+            "count, which decreases when a family member is unbound."
         ),
         parameters={"type": "object", "properties": {}},
-        handler=_handle_generate_invite_code,
+        handler=_handle_get_invite_code,
         allowed_roles={"elder"},
         required_permission="elder:invite",
-        action="write",
+        action="read",
         ui_bubble_type="text",
     )
 )

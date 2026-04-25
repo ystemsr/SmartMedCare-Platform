@@ -1209,7 +1209,11 @@
 /* ---------- AppShell (layout) ---------- */
 .smc-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  /* dvh accounts for mobile browser chrome that vh ignores; falls back
+   * to vh in older engines. */
+  height: 100dvh;
+  overflow: hidden;
   background: transparent; /* body owns the beige + vignette */
 }
 .smc-shell__sidebar {
@@ -1219,12 +1223,12 @@
   border-right: 1px solid var(--smc-border);
   display: flex;
   flex-direction: column;
+  /* Sidebar owns its own scroll region (via .smc-shell__nav below), so
+   * it does not need position:sticky — the shell itself is height-locked
+   * to the viewport and never scrolls. */
+  height: 100%;
   overflow: visible;
   box-shadow: 1px 0 0 rgba(66, 44, 28, 0.02);
-  position: sticky;
-  top: 0;
-  align-self: flex-start;
-  height: 100vh;
   z-index: 5;
 }
 .smc-shell__sidebar--mini {
@@ -1313,10 +1317,16 @@
   min-height: 40vh;
 }
 .smc-shell__nav {
-  flex: 1;
+  flex: 1 1 0;
+  /* Without min-height: 0, the default min-height: auto on a flex item
+   * forces this element to grow to fit its content, so overflow-y never
+   * triggers when the menu is taller than the remaining sidebar space
+   * (e.g. admin's fully-expanded "大数据" submenu). */
+  min-height: 0;
   padding: 14px 10px 24px;
   overflow-y: auto;
-  overflow-x: visible;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1426,7 +1436,27 @@
   pointer-events: none;
   z-index: 50;
 }
+.smc-shell__subnav-wrap {
+  /* grid-template-rows between 0fr and 1fr interpolates smoothly and,
+   * unlike a JS-side `height: 'auto'` animation, never has to commit
+   * to a measured pixel target — so the submenu can never be clipped
+   * if the nav grows a scrollbar mid-animation. */
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--smc-dur-md, 220ms) var(--smc-ease, cubic-bezier(0.22, 1, 0.36, 1)),
+    opacity var(--smc-dur-md, 220ms) var(--smc-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.smc-shell__subnav-wrap--open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
 .smc-shell__subnav {
+  /* The grid track clips the unneeded height while collapsed; overflow
+   * hidden on this inner row keeps children invisible during collapse
+   * but does not affect expanded natural height. */
+  min-height: 0;
   overflow: hidden;
   padding-left: 14px;
   display: flex;
@@ -1455,8 +1485,10 @@
 .smc-shell__main {
   flex: 1;
   min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .smc-shell__header {
   height: var(--smc-header-h);
@@ -1467,9 +1499,17 @@
   align-items: center;
   padding: 0 28px;
   gap: 12px;
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 10;
+}
+.smc-shell__scroll {
+  flex: 1 1 0;
+  /* Flex column min-height-auto would prevent this region from
+   * shrinking to fit the remaining viewport, disabling its overflow.
+   * See also .smc-shell__nav for the sidebar-side twin of this fix. */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .smc-shell__title-wrap {
   flex: 1;

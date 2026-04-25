@@ -502,8 +502,6 @@ async def chat_stream(
         "X-Title": "SmartMedCare",
     }
 
-    MAX_TOOL_ITERATIONS = 3
-
     def _sse(obj: Dict[str, Any]) -> str:
         return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
@@ -791,12 +789,6 @@ async def chat_stream(
                             )
 
                         iteration += 1
-                        if iteration >= MAX_TOOL_ITERATIONS:
-                            yield (
-                                "event: error\n"
-                                f"data: {json.dumps({'message': '已达到工具调用次数上限'}, ensure_ascii=False)}\n\n"
-                            )
-                            return
                         continue  # next iteration: send tool results back
 
                     # Normal completion (or upstream sent [DONE]).

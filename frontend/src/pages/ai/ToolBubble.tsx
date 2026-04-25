@@ -159,7 +159,9 @@ const TOOL_LABELS: Partial<Record<string, string>> = {
   get_elder_profile: '读取老人档案',
   get_my_elder: '读取关联老人',
   list_health_records: '读取健康记录',
+  list_my_health_records: '读取本人/关联老人记录',
   get_latest_vitals: '读取最新体征',
+  get_my_latest_vitals: '读取本人/关联老人体征',
   list_alerts: '检索预警',
   list_my_alerts: '检索关联预警',
   get_alert_detail: '读取预警详情',
@@ -184,7 +186,9 @@ const TOOL_LABELS: Partial<Record<string, string>> = {
   list_users: '检索用户',
   get_recent_audit_logs: '读取审计日志',
   list_kb_documents: '读取知识库文档',
-  generate_family_invite_code: '生成家属邀请码',
+  get_family_invite_code: '查询家属邀请码',
+  // Backward compat: legacy bubbles in saved chat history used the old name.
+  generate_family_invite_code: '查询家属邀请码',
 };
 
 /* ---------- generic helpers ---------- */
@@ -1208,14 +1212,14 @@ const TextBody: React.FC<{ payload: Record<string, unknown> }> = ({
     );
   }
 
-  // Invite code shape (generate_family_invite_code)
+  // Invite code shape (get_family_invite_code)
   if (payload.code) {
     return (
       <div className="ai-tool-kv">
         <KV label="邀请码" value={asString(payload.code)} />
-        <KV label="可使用次数" value={asString(payload.max_uses)} />
-        <KV label="已使用" value={asString(payload.used_count)} />
-        <KV label="剩余" value={asString(payload.remaining_slots)} />
+        <KV label="可绑定上限" value={`${asString(payload.max_uses)} 人`} />
+        <KV label="已绑定家属" value={`${asString(payload.used_count)} 人`} />
+        <KV label="剩余可邀请" value={`${asString(payload.remaining_slots)} 人`} />
       </div>
     );
   }

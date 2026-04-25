@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  AnimatePresence,
   motion,
   useMotionValue,
   useSpring,
@@ -446,17 +445,20 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
           open={open}
           registerNode={registerNode}
         />
-        <AnimatePresence initial={false} onExitComplete={measurePill}>
-          {!mini && open && (
-            <motion.div
-              key={`${item.key}-sub`}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-              onAnimationComplete={measurePill}
-              className="smc-shell__subnav"
-            >
+        {!mini && (
+          /* CSS grid-template-rows trick: the wrapper transitions
+           * between 0fr (collapsed) and 1fr (expanded). The inner
+           * `.smc-shell__subnav` always renders at its natural height,
+           * so there is no JS-side measurement that can go stale when
+           * the nav grows a scrollbar mid-animation. */
+          <div
+            className={`smc-shell__subnav-wrap${
+              open ? ' smc-shell__subnav-wrap--open' : ''
+            }`}
+            aria-hidden={!open}
+            onTransitionEnd={measurePill}
+          >
+            <div className="smc-shell__subnav">
               {(() => {
                 const bestChild = findBestChildMatch(
                   item.children!,
@@ -480,9 +482,9 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
                   );
                 });
               })()}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </div>
+        )}
       </Fragment>
     );
   };
@@ -668,17 +670,19 @@ const AppShell: React.FC<AppShellProps> = ({ items, personalPath }) => {
             ]}
           />
         </header>
-        <main className="smc-shell__content">
-          <Suspense
-            fallback={
-              <div className="smc-shell__content-loader">
-                <Spinner size="lg" />
-              </div>
-            }
-          >
-            <Outlet />
-          </Suspense>
-        </main>
+        <div className="smc-shell__scroll">
+          <main className="smc-shell__content">
+            <Suspense
+              fallback={
+                <div className="smc-shell__content-loader">
+                  <Spinner size="lg" />
+                </div>
+              }
+            >
+              <Outlet />
+            </Suspense>
+          </main>
+        </div>
       </div>
       <AIEntryFab />
     </div>

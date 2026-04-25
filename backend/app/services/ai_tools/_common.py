@@ -17,10 +17,61 @@ Centralises the two context-bloat concerns that showed up during review:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+from app.services.ai_tools.context import ToolContext, ToolResult
 
 
 MODEL_TEXT_ITEM_CAP = 15
+
+
+def resolve_scoped_elder_id(
+    ctx: ToolContext,
+    raw: Any,
+    *,
+    bubble: str = "text",
+) -> Tuple[Optional[int], Optional[ToolResult]]:
+    """Resolve an elder_id for single-elder tools, with scope-aware auto-fill.
+
+    Behavior:
+      - If the caller supplied `raw`, coerce it to int and let the caller
+        enforce scope as usual.
+      - Otherwise, if the caller is elder/family and has exactly one
+        linked elder, auto-fill from `ctx.scoped_elder_ids`.
+      - Family with multiple linked elders gets a helpful error listing
+        the bound ids so the LLM can re-call with the right one.
+      - Admin/doctor (unrestricted scope) must provide `elder_id` — we
+        refuse to guess for them.
+
+    Returns `(elder_id, None)` on success, or `(None, ToolResult)` on
+    failure; callers should forward the ToolResult directly.
+    """
+    if raw is not None:
+        try:
+            return int(raw), None
+        except (TypeError, ValueError):
+            return None, ToolResult.fail(
+                "elder_id 必须是整数", bubble=bubble
+            )
+
+    scope = ctx.scoped_elder_ids
+    if scope is None:
+        return None, ToolResult.fail(
+            "请提供 elder_id（管理员/医生调用必填）", bubble=bubble
+        )
+    if not scope:
+        return None, ToolResult.fail(
+            "尚未关联任何老人档案。"
+            + ("请先绑定家属邀请码。" if ctx.role_code == "family" else ""),
+            bubble=bubble,
+        )
+    if len(scope) == 1:
+        return scope[0], None
+    ids_txt = "、".join(str(i) for i in scope)
+    return None, ToolResult.fail(
+        f"您已绑定 {len(scope)} 位老人（ID: {ids_txt}），请指定 elder_id 或先调用 get_my_elder。",
+        bubble=bubble,
+    )
 
 
 def cap_model_lines(

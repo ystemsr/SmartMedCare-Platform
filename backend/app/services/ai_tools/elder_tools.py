@@ -289,7 +289,7 @@ async def _handle_get_elder_profile(args: dict, ctx: ToolContext) -> ToolResult:
 register(
     ToolSpec(
         name="get_elder_profile",
-        description="Return a single elder's full profile (masked PII). Elder/family callers are restricted to their own/linked elder.",
+        description="Return a single elder's full profile (masked PII).",
         parameters={
             "type": "object",
             "properties": {
@@ -298,7 +298,7 @@ register(
             "required": ["elder_id"],
         },
         handler=_handle_get_elder_profile,
-        allowed_roles={"admin", "doctor", "elder", "family"},
+        allowed_roles={"admin", "doctor"},
         action="read",
         ui_bubble_type="elder_profile",
     )

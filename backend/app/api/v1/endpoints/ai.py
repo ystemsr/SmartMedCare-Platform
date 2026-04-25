@@ -314,9 +314,18 @@ async def _load_config(db: AsyncSession) -> Dict[str, Any]:
     if env_key and env_key.lower() != "your_api_key":
         cfg["api_key"] = env_key
 
+    # Treat empty / whitespace DB values as "not set" so the field falls
+    # back to the env-driven bootstrap or the baked-in default. Without
+    # this, a row written with config_value="" silently shadowed the
+    # default — most visibly for system prompts, where an empty row
+    # produced "no system message at all" instead of the per-role default.
     for field, key in _AI_KEYS.items():
-        if key in by_key:
-            cfg[field] = _coerce(field, by_key[key])
+        raw = by_key.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, str) and not raw.strip():
+            continue
+        cfg[field] = _coerce(field, raw)
 
     # Reconcile the models list with the legacy single-model field.
     # If the list is empty but a legacy `ai.model` is set, adopt it as

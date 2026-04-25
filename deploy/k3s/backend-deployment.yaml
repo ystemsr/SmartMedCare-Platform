@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: smartmedcare
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # docker.sock + spark-logs hostPath are single-writer
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # Resolve the legacy docker-compose service names to the WSL2 host IP.
+      # Stateful deps stay in Docker and are reachable via published ports
+      # on the host — this lets the backend keep its existing config
+      # (MYSQL_HOST=mysql, REDIS_HOST=redis, ...) with zero code change.
+      hostAliases:
+        - ip: "172.30.240.74"
+          hostnames:
+            - mysql
+            - redis
+            - minio
+            - qdrant
+            - hadoop-namenode
+            - hadoop-datanode
+            - hive-server
+            - hive-metastore
+            - hive-metastore-db
+            - spark-master
+            - spark-worker
+      containers:
+        - name: backend
+          image: smartmedcare-platform-backend:k3s
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secret
+          env:
+            - name: SPARK_LOG_DIR
+              value: /app/logs/spark
+          volumeMounts:
+            # Backend uses docker-py to `docker exec spark-submit` inside the
+            # docker spark-master container. Mount the host docker socket.
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            # Share the same docker volume the spark-master writes job logs to.
+            - name: spark-logs
+              mountPath: /app/logs/spark
+          # The system health endpoint is auth-gated (returns 401 without a
+          # bearer token), so HTTP probes flap the pod. Use TCP probes — port
+          # 8000 only opens after alembic migrations finish and uvicorn binds.
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: spark-logs
+          hostPath:
+            path: /var/lib/docker/volumes/smartmedcare-platform_spark_logs/_data
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: smartmedcare
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: smartmedcare
+data:
+  APP_NAME: "SmartMedCare"
+  APP_ENV: "development"
+  APP_DEBUG: "true"
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8000"
+  JWT_ALGORITHM: "HS256"
+  JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "120"
+  JWT_REFRESH_TOKEN_EXPIRE_MINUTES: "10080"
+
+  # Stateful deps live in Docker; hostAliases below resolves these names
+  # to the WSL2 host IP so the existing docker-published ports answer.
+  MYSQL_HOST: "mysql"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "smartmedcare"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  MINIO_ENDPOINT: "minio:9000"
+  MINIO_BUCKET: "smartmedcare"
+  MINIO_SECURE: "false"
+  QDRANT_URL: "http://qdrant:6333"
+
+  # CORS — same-origin via nginx proxy, but include K3s ingress host for safety.
+  CORS_ORIGINS: '["http://localhost:5173","http://localhost:3000","http://localhost","http://172.30.240.74"]'
+
+  # Big data stack — still on Docker.
+  HDFS_NAMENODE_URL: "http://hadoop-namenode:9870"
+  HDFS_NAMENODE_RPC: "hdfs://hadoop-namenode:9000"
+  HIVE_HOST: "hive-server"
+  HIVE_PORT: "10000"
+  SPARK_MASTER_URL: "spark://spark-master:7077"
+  SPARK_IMAGE: "smartmedcare-spark-apps:local"
+  SPARK_CONTAINER: "smartmedcare-spark-master"
+  HIVE_METASTORE_DB_USER: "hive"
+
+  ML_MODEL_PATH: "/app/models/multitask_health_model.pt"
+  SPARK_LOG_DIR: "/app/logs/spark"
+
+  PIPELINE_SCHEDULE_ENABLED: "true"
+  PIPELINE_SCHEDULE_UTC_TIME: "19:00"
+
+  AI_BASE_URL: "https://openrouter.ai/api/v1"
+  KB_EMBEDDING_BASE_URL: "https://openrouter.ai/api/v1"
+  KB_EMBEDDING_MODEL: "qwen/qwen3-embedding-8b"
+  KB_EMBEDDING_DIM: "4096"
+  KB_CHUNK_SIZE: "512"
+  KB_CHUNK_OVERLAP: "128"
+  KB_TOP_K: "5"

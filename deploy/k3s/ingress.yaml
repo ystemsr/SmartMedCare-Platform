@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: smartmedcare
+  namespace: smartmedcare
+  annotations:
+    # Allow large request bodies for file uploads via MinIO presigned flow.
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    # Wildcard host — Traefik exposes this on http://<node-ip>/ (default 80).
+    # Frontend nginx already proxies /api/* to the backend Service inside
+    # the cluster, so a single ingress rule covers both UI and API.
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

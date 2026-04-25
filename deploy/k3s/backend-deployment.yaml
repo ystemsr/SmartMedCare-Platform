@@ -17,6 +17,13 @@ spec:
       labels:
         app: backend
     spec:
+      # Use the host resolver so DNS queries and subsequent TCP egress share
+      # the same source IP after SNAT. Required when a host-side proxy uses
+      # fake-IP per-source mappings: routing DNS through CoreDNS produces
+      # fake-IPs the proxy can't map back when the connection arrives from a
+      # different source IP. In-cluster service discovery is unused here —
+      # internal deps are reached via hostAliases below.
+      dnsPolicy: Default
       # Resolve the legacy docker-compose service names to the WSL2 host IP.
       # Stateful deps stay in Docker and are reachable via published ports
       # on the host — this lets the backend keep its existing config

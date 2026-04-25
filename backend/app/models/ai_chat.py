@@ -6,7 +6,8 @@ stored as a JSON payload that preserves the full UI message shape
 the chat UI can round-trip without losing bubble metadata.
 """
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
@@ -50,4 +51,4 @@ class AIMessage(BaseModel):
     # ascending position order.
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
-    payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    payload: Mapped[str] = mapped_column(LONGTEXT, nullable=False, default="{}")
